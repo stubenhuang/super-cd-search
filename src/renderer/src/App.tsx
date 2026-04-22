@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { BatchQueryResult, BatchQueryProgress } from './electron-api'
+import { SettingsPanel } from './Settings'
 import './App.css'
 
 function App() {
@@ -8,6 +9,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState<BatchQueryResult[]>([])
   const [progress, setProgress] = useState<BatchQueryProgress[]>([])
+  const [showSettings, setShowSettings] = useState(false)
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
@@ -55,6 +57,16 @@ function App() {
     <div className="app-container">
       <header className="app-header">
         <h1>Super CD Search</h1>
+        <button
+          className="settings-button"
+          onClick={() => setShowSettings(true)}
+          title="Settings"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
       </header>
       <main className="app-main">
         <aside className="left-panel">
@@ -113,6 +125,7 @@ function App() {
           </div>
         </section>
       </main>
+      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   )
 }
