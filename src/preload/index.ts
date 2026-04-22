@@ -1,19 +1,21 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-// Expose protected methods that allow the renderer process to use
-// ipcRenderer without exposing the entire object
+const validSendChannels = ['toMain'] as const
+const validReceiveChannels = ['fromMain'] as const
+
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Placeholder for future IPC methods
   send: (channel: string, data: unknown) => {
-    const validChannels = ['toMain']
-    if (validChannels.includes(channel)) {
+    if (validSendChannels.includes(channel as typeof validSendChannels[number])) {
       ipcRenderer.send(channel, data)
     }
   },
   receive: (channel: string, func: (...args: unknown[]) => void) => {
-    const validChannels = ['fromMain']
-    if (validChannels.includes(channel)) {
+    if (validReceiveChannels.includes(channel as typeof validReceiveChannels[number])) {
       ipcRenderer.on(channel, (_event, ...args) => func(...args))
     }
-  }
+  },
+  getSettings: () => ipcRenderer.invoke('getSettings'),
+  getSetting: (key: string) => ipcRenderer.invoke('getSetting', key),
+  setSetting: (key: string, value: unknown) => ipcRenderer.invoke('setSetting', key, value),
+  deleteSetting: (key: string) => ipcRenderer.invoke('deleteSetting', key)
 })

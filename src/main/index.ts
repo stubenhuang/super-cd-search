@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { initDatabase, closeDatabase } from './database'
+import { registerSettingsIpc } from './ipc/settings'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -29,6 +30,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   initDatabase()
+  registerSettingsIpc()
   createWindow()
 
   app.on('activate', () => {
