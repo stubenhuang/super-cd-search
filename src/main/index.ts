@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { initDatabase, closeDatabase } from './database'
 import { registerSettingsIpc } from './ipc/settings'
+import { registerOrchestratorIpc } from './ipc/orchestrator'
 import { browserPool } from './browser'
 import { registerThrottleIpc } from './throttle'
 
@@ -33,6 +34,7 @@ function createWindow() {
 app.whenReady().then(() => {
   initDatabase()
   registerSettingsIpc()
+  registerOrchestratorIpc()
   registerThrottleIpc()
   createWindow()
 

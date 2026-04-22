@@ -21,6 +21,32 @@ export interface ThrottleStatus {
   }>
 }
 
+export type QueryStatus = 'found' | 'not_found' | 'error'
+
+export interface QueryResult {
+  platform: 'discogs' | 'ebay' | 'kojima' | 'mercari'
+  name: string | null
+  artist: string | null
+  priceMin: number | null
+  priceMax: number | null
+  coverUrl: string | null
+  link: string | null
+  status: QueryStatus
+  error?: string
+}
+
+export interface BatchQueryProgress {
+  event: string
+  catalogNumber: string
+  platform: string
+  status: 'loading' | 'complete' | 'error' | 'not_found'
+}
+
+export interface BatchQueryResult {
+  catalogNumber: string
+  results: QueryResult[]
+}
+
 export interface IElectronAPI {
   send: (channel: string, data: unknown) => void
   receive: (channel: string, func: (...args: unknown[]) => void) => void
@@ -29,6 +55,7 @@ export interface IElectronAPI {
   setSetting: (key: string, value: unknown) => Promise<void>
   deleteSetting: (key: string) => Promise<void>
   getThrottleStatus: () => Promise<ThrottleStatus>
+  executeBatchQuery: (catalogNumbers: string[]) => Promise<BatchQueryResult[]>
 }
 
 declare global {

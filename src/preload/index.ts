@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 const validSendChannels = ['toMain'] as const
-const validReceiveChannels = ['fromMain'] as const
+const validReceiveChannels = ['fromMain', 'query:progress'] as const
 
 contextBridge.exposeInMainWorld('electronAPI', {
   send: (channel: string, data: unknown) => {
@@ -18,5 +18,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSetting: (key: string) => ipcRenderer.invoke('getSetting', key),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke('setSetting', key, value),
   deleteSetting: (key: string) => ipcRenderer.invoke('deleteSetting', key),
-  getThrottleStatus: () => ipcRenderer.invoke('getThrottleStatus')
+  getThrottleStatus: () => ipcRenderer.invoke('getThrottleStatus'),
+  executeBatchQuery: (catalogNumbers: string[]) => ipcRenderer.invoke('executeBatchQuery', catalogNumbers)
 })
