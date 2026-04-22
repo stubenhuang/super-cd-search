@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { initDatabase, closeDatabase } from './database'
 import { registerSettingsIpc } from './ipc/settings'
+import { browserPool } from './browser'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -42,6 +43,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   closeDatabase()
+  browserPool.closeAll()
   if (process.platform !== 'darwin') {
     app.quit()
   }
