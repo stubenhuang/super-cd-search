@@ -1,7 +1,100 @@
 import { useState, useCallback, useEffect } from 'react'
-import type { BatchQueryResult, BatchQueryProgress } from './electron-api'
+import type { BatchQueryResult, BatchQueryProgress, QueryResult } from './electron-api'
 import { SettingsPanel } from './Settings'
 import './App.css'
+
+const PLATFORM_LABELS: Record<string, string> = {
+  discogs: 'Discogs',
+  ebay: 'eBay',
+  kojima: 'Kojima Rokuon',
+  mercari: 'Mercari'
+}
+
+function PlatformResultRow({ result }: { result: QueryResult }) {
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+
+  const formatPrice = (min: number | null, max: number | null): string => {
+    if (min === null && max === null) return '-'
+    if (min === null || max === null) {
+      const price = min ?? max
+      return price !== null ? `¥${price.toLocaleString()}` : '-'
+    }
+    if (min === max) return `¥${min.toLocaleString()}`
+    return `¥${min.toLocaleString()} - ¥${max.toLocaleString()}`
+  }
+
+  return (
+    <div className={`platform-result-row ${result.status}`}>
+      <div className="platform-info">
+        <span className="platform-icon">
+          {result.platform === 'discogs' && '唱片'}
+          {result.platform === 'ebay' && 'EB'}
+          {result.platform === 'kojima' && '小島'}
+          {result.platform === 'mercari' && 'メ'}
+        </span>
+        <span className="platform-label">{PLATFORM_LABELS[result.platform] || result.platform}</span>
+      </div>
+      <div className="platform-image">
+        {result.coverUrl && !imageError ? (
+          <>
+            {!imageLoaded && <div className="image-placeholder" />}
+            <img
+              src={result.coverUrl}
+              alt={result.name || 'Cover'}
+              className={`cover-thumbnail ${imageLoaded ? 'loaded' : ''}`}
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError(true)}
+            />
+          </>
+        ) : (
+          <div className="image-placeholder">No image</div>
+        )}
+      </div>
+      <div className="platform-details">
+        {result.status === 'found' ? (
+          <>
+            <div className="name">{result.name || '-'}</div>
+            <div className="artist">{result.artist || '-'}</div>
+            <div className="price">{formatPrice(result.priceMin, result.priceMax)}</div>
+          </>
+        ) : result.status === 'error' ? (
+          <div className="error-text">Error: {result.error || 'Unknown error'}</div>
+        ) : (
+          <div className="not-found-text">Not found</div>
+        )}
+      </div>
+      <div className="platform-link">
+        {result.link && result.status === 'found' && (
+          <a href={result.link} target="_blank" rel="noopener noreferrer">
+            View
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ResultCard({ catalogNumber, results }: BatchQueryResult) {
+  const foundResult = results.find(r => r.status === 'found' && r.name)
+  const displayName = foundResult?.name || catalogNumber
+  const displayArtist = foundResult?.artist
+
+  return (
+    <div className="result-card">
+      <div className="result-header">
+        <div className="result-catalog">{catalogNumber}</div>
+        {displayArtist && <div className="result-artist">{displayArtist}</div>}
+      </div>
+      <div className="result-title">{displayName}</div>
+      <div className="platform-results">
+        {results.map((r, idx) => (
+          <PlatformResultRow key={idx} result={r} />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function App() {
   const [input, setInput] = useState('')
@@ -53,6 +146,10 @@ function App() {
     window.electronAPI.receive('query:progress', handleProgress)
   }, [])
 
+  const completedCount = progress.filter(p => p.event === 'query:complete').length
+  const totalCount = parseCatalogNumbers(input).length || 0
+  const progressText = totalCount > 0 ? `${completedCount}/${totalCount} CDs queried` : ''
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -95,6 +192,7 @@ function App() {
         <section className="right-panel">
           <div className="panel-header">
             <h2>Results</h2>
+            {progressText && <span className="progress-text">{progressText}</span>}
           </div>
           <div className="panel-content">
             {results.length === 0 && progress.length === 0 && (
@@ -104,21 +202,14 @@ function App() {
             )}
             {progress.length > 0 && results.length === 0 && (
               <div className="progress-area">
+                <div className="spinner" />
                 <p>Querying...</p>
               </div>
             )}
             {results.length > 0 && (
               <div className="results-area">
                 {results.map((result, idx) => (
-                  <div key={idx} className="result-card">
-                    <div className="result-catalog">{result.catalogNumber}</div>
-                    {result.results.map((r, rIdx) => (
-                      <div key={rIdx} className="platform-result">
-                        <span className="platform-name">{r.platform}</span>
-                        <span className={`status status-${r.status}`}>{r.status}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <ResultCard key={idx} {...result} />
                 ))}
               </div>
             )}
