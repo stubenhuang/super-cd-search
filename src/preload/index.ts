@@ -19,5 +19,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke('setSetting', key, value),
   deleteSetting: (key: string) => ipcRenderer.invoke('deleteSetting', key),
   getThrottleStatus: () => ipcRenderer.invoke('getThrottleStatus'),
-  executeBatchQuery: (catalogNumbers: string[]) => ipcRenderer.invoke('executeBatchQuery', catalogNumbers)
+  executeBatchQuery: (catalogNumbers: string[]) => ipcRenderer.invoke('executeBatchQuery', catalogNumbers),
+  getHistory: () => ipcRenderer.invoke('getHistory'),
+  getHistoryEntry: (queryId: number) => ipcRenderer.invoke('getHistoryEntry', queryId),
+  deleteHistoryEntry: (queryId: number) => ipcRenderer.invoke('deleteHistoryEntry', queryId),
+  clearAllHistory: () => ipcRenderer.invoke('clearAllHistory')
 })

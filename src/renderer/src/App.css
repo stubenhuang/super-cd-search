@@ -77,6 +77,31 @@
   color: var(--text-secondary);
 }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  padding: 6px 16px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.tab:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.tab.active {
+  background-color: var(--accent-color);
+  color: white;
+}
+
 .progress-text {
   font-size: 12px;
   color: var(--text-secondary);

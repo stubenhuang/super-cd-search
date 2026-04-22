@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { BatchQueryResult, BatchQueryProgress, QueryResult } from './electron-api'
 import { SettingsPanel } from './Settings'
+import { HistoryView } from './History'
 import './App.css'
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -122,6 +123,7 @@ function App() {
   const [results, setResults] = useState<BatchQueryResult[]>([])
   const [progress, setProgress] = useState<BatchQueryProgress[]>([])
   const [showSettings, setShowSettings] = useState(false)
+  const [activeTab, setActiveTab] = useState<'results' | 'history'>('results')
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
@@ -169,6 +171,17 @@ function App() {
   const totalCount = parseCatalogNumbers(input).length || 0
   const progressText = totalCount > 0 ? `${completedCount}/${totalCount} CDs queried` : ''
 
+  const handleLoadHistory = useCallback(async (queryId: number) => {
+    const entry = await window.electronAPI.getHistoryEntry(queryId)
+    if (entry) {
+      setResults([{
+        catalogNumber: entry.query.catalogNumber,
+        results: entry.results
+      }])
+      setActiveTab('results')
+    }
+  }, [])
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -210,27 +223,49 @@ function App() {
         </aside>
         <section className="right-panel">
           <div className="panel-header">
-            <h2>Results</h2>
-            {progressText && <span className="progress-text">{progressText}</span>}
+            <div className="tabs">
+              <button
+                className={`tab ${activeTab === 'results' ? 'active' : ''}`}
+                onClick={() => setActiveTab('results')}
+              >
+                Results
+              </button>
+              <button
+                className={`tab ${activeTab === 'history' ? 'active' : ''}`}
+                onClick={() => setActiveTab('history')}
+              >
+                History
+              </button>
+            </div>
+            {activeTab === 'results' && progressText && (
+              <span className="progress-text">{progressText}</span>
+            )}
           </div>
           <div className="panel-content">
-            {results.length === 0 && progress.length === 0 && (
-              <p className="placeholder-text">
-                Search results will appear here.
-              </p>
+            {activeTab === 'results' && (
+              <>
+                {results.length === 0 && progress.length === 0 && (
+                  <p className="placeholder-text">
+                    Search results will appear here.
+                  </p>
+                )}
+                {progress.length > 0 && results.length === 0 && (
+                  <div className="progress-area">
+                    <div className="spinner" />
+                    <p>Querying...</p>
+                  </div>
+                )}
+                {results.length > 0 && (
+                  <div className="results-area">
+                    {results.map((result, idx) => (
+                      <ResultCard key={idx} {...result} />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
-            {progress.length > 0 && results.length === 0 && (
-              <div className="progress-area">
-                <div className="spinner" />
-                <p>Querying...</p>
-              </div>
-            )}
-            {results.length > 0 && (
-              <div className="results-area">
-                {results.map((result, idx) => (
-                  <ResultCard key={idx} {...result} />
-                ))}
-              </div>
+            {activeTab === 'history' && (
+              <HistoryView onLoadEntry={handleLoadHistory} />
             )}
           </div>
         </section>

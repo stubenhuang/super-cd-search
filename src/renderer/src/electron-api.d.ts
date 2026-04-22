@@ -47,6 +47,21 @@ export interface BatchQueryResult {
   results: QueryResult[]
 }
 
+export interface HistoryBatch {
+  id: number
+  catalogNumber: string
+  createdAt: string
+}
+
+export interface HistoryEntry {
+  query: {
+    id: number
+    catalogNumber: string
+    createdAt: string
+  }
+  results: QueryResult[]
+}
+
 export interface IElectronAPI {
   send: (channel: string, data: unknown) => void
   receive: (channel: string, func: (...args: unknown[]) => void) => void
@@ -56,6 +71,10 @@ export interface IElectronAPI {
   deleteSetting: (key: string) => Promise<void>
   getThrottleStatus: () => Promise<ThrottleStatus>
   executeBatchQuery: (catalogNumbers: string[]) => Promise<BatchQueryResult[]>
+  getHistory: () => Promise<HistoryBatch[]>
+  getHistoryEntry: (queryId: number) => Promise<HistoryEntry | null>
+  deleteHistoryEntry: (queryId: number) => Promise<void>
+  clearAllHistory: () => Promise<void>
 }
 
 declare global {
