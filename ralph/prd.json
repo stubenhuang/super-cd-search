@@ -1,0 +1,291 @@
+{
+  "project": "Super CD Search",
+  "branchName": "ralph/cd-info-query-app",
+  "description": "A macOS Electron desktop app for batch-querying CD information by catalog number across Discogs, eBay, Kojima Rokuon, and Mercari, with anti-scraping bypass, local history, and Excel export.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Initialize Electron + React project scaffold",
+      "description": "As a developer, I need a working Electron + React project scaffold so that subsequent stories can build on it.",
+      "acceptanceCriteria": [
+        "Electron app launches with a React-based main window",
+        "Hot reload works in development mode",
+        "Package.json has scripts for dev, build, and lint",
+        "App window has a placeholder layout with left panel and right panel",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Completed with electron-vite + React + TypeScript"
+    },
+    {
+      "id": "US-002",
+      "title": "Add SQLite database schema for query results",
+      "description": "As a developer, I need a SQLite database with tables for query results so that CD data can be persisted locally.",
+      "acceptanceCriteria": [
+        "Initialize better-sqlite3 database on app startup in user data directory",
+        "Create 'queries' table: id, catalog_number, created_at",
+        "Create 'results' table: id, query_id, platform, name, artist, price_min, price_max, cover_url, link, status ('found'|'not_found'|'error')",
+        "Migration runs automatically on app start",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Add secure settings storage for API keys and cookies",
+      "description": "As a developer, I need a secure settings store so that user-provided API tokens and cookies are persisted safely.",
+      "acceptanceCriteria": [
+        "Settings store backed by electron-store with encryption enabled",
+        "Schema supports: discogsToken, ebayClientId, ebayClientSecret, cookies (object with discogs/ebay/kojima/mercari keys)",
+        "Expose IPC handlers: getSettings, setSetting, deleteSetting",
+        "Settings persist across app restarts",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Set up Puppeteer stealth scraping engine",
+      "description": "As a developer, I need a Puppeteer instance with stealth plugin so that scraping can bypass basic anti-bot detection.",
+      "acceptanceCriteria": [
+        "Puppeteer bundled within Electron app using puppeteer-core + local Chromium",
+        "puppeteer-extra-plugin-stealth applied to all browser instances",
+        "Dynamic fingerprinting: rotate User-Agent, viewport size, and WebGL vendor strings per session",
+        "Browser instance pool managed with acquire/release pattern (max 2 concurrent)",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Add request throttling middleware",
+      "description": "As a developer, I need request throttling so that scraping requests mimic human behavior and avoid rate limits.",
+      "acceptanceCriteria": [
+        "Per-domain throttle queue with randomized 2-6 second delay between requests",
+        "429 responses trigger exponential backoff (2s, 4s, 8s, then fail)",
+        "When all retries exhausted, return error status with message indicating manual intervention needed",
+        "Throttle state exposed via IPC: getThrottleStatus",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Implement Discogs query module",
+      "description": "As a developer, I need a Discogs query module so the app can fetch CD info from Discogs by catalog number.",
+      "acceptanceCriteria": [
+        "Primary: call Discogs search API with user-provided token, search by catalog_number field",
+        "Fallback: stealth-scrape Discogs search page if API returns error or no token",
+        "Extract from results: name, artist, price_min, price_max, cover_url, link",
+        "Return { status: 'not_found' } when no results",
+        "Inject user cookies from settings when scraping",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Implement eBay query module",
+      "description": "As a developer, I need an eBay query module so the app can fetch CD listing info from eBay by catalog number.",
+      "acceptanceCriteria": [
+        "Primary: call eBay Browse API with OAuth credentials from settings",
+        "Fallback: stealth-scrape eBay search results page",
+        "Extract from results: name, price_min, price_max, cover_url, link",
+        "Return { status: 'not_found' } when no results",
+        "Inject user cookies from settings when scraping",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Implement Kojima Rokuon query module",
+      "description": "As a developer, I need a Kojima Rokuon query module so the app can fetch CD info from kojimarokuon.com by catalog number.",
+      "acceptanceCriteria": [
+        "Stealth-scrape kojimarokuon.com search page using catalog number (no public API)",
+        "Handle Japanese-language pages and UTF-8 character encoding correctly",
+        "Extract from results: name, artist, price_min, price_max, cover_url, link",
+        "Return { status: 'not_found' } when no results",
+        "Inject user cookies from settings when scraping",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Implement Mercari query module",
+      "description": "As a developer, I need a Mercari query module so the app can fetch CD listing info from Mercari JP by catalog number.",
+      "acceptanceCriteria": [
+        "Stealth-scrape mercari.com search page using catalog number (no stable public API)",
+        "Extract from results: name, price_min, price_max, cover_url, link",
+        "Return { status: 'not_found' } when no results",
+        "Inject user cookies from settings when scraping",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Build query orchestrator with parallel execution",
+      "description": "As a developer, I need a query orchestrator that runs all 4 platform queries in parallel per CD and handles batches of up to 10 CDs.",
+      "acceptanceCriteria": [
+        "Accept array of up to 10 catalog numbers",
+        "For each catalog number, query all 4 platforms in parallel",
+        "Control concurrency: max 3 catalog numbers processed simultaneously",
+        "Emit IPC events for progress: query:start, query:progress, query:complete, query:error",
+        "Save all results to SQLite after each catalog number completes",
+        "Return aggregated results when entire batch finishes",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Build input panel UI for catalog numbers",
+      "description": "As a user, I want to enter up to 10 CD catalog numbers so I can start a search.",
+      "acceptanceCriteria": [
+        "Left panel contains a textarea for catalog numbers (one per line or comma-separated)",
+        "Validate: show error message if empty or more than 10 entries",
+        "Search button triggers IPC call to query orchestrator",
+        "Search button shows disabled/loading state while query is running",
+        "Support dark mode via macOS system appearance",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Build settings panel UI",
+      "description": "As a user, I want to configure API tokens and cookies so the app can access protected platforms.",
+      "acceptanceCriteria": [
+        "Settings panel accessible via menu or toolbar icon",
+        "Input fields for: Discogs API token, eBay Client ID, eBay Client Secret",
+        "Cookie input textarea per platform (Discogs, eBay, Kojima Rokuon, Mercari)",
+        "Save button writes settings via IPC; values load on panel open",
+        "Toast notification confirms settings saved successfully",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Build result card component",
+      "description": "As a user, I want to see each CD's information in a card layout so I can quickly scan results.",
+      "acceptanceCriteria": [
+        "Right panel displays result cards grouped by catalog number",
+        "Each card shows: catalog number, CD name, artist, cover image thumbnail, per-platform price range with link",
+        "Cover images load asynchronously with placeholder while loading",
+        "Platform names shown with recognizable label/icon per row",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Add price comparison and not-found display",
+      "description": "As a user, I want to see the lowest price highlighted and clear 'Not Found' indicators so I can quickly identify the best deal.",
+      "acceptanceCriteria": [
+        "Lowest price across all platforms highlighted in green within each result card",
+        "Platforms with no results show a 'Not Found' badge instead of price",
+        "Platforms with errors show an 'Error' badge with tooltip for details",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add query progress indicator",
+      "description": "As a user, I want to see real-time progress while queries are running so I know the app is working.",
+      "acceptanceCriteria": [
+        "Progress bar or status area in right panel shows overall batch progress (e.g., '3/10 CDs queried')",
+        "Per-platform status badges on each result card: loading/complete/error/not-found",
+        "Status updates in real-time via IPC events from orchestrator",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Build history view",
+      "description": "As a user, I want to view past queries so I can reference previously searched CDs offline.",
+      "acceptanceCriteria": [
+        "History tab/section lists all past query batches with timestamp and catalog numbers",
+        "Clicking a history entry loads its saved results into the result cards view",
+        "Delete button on each history entry removes it from SQLite",
+        "Clear All button removes entire history",
+        "Results viewable without internet connection",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Implement Excel export logic",
+      "description": "As a developer, I need an Excel export module so users can export query results to .xlsx files.",
+      "acceptanceCriteria": [
+        "Use exceljs to generate .xlsx file",
+        "Columns: Catalog Number, Name, Artist, Discogs Price, eBay Price, Kojima Rokuon Price, Mercari Price, Cover Image URL, Discogs Link, eBay Link, Kojima Link, Mercari Link",
+        "Accept array of result objects (from current view or history selection)",
+        "Show native save dialog (dialog.showSaveDialog) for destination path",
+        "Exported file opens correctly in Excel/Numbers/Google Sheets",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Add export UI button and integration",
+      "description": "As a user, I want an Export to Excel button so I can save my search results as a spreadsheet.",
+      "acceptanceCriteria": [
+        "Export to Excel button in results view toolbar",
+        "Clicking triggers IPC to export module with current result set",
+        "Option to export selected results from history (checkbox selection)",
+        "Toast notification confirms export success with file path",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
