@@ -12,6 +12,15 @@ export interface Settings {
   cookies?: Cookies
 }
 
+export interface ThrottleStatus {
+  domains: Record<string, {
+    pendingRequests: number
+    active: boolean
+    backoffAttempt: number | null
+    nextBackoffDelay: number | null
+  }>
+}
+
 export interface IElectronAPI {
   send: (channel: string, data: unknown) => void
   receive: (channel: string, func: (...args: unknown[]) => void) => void
@@ -19,6 +28,7 @@ export interface IElectronAPI {
   getSetting: (key: string) => Promise<unknown>
   setSetting: (key: string, value: unknown) => Promise<void>
   deleteSetting: (key: string) => Promise<void>
+  getThrottleStatus: () => Promise<ThrottleStatus>
 }
 
 declare global {

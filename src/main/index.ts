@@ -3,6 +3,7 @@ import { join } from 'path'
 import { initDatabase, closeDatabase } from './database'
 import { registerSettingsIpc } from './ipc/settings'
 import { browserPool } from './browser'
+import { registerThrottleIpc } from './throttle'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -32,6 +33,7 @@ function createWindow() {
 app.whenReady().then(() => {
   initDatabase()
   registerSettingsIpc()
+  registerThrottleIpc()
   createWindow()
 
   app.on('activate', () => {

@@ -17,5 +17,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('getSettings'),
   getSetting: (key: string) => ipcRenderer.invoke('getSetting', key),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke('setSetting', key, value),
-  deleteSetting: (key: string) => ipcRenderer.invoke('deleteSetting', key)
+  deleteSetting: (key: string) => ipcRenderer.invoke('deleteSetting', key),
+  getThrottleStatus: () => ipcRenderer.invoke('getThrottleStatus')
 })
