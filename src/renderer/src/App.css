@@ -318,6 +318,55 @@
   font-weight: 600;
   color: var(--success-color);
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.platform-details .price.lowest-price {
+  color: #059669;
+}
+
+.lowest-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background-color: var(--success-color);
+  color: white;
+  text-transform: uppercase;
+}
+
+.error-container,
+.not-found-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: var(--error-bg);
+  color: var(--error-text);
+  text-transform: uppercase;
+}
+
+.error-tooltip {
+  cursor: help;
+  font-size: 14px;
+}
+
+.not-found-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: var(--warning-bg);
+  color: var(--warning-text);
+  text-transform: uppercase;
 }
 
 .platform-details .error-text {

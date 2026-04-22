@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { BatchQueryResult, BatchQueryProgress, QueryResult } from './electron-api'
 import { SettingsPanel } from './Settings'
 import './App.css'
@@ -10,7 +10,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   mercari: 'Mercari'
 }
 
-function PlatformResultRow({ result }: { result: QueryResult }) {
+function PlatformResultRow({ result, isLowestPrice }: { result: QueryResult; isLowestPrice: boolean }) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
@@ -56,12 +56,20 @@ function PlatformResultRow({ result }: { result: QueryResult }) {
           <>
             <div className="name">{result.name || '-'}</div>
             <div className="artist">{result.artist || '-'}</div>
-            <div className="price">{formatPrice(result.priceMin, result.priceMax)}</div>
+            <div className={`price ${isLowestPrice ? 'lowest-price' : ''}`}>
+              {formatPrice(result.priceMin, result.priceMax)}
+              {isLowestPrice && <span className="lowest-badge">Best</span>}
+            </div>
           </>
         ) : result.status === 'error' ? (
-          <div className="error-text">Error: {result.error || 'Unknown error'}</div>
+          <div className="error-container">
+            <span className="error-badge">Error</span>
+            <span className="error-tooltip" title={result.error || 'Unknown error'}>⚠</span>
+          </div>
         ) : (
-          <div className="not-found-text">Not found</div>
+          <div className="not-found-container">
+            <span className="not-found-badge">Not Found</span>
+          </div>
         )}
       </div>
       <div className="platform-link">
@@ -80,6 +88,13 @@ function ResultCard({ catalogNumber, results }: BatchQueryResult) {
   const displayName = foundResult?.name || catalogNumber
   const displayArtist = foundResult?.artist
 
+  const lowestPrice = useMemo(() => {
+    const prices = results
+      .filter(r => r.status === 'found' && r.priceMin !== null)
+      .map(r => r.priceMin as number)
+    return prices.length > 0 ? Math.min(...prices) : null
+  }, [results])
+
   return (
     <div className="result-card">
       <div className="result-header">
@@ -89,7 +104,11 @@ function ResultCard({ catalogNumber, results }: BatchQueryResult) {
       <div className="result-title">{displayName}</div>
       <div className="platform-results">
         {results.map((r, idx) => (
-          <PlatformResultRow key={idx} result={r} />
+          <PlatformResultRow
+            key={idx}
+            result={r}
+            isLowestPrice={r.status === 'found' && r.priceMin !== null && r.priceMin === lowestPrice}
+          />
         ))}
       </div>
     </div>
