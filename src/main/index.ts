@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { initDatabase, closeDatabase } from './database'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -27,6 +28,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  initDatabase()
   createWindow()
 
   app.on('activate', () => {
@@ -37,6 +39,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  closeDatabase()
   if (process.platform !== 'darwin') {
     app.quit()
   }
