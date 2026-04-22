@@ -69,3 +69,130 @@
   font-size: 14px;
   line-height: 1.5;
 }
+
+.catalog-input {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.catalog-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.catalog-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.error-message {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 4px;
+  color: var(--error-text);
+  font-size: 13px;
+}
+
+.search-button {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.search-button:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.search-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.progress-area {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.results-area {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.result-card {
+  padding: 16px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.result-catalog {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.platform-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.platform-result:last-child {
+  border-bottom: none;
+}
+
+.platform-name {
+  font-weight: 500;
+  text-transform: capitalize;
+  color: var(--text-primary);
+}
+
+.status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.status-found {
+  background-color: var(--success-bg);
+  color: var(--success-text);
+}
+
+.status-not_found {
+  background-color: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.status-error {
+  background-color: var(--error-bg);
+  color: var(--error-text);
+}
+
+.status-loading {
+  background-color: var(--info-bg);
+  color: var(--info-text);
+}
