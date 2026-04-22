@@ -1,0 +1,28 @@
+{
+  "name": "super-cd-search",
+  "version": "1.0.0",
+  "description": "A macOS Electron desktop app for batch-querying CD information by catalog number",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"No lint configured yet\" && exit 0"
+  },
+  "keywords": ["electron", "react", "cd", "search", "discogs", "ebay", "mercari"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "electron": "^41.2.2",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "typescript": "^6.0.3"
+  }
+}
