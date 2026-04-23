@@ -13,6 +13,8 @@ Started: Wed Apr 22 23:42:15 CST 2026
 - Use `browserPool.acquire()` / `browserPool.release()` for all Puppeteer operations
 - Use `throttledFetch(domain, url, options)` for all HTTP requests to avoid rate limits
 - Query modules: API first, web scraping fallback; use try/finally for browser pool
+- IPC registration pattern: create handler in src/main/ipc/, register in main index.ts, expose in preload, type in renderer
+- All new IPC methods must be added to: preload/index.ts, renderer/src/electron-api.d.ts
 
 ## Wed Apr 22 23:50:00 CST 2026 - US-001
 - Initialized Electron + React + TypeScript project scaffold using electron-vite
@@ -116,3 +118,89 @@ Started: Wed Apr 22 23:42:15 CST 2026
   - Use getSetting('discogsToken') and getSetting('cookies')?.discogs for credentials
   - Browser pool acquire/release must be in try/finally block
 ---
+
+## Wed Apr 23 01:20:00 CST 2026 - US-007
+- Implemented eBay query module with OAuth + web fallback
+- Primary: call eBay Browse API with OAuth credentials
+- Access token caching with expiry management
+- Fallback: stealth-scrape eBay search page
+- Files changed: src/main/queries/ebay.ts
+
+## Wed Apr 23 01:30:00 CST 2026 - US-008 & US-009
+- Implemented Kojima Rokuon and Mercari query modules
+- Both are scraping-only (no public APIs)
+- Handle Japanese price formats and UTF-8 encoding
+- Files changed: src/main/queries/kojima.ts, src/main/queries/mercari.ts
+
+## Wed Apr 23 01:45:00 CST 2026 - US-010
+- Built query orchestrator with parallel execution
+- Accept array of up to 10 catalog numbers
+- Query all 4 platforms in parallel per catalog number
+- Control concurrency: max 3 catalog numbers simultaneously
+- Emit IPC events for progress tracking
+- Save all results to SQLite after each catalog number completes
+- Files changed: src/main/orchestrator/index.ts, src/main/ipc/orchestrator.ts
+
+## Wed Apr 23 02:00:00 CST 2026 - US-011
+- Built input panel UI for catalog numbers
+- Textarea for catalog numbers (one per line or comma-separated)
+- Validation for empty or more than 10 entries
+- Search button triggers IPC call to query orchestrator
+- Dark mode support via CSS variables
+- Files changed: src/renderer/src/App.tsx, src/renderer/src/App.css, src/renderer/src/index.css
+
+## Wed Apr 23 02:15:00 CST 2026 - US-012
+- Built settings panel UI
+- Accessible via toolbar gear icon
+- Input fields for Discogs API token, eBay Client ID/Secret
+- Cookie input textarea per platform
+- Save button writes settings via IPC; values load on panel open
+- Toast notification confirms settings saved
+- Files changed: src/renderer/src/Settings.tsx, src/renderer/src/Settings.css
+
+## Wed Apr 23 02:30:00 CST 2026 - US-013
+- Built result card component
+- Right panel displays result cards grouped by catalog number
+- Each card shows catalog number, CD name, artist, cover thumbnail
+- Per-platform price range with link
+- Cover images load asynchronously with placeholder
+- Platform names shown with recognizable label/icon per row
+- Files changed: src/renderer/src/App.tsx, src/renderer/src/App.css
+
+## Wed Apr 23 02:45:00 CST 2026 - US-014
+- Added price comparison and not-found display
+- Lowest price across all platforms highlighted with "Best" badge
+- Platforms with no results show "Not Found" badge
+- Platforms with errors show "Error" badge with tooltip
+- Color-coded border indicators per status
+- Files changed: src/renderer/src/App.tsx, src/renderer/src/App.css
+
+## Wed Apr 23 03:00:00 CST 2026 - US-015
+- Added query progress indicator
+- Progress text shows "X/Y CDs queried" in header
+- Spinner and progress area during querying
+- Real-time status updates via IPC events
+
+## Wed Apr 23 03:15:00 CST 2026 - US-016
+- Built history view
+- History tab lists all past query batches
+- Clicking history entry loads saved results
+- Delete and Clear All buttons
+- Results viewable offline
+- Files changed: src/main/database/queries.ts, src/main/ipc/history.ts, src/renderer/src/History.tsx
+
+## Wed Apr 23 03:30:00 CST 2026 - US-017
+- Implemented Excel export logic with exceljs
+- Columns: Catalog Number, Name, Artist, prices per platform, cover URL, links
+- Native save dialog for destination path
+- Header styling in exported file
+- Files changed: src/main/export/index.ts, src/main/ipc/export.ts
+
+## Wed Apr 23 03:40:00 CST 2026 - US-018
+- Added export UI button and integration
+- Export to Excel button in results view toolbar
+- Toast notification confirms export success with file path
+- Files changed: src/renderer/src/App.tsx, src/renderer/src/App.css
+
+---
+# ALL STORIES COMPLETE - 18/18 passed
