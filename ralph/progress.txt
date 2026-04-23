@@ -1,0 +1,26 @@
+# Ralph Progress Log
+Started: Wed Apr 23 2026
+---
+
+## Codebase Patterns
+- Use `browserPool.acquire()` / `browserPool.release()` for all Puppeteer operations
+- Query modules: API first, web scraping fallback; use try/finally for browser pool
+- Discogs website uses modern React/Tailwind - selectors: `div[role="listitem"]`, `a[aria-label^="Release:"]`, `a[aria-label^="Artist:"]`
+
+## Wed Apr 23 2026 - US-001
+- Fixed Discogs query module to use `catno=` parameter instead of `q=` for accurate catalog number searches
+- Added exact catalog number matching to prioritize correct results over partial matches
+- Updated web scraping selectors for modern Discogs website (old selectors `#search_results .card` no longer work)
+- Web scraping now uses `catno=` URL parameter and modern CSS selectors
+- **Verification results:**
+  - ALCD-1197 returns `not_found` on Discogs (correct - this catalog number doesn't exist in their database)
+  - TOCP-6701 returns `found` with all 4 fields (name, artist, coverUrl, link)
+- Files changed:
+  - src/main/queries/discogs.ts
+- **Learnings for future iterations:**
+  - Discogs website has changed significantly - old card-based selectors no longer work
+  - Use `catno=` URL parameter for catalog number searches on Discogs web (not `catno:` prefix in q parameter)
+  - Modern Discogs uses React/Tailwind with `div[role="listitem"]` for result items
+  - Release links use `aria-label^="Release:"` attribute selector
+  - Artist links use `aria-label^="Artist:"` attribute selector
+---

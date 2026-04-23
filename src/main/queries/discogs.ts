@@ -8,7 +8,7 @@ const DISCOGS_API_URL = 'https://api.discogs.com'
 const DISCOGS_WEB_URL = 'https://www.discogs.com'
 
 async function queryDiscogsApi(catalogNumber: string, token: string): Promise<QueryResult> {
-  const url = `${DISCOGS_API_URL}/database/search?q=${encodeURIComponent(catalogNumber)}&type=release&token=${token}`
+  const url = `${DISCOGS_API_URL}/database/search?catno=${encodeURIComponent(catalogNumber)}&type=release&token=${token}`
 
   try {
     const response = await throttledFetch('api.discogs.com', url)
@@ -20,6 +20,7 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
     const data = await response.json()
     const results = data.results as Array<{
       title: string
+      catno?: string
       year?: string
       cover_image?: string
       uri?: string
@@ -30,7 +31,11 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
       return notFound('discogs')
     }
 
-    const first = results[0]
+    // Prioritize exact catalog number match
+    const exactMatch = results.find(r =>
+      r.catno && r.catno.toUpperCase() === catalogNumber.toUpperCase()
+    )
+    const first = exactMatch || results[0]
     const titleParts = first.title.split(' - ')
     const artist = titleParts[0] || null
     const name = titleParts.slice(1).join(' - ') || first.title
@@ -63,36 +68,33 @@ async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise
       })
     }
 
-    const searchUrl = `${DISCOGS_WEB_URL}/search/?q=${encodeURIComponent(catalogNumber)}&type=release`
+    const searchUrl = `${DISCOGS_WEB_URL}/search/?q=&type=release&catno=${encodeURIComponent(catalogNumber)}`
     await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 })
 
-    const noResults = await page.$('.no-results')
-    if (noResults) {
+    // Wait for results to load
+    await page.waitForSelector('div[role="listitem"]', { timeout: 10000 }).catch(() => null)
+
+    // Check for no results text
+    const bodyText = await page.evaluate(() => document.body.innerText)
+    if (bodyText.includes('No results')) {
       return notFound('discogs')
     }
 
-    const firstResult = await page.$('#search_results .card')
+    // Find first result item
+    const firstResult = await page.$('div[role="listitem"]')
     if (!firstResult) {
       return notFound('discogs')
     }
 
-    const name = await firstResult.$eval('.card_title a', el => el.textContent?.trim() || null).catch(() => null)
-    const artist = await firstResult.$eval('.card_artist a', el => el.textContent?.trim() || null).catch(() => null)
-    const coverUrl = await firstResult.$eval('.card_image img', el => el.getAttribute('src')).catch(() => null)
-    const link = await firstResult.$eval('.card_title a', el => el.getAttribute('href')).catch(() => null)
+    // Extract data using updated selectors for new Discogs layout
+    const name = await firstResult.$eval('a[aria-label^="Release:"]', el => el.textContent?.trim() || null).catch(() => null)
+    const artist = await firstResult.$eval('a[aria-label^="Artist:"]', el => el.textContent?.trim() || null).catch(() => null)
+    const coverUrl = await firstResult.$eval('img', el => el.getAttribute('src')).catch(() => null)
+    const link = await firstResult.$eval('a[href*="/release/"]', el => el.getAttribute('href')).catch(() => null)
 
-    const priceText = await firstResult.$eval('.card_price', el => el.textContent?.trim() || null).catch(() => null)
-    let priceMin: number | null = null
-    let priceMax: number | null = null
-
-    if (priceText) {
-      const priceMatch = priceText.match(/[\$€£¥]([\d,.]+)/)
-      if (priceMatch) {
-        const price = parseFloat(priceMatch[1].replace(/,/g, ''))
-        priceMin = price
-        priceMax = price
-      }
-    }
+    // Discogs search results don't show price (that's in marketplace)
+    const priceMin: number | null = null
+    const priceMax: number | null = null
 
     return {
       platform: 'discogs',
