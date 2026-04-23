@@ -75,6 +75,7 @@ export interface IElectronAPI {
   getHistoryEntry: (queryId: number) => Promise<HistoryEntry | null>
   deleteHistoryEntry: (queryId: number) => Promise<void>
   clearAllHistory: () => Promise<void>
+  exportToExcel: (results: BatchQueryResult[]) => Promise<string | null>
 }
 
 declare global {

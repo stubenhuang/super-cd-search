@@ -23,5 +23,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getHistory: () => ipcRenderer.invoke('getHistory'),
   getHistoryEntry: (queryId: number) => ipcRenderer.invoke('getHistoryEntry', queryId),
   deleteHistoryEntry: (queryId: number) => ipcRenderer.invoke('deleteHistoryEntry', queryId),
-  clearAllHistory: () => ipcRenderer.invoke('clearAllHistory')
+  clearAllHistory: () => ipcRenderer.invoke('clearAllHistory'),
+  exportToExcel: (results: unknown[]) => ipcRenderer.invoke('exportToExcel', results)
 })

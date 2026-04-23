@@ -4,6 +4,7 @@ import { initDatabase, closeDatabase } from './database'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerOrchestratorIpc } from './ipc/orchestrator'
 import { registerHistoryIpc } from './ipc/history'
+import { registerExportIpc } from './ipc/export'
 import { browserPool } from './browser'
 import { registerThrottleIpc } from './throttle'
 
@@ -37,6 +38,7 @@ app.whenReady().then(() => {
   registerSettingsIpc()
   registerOrchestratorIpc()
   registerHistoryIpc()
+  registerExportIpc()
   registerThrottleIpc()
   createWindow()
 
