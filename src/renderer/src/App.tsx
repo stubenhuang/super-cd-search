@@ -124,6 +124,7 @@ function App() {
   const [progress, setProgress] = useState<BatchQueryProgress[]>([])
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState<'results' | 'history'>('results')
+  const [toast, setToast] = useState<string | null>(null)
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
@@ -182,6 +183,20 @@ function App() {
     }
   }, [])
 
+  const handleExport = useCallback(async () => {
+    if (results.length === 0) return
+    try {
+      const filePath = await window.electronAPI.exportToExcel(results)
+      if (filePath) {
+        setToast(`Exported to ${filePath}`)
+        setTimeout(() => setToast(null), 4000)
+      }
+    } catch (err) {
+      setToast('Export failed')
+      setTimeout(() => setToast(null), 4000)
+    }
+  }, [results])
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -237,9 +252,16 @@ function App() {
                 History
               </button>
             </div>
-            {activeTab === 'results' && progressText && (
-              <span className="progress-text">{progressText}</span>
-            )}
+            <div className="panel-actions">
+              {activeTab === 'results' && progressText && (
+                <span className="progress-text">{progressText}</span>
+              )}
+              {activeTab === 'results' && results.length > 0 && (
+                <button className="export-button" onClick={handleExport}>
+                  Export to Excel
+                </button>
+              )}
+            </div>
           </div>
           <div className="panel-content">
             {activeTab === 'results' && (
@@ -271,6 +293,7 @@ function App() {
         </section>
       </main>
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      {toast && <div className="app-toast">{toast}</div>}
     </div>
   )
 }
