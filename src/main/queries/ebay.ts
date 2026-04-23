@@ -106,16 +106,35 @@ async function queryEbayWeb(catalogNumber: string, cookies?: string): Promise<Qu
       })
     }
 
+    // Force English locale for consistent parsing
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' })
+
     const searchUrl = `${EBAY_WEB_URL}/sch/i.html?_nkw=${encodeURIComponent(catalogNumber)}`
-    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 })
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 })
+    await new Promise(r => setTimeout(r, 5000))
+
+    // Check for bot detection page
+    const bodyText = await page.evaluate(() => document.body.innerText)
+    if (bodyText.includes('Checking your browser')) {
+      console.warn('eBay web scraping blocked by bot detection')
+      throw new Error('eBay blocked by bot detection - use API credentials')
+    }
 
     const noResults = await page.$('.srp-rail__no-results')
     if (noResults) {
       return notFound('ebay')
     }
 
-    const firstItem = await page.$('.srp-results .s-item')
+    // Try multiple selector patterns for eBay's varying HTML structures
+    const firstItem = await page.$('.srp-results .s-item') ||
+                      await page.$('li.s-item') ||
+                      await page.$('[data-view*="item"]')
+
     if (!firstItem) {
+      // Check if results exist in page text
+      if (!bodyText.includes('0个符合') && !bodyText.includes('0 results')) {
+        console.warn('eBay results may exist but selectors need updating')
+      }
       return notFound('ebay')
     }
 

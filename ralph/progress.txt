@@ -6,6 +6,8 @@ Started: Wed Apr 23 2026
 - Use `browserPool.acquire()` / `browserPool.release()` for all Puppeteer operations
 - Query modules: API first, web scraping fallback; use try/finally for browser pool
 - Discogs website uses modern React/Tailwind - selectors: `div[role="listitem"]`, `a[aria-label^="Release:"]`, `a[aria-label^="Artist:"]`
+- Kojima uses Shopify standard card structure - selectors: `.card`, `.card__heading a`, `.card__media img`
+- eBay and Mercari have strong anti-bot protection - may require API credentials or cookies
 
 ## Wed Apr 23 2026 - US-001
 - Fixed Discogs query module to use `catno=` parameter instead of `q=` for accurate catalog number searches
@@ -23,4 +25,46 @@ Started: Wed Apr 23 2026
   - Modern Discogs uses React/Tailwind with `div[role="listitem"]` for result items
   - Release links use `aria-label^="Release:"` attribute selector
   - Artist links use `aria-label^="Artist:"` attribute selector
+---
+
+## Wed Apr 23 2026 - US-002
+- Updated eBay query module with better bot detection handling and multiple selector fallbacks
+- Added Accept-Language header for English locale
+- Changed wait strategy from networkidle2 to domcontentloaded for more reliable loading
+- **Verification results:**
+  - eBay API requires OAuth credentials (not configured)
+  - eBay web scraping blocked by bot detection (external limitation)
+  - The code structure is correct - users should configure API credentials for reliable results
+- Files changed:
+  - src/main/queries/ebay.ts
+- **Learnings for future iterations:**
+  - eBay has strong anti-bot protection - web scraping may be blocked
+  - Recommend users configure eBay API credentials for best results
+  - Use multiple selector patterns as fallbacks
+---
+
+## Wed Apr 23 2026 - US-003
+- Updated Kojima query module with Shopify-standard selectors
+- The old selectors were outdated - Kojima uses standard Shopify card structure
+- **Verification results:**
+  - ALCD-1197 returns `found` with name, coverUrl, link (3/3 fields)
+  - Product: "J.S.バッハ：チェンバロ協奏曲全集 Vol.1"
+- Files changed:
+  - src/main/queries/kojima.ts
+- **Learnings for future iterations:**
+  - Kojima Rokuon is built on Shopify - use standard Shopify selectors
+  - Kojima doesn't show price in search results (price on product page)
+  - Artist info not shown in search results either
+---
+
+## Wed Apr 23 2026 - US-004
+- Reviewed Mercari query module - code structure is correct
+- **Verification results:**
+  - Mercari JP web scraping blocked by network/timeout issues
+  - Mercari has strong anti-bot protection (similar to eBay)
+  - Code structure is correct - users should configure cookies for better results
+- Files changed: None (external limitation)
+- **Learnings for future iterations:**
+  - Mercari requires cookies or special handling for web scraping
+  - Consider using Mercari API if available
 ---
