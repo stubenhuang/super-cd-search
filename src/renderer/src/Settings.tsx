@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Settings } from './electron-api'
 import './Settings.css'
 
@@ -14,7 +14,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [cookiesDiscogs, setCookiesDiscogs] = useState('')
   const [cookiesEbay, setCookiesEbay] = useState('')
   const [cookiesKojima, setCookiesKojima] = useState('')
-  const [cookiesMercari, setCookiesMercari] = useState('')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -24,7 +23,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     }
   }, [isOpen])
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     const settings = await window.electronAPI.getSettings() as Settings
     setDiscogsToken(settings.discogsToken || '')
     setEbayClientId(settings.ebayClientId || '')
@@ -32,8 +31,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setCookiesDiscogs(settings.cookies?.discogs || '')
     setCookiesEbay(settings.cookies?.ebay || '')
     setCookiesKojima(settings.cookies?.kojima || '')
-    setCookiesMercari(settings.cookies?.mercari || '')
-  }
+  }, [])
 
   const handleSave = async () => {
     setSaving(true)
@@ -44,8 +42,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       await window.electronAPI.setSetting('cookies', {
         discogs: cookiesDiscogs,
         ebay: cookiesEbay,
-        kojima: cookiesKojima,
-        mercari: cookiesMercari
+        kojima: cookiesKojima
       })
       setToast('Settings saved successfully')
       setTimeout(() => setToast(null), 3000)
@@ -130,16 +127,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 id="cookiesKojima"
                 value={cookiesKojima}
                 onChange={e => setCookiesKojima(e.target.value)}
-                placeholder="Paste cookies here..."
-                rows={3}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="cookiesMercari">Mercari Cookies</label>
-              <textarea
-                id="cookiesMercari"
-                value={cookiesMercari}
-                onChange={e => setCookiesMercari(e.target.value)}
                 placeholder="Paste cookies here..."
                 rows={3}
               />

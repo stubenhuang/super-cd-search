@@ -1,18 +1,7 @@
-import Store from 'electron-store'
+import electronStore from 'electron-store'
+import type { Settings, Cookies } from '../../shared/types'
 
-export interface Cookies {
-  discogs?: string
-  ebay?: string
-  kojima?: string
-  mercari?: string
-}
-
-export interface Settings {
-  discogsToken?: string
-  ebayClientId?: string
-  ebayClientSecret?: string
-  cookies?: Cookies
-}
+export type { Settings, Cookies }
 
 const schema = {
   discogsToken: { type: 'string' as const, default: '' },
@@ -23,14 +12,26 @@ const schema = {
     properties: {
       discogs: { type: 'string' as const, default: '' },
       ebay: { type: 'string' as const, default: '' },
-      kojima: { type: 'string' as const, default: '' },
-      mercari: { type: 'string' as const, default: '' }
+      kojima: { type: 'string' as const, default: '' }
     },
     default: {}
   }
 } as const
 
-const store = new Store({ schema, encryptionKey: 'super-cd-search-enc-key', name: 'settings' })
+const Store = (electronStore as any).default || electronStore
+
+function getEncryptionKey(): string {
+  if (process.env.SETTINGS_ENCRYPTION_KEY) {
+    return process.env.SETTINGS_ENCRYPTION_KEY
+  }
+  // Generate a machine-specific key based on username and hostname
+  // This provides some obfuscation without requiring user setup
+  const crypto = require('crypto')
+  const machineId = `${process.env.USER || 'unknown'}-${process.env.HOSTNAME || 'localhost'}-super-cd-search`
+  return crypto.createHash('sha256').update(machineId).digest('hex').slice(0, 32)
+}
+
+const store = new Store({ schema, encryptionKey: getEncryptionKey(), name: 'settings' })
 
 export function getSettings(): Settings {
   return {

@@ -1,7 +1,7 @@
 {
   "name": "super-cd-search",
   "version": "1.0.0",
-  "description": "A macOS Electron desktop app for batch-querying CD information by catalog number",
+  "description": "An Electron desktop app for batch-querying CD information by catalog number",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -9,7 +9,43 @@
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
     "typecheck": "tsc --build",
-    "lint": "echo \"No lint configured yet\" && exit 0"
+    "lint": "echo \"No lint configured yet\" && exit 0",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "rebuild": "npx electron-rebuild -f -w better-sqlite3"
+  },
+  "build": {
+    "appId": "com.super-cd-search.app",
+    "productName": "Super CD Search",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    }
   },
   "keywords": [
     "electron",
@@ -29,6 +65,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
     "electron": "^41.2.2",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

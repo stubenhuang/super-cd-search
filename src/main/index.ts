@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
 import { initDatabase, closeDatabase } from './database'
 import { registerSettingsIpc } from './ipc/settings'
@@ -21,8 +21,24 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true
     },
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 10 }
+    // macOS-only window styling
+    ...(process.platform === 'darwin' && {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 15, y: 10 }
+    })
+  })
+
+  // Prevent Electron from navigating inside the window
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('http://localhost')) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -40,6 +56,13 @@ app.whenReady().then(() => {
   registerHistoryIpc()
   registerExportIpc()
   registerThrottleIpc()
+
+  // Register shell.openExternal handler
+  ipcMain.handle('openExternal', async (_event, url: string) => {
+    console.log('openExternal called with:', url)
+    await shell.openExternal(url)
+  })
+
   createWindow()
 
   app.on('activate', () => {

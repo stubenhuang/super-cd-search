@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { Settings, BatchQueryResult, ThrottleStatus, HistoryBatch, HistoryEntry } from '../shared/types'
 
 const validSendChannels = ['toMain'] as const
 const validReceiveChannels = ['fromMain', 'query:progress'] as const
@@ -14,15 +15,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on(channel, (_event, ...args) => func(...args))
     }
   },
-  getSettings: () => ipcRenderer.invoke('getSettings'),
-  getSetting: (key: string) => ipcRenderer.invoke('getSetting', key),
-  setSetting: (key: string, value: unknown) => ipcRenderer.invoke('setSetting', key, value),
-  deleteSetting: (key: string) => ipcRenderer.invoke('deleteSetting', key),
-  getThrottleStatus: () => ipcRenderer.invoke('getThrottleStatus'),
-  executeBatchQuery: (catalogNumbers: string[]) => ipcRenderer.invoke('executeBatchQuery', catalogNumbers),
-  getHistory: () => ipcRenderer.invoke('getHistory'),
-  getHistoryEntry: (queryId: number) => ipcRenderer.invoke('getHistoryEntry', queryId),
-  deleteHistoryEntry: (queryId: number) => ipcRenderer.invoke('deleteHistoryEntry', queryId),
-  clearAllHistory: () => ipcRenderer.invoke('clearAllHistory'),
-  exportToExcel: (results: unknown[]) => ipcRenderer.invoke('exportToExcel', results)
+  getSettings: (): Promise<Settings> => ipcRenderer.invoke('getSettings'),
+  getSetting: <K extends keyof Settings>(key: K): Promise<Settings[K] | undefined> =>
+    ipcRenderer.invoke('getSetting', key),
+  setSetting: <K extends keyof Settings>(key: K, value: Settings[K]): Promise<void> =>
+    ipcRenderer.invoke('setSetting', key, value),
+  deleteSetting: <K extends keyof Settings>(key: K): Promise<void> =>
+    ipcRenderer.invoke('deleteSetting', key),
+  getThrottleStatus: (): Promise<ThrottleStatus> => ipcRenderer.invoke('getThrottleStatus'),
+  executeBatchQuery: (catalogNumbers: string[]): Promise<BatchQueryResult[]> =>
+    ipcRenderer.invoke('executeBatchQuery', catalogNumbers),
+  getHistory: (): Promise<HistoryBatch[]> => ipcRenderer.invoke('getHistory'),
+  getHistoryEntry: (queryId: number): Promise<HistoryEntry | null> =>
+    ipcRenderer.invoke('getHistoryEntry', queryId),
+  deleteHistoryEntry: (queryId: number): Promise<void> =>
+    ipcRenderer.invoke('deleteHistoryEntry', queryId),
+  clearAllHistory: (): Promise<void> => ipcRenderer.invoke('clearAllHistory'),
+  exportToExcel: (results: BatchQueryResult[]): Promise<string | null> =>
+    ipcRenderer.invoke('exportToExcel', results),
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url)
 })

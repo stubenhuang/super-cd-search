@@ -3,22 +3,12 @@ import { getDatabase } from '../database'
 import { queryDiscogs } from '../queries/discogs'
 import { queryEbay } from '../queries/ebay'
 import { queryKojima } from '../queries/kojima'
-import { queryMercari } from '../queries/mercari'
-import type { QueryResult } from '../queries/types'
+import type { QueryResult, BatchQueryProgress, BatchQueryResult } from '../../shared/types'
 
 const MAX_CONCURRENT_CATALOGS = 3
 const MAX_CATALOG_NUMBERS = 10
 
-export interface BatchQueryProgress {
-  catalogNumber: string
-  platform: string
-  status: 'loading' | 'complete' | 'error' | 'not_found'
-}
-
-export interface BatchQueryResult {
-  catalogNumber: string
-  results: QueryResult[]
-}
+export type { BatchQueryProgress, BatchQueryResult }
 
 function saveResults(catalogNumber: string, results: QueryResult[]): void {
   const db = getDatabase()
@@ -64,8 +54,7 @@ async function queryAllPlatforms(catalogNumber: string): Promise<QueryResult[]> 
   const platforms: Array<{ name: string; query: () => Promise<QueryResult> }> = [
     { name: 'discogs', query: () => queryDiscogs(catalogNumber) },
     { name: 'ebay', query: () => queryEbay(catalogNumber) },
-    { name: 'kojima', query: () => queryKojima(catalogNumber) },
-    { name: 'mercari', query: () => queryMercari(catalogNumber) }
+    { name: 'kojima', query: () => queryKojima(catalogNumber) }
   ]
 
   const results = await Promise.all(

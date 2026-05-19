@@ -50,7 +50,9 @@ class BrowserPool {
     })
   }
 
-  async release(browser: Browser): Promise<void> {
+  async release(browser: Browser, page: Page): Promise<void> {
+    await page.close().catch(() => {})
+
     const instance = this.instances.find(i => i.browser === browser)
     if (!instance) return
 
@@ -60,9 +62,9 @@ class BrowserPool {
       const waiter = this.waitQueue.shift()
       if (waiter) {
         instance.inUse = true
-        const page = await instance.browser.newPage()
-        await this.applyFingerprint(page, instance.fingerprint)
-        waiter.resolve({ browser: instance.browser, page, fingerprint: instance.fingerprint })
+        const newPage = await instance.browser.newPage()
+        await this.applyFingerprint(newPage, instance.fingerprint)
+        waiter.resolve({ browser: instance.browser, page: newPage, fingerprint: instance.fingerprint })
       }
     }
   }
@@ -77,7 +79,7 @@ class BrowserPool {
   private async createInstance(): Promise<BrowserInstance> {
     const fingerprint = generateFingerprint()
     const browser = await puppeteer.launch({
-      headless: false,
+      headless: true,
       executablePath: executablePath(),
       args: [
         '--no-sandbox',

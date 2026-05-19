@@ -1,57 +1,87 @@
 import { getSetting } from '../settings'
 import { throttledFetch } from '../throttle'
 import { browserPool } from '../browser'
+import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult } from './types'
 import { notFound, queryError } from './types'
 
 const DISCOGS_API_URL = 'https://api.discogs.com'
 const DISCOGS_WEB_URL = 'https://www.discogs.com'
 
+async function getDiscogsPriceRange(releaseId: number, token: string): Promise<{ min: number | null; max: number | null }> {
+  try {
+    const url = `${DISCOGS_API_URL}/marketplace/price_suggestions/${releaseId}?token=${token}`
+    const response = await throttledFetch('api.discogs.com', url)
+
+    if (response.ok) {
+      const data = await response.json()
+
+      // Extract VG and NM prices for typical condition range
+      const vgPrice = data['Very Good (VG)']?.value
+      const nmPrice = data['Near Mint (NM or M-)']?.value
+
+      if (vgPrice !== undefined && nmPrice !== undefined) {
+        const vgCurrency = data['Very Good (VG)']?.currency || 'USD'
+        const nmCurrency = data['Near Mint (NM or M-)']?.currency || 'USD'
+
+        return {
+          min: await convertToUSDWithFallback(vgPrice, vgCurrency as Currency),
+          max: await convertToUSDWithFallback(nmPrice, nmCurrency as Currency)
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Discogs price suggestions failed:', err)
+  }
+
+  return { min: null, max: null }
+}
+
 async function queryDiscogsApi(catalogNumber: string, token: string): Promise<QueryResult> {
   const url = `${DISCOGS_API_URL}/database/search?catno=${encodeURIComponent(catalogNumber)}&type=release&token=${token}`
 
-  try {
-    const response = await throttledFetch('api.discogs.com', url)
+  const response = await throttledFetch('api.discogs.com', url)
 
-    if (!response.ok) {
-      throw new Error(`Discogs API returned ${response.status}`)
-    }
+  if (!response.ok) {
+    throw new Error(`Discogs API returned ${response.status}`)
+  }
 
-    const data = await response.json()
-    const results = data.results as Array<{
-      title: string
-      catno?: string
-      year?: string
-      cover_image?: string
-      uri?: string
-      community?: { have: number; want: number }
-    }>
+  const data = await response.json()
+  const results = data.results as Array<{
+    id: number
+    title: string
+    catno?: string
+    year?: string
+    cover_image?: string
+    uri?: string
+    community?: { have: number; want: number }
+  }>
 
-    if (!results || results.length === 0) {
-      return notFound('discogs')
-    }
+  if (!results || results.length === 0) {
+    return notFound('discogs')
+  }
 
-    // Prioritize exact catalog number match
-    const exactMatch = results.find(r =>
-      r.catno && r.catno.toUpperCase() === catalogNumber.toUpperCase()
-    )
-    const first = exactMatch || results[0]
-    const titleParts = first.title.split(' - ')
-    const artist = titleParts[0] || null
-    const name = titleParts.slice(1).join(' - ') || first.title
+  // Prioritize exact catalog number match
+  const exactMatch = results.find(r =>
+    r.catno && r.catno.toUpperCase() === catalogNumber.toUpperCase()
+  )
+  const first = exactMatch || results[0]
+  const titleParts = first.title.split(' - ')
+  const artist = titleParts[0] || null
+  const name = titleParts.slice(1).join(' - ') || first.title
 
-    return {
-      platform: 'discogs',
-      name,
-      artist,
-      priceMin: null,
-      priceMax: null,
-      coverUrl: first.cover_image || null,
-      link: first.uri ? `${DISCOGS_WEB_URL}${first.uri}` : null,
-      status: 'found'
-    }
-  } catch (err) {
-    throw err
+  // Get price range from price_suggestions API (VG to NM)
+  const prices = await getDiscogsPriceRange(first.id, token)
+
+  return {
+    platform: 'discogs',
+    name,
+    artist,
+    priceMin: prices.min,
+    priceMax: prices.max,
+    coverUrl: first.cover_image || null,
+    link: first.uri ? `${DISCOGS_WEB_URL}${first.uri}` : null,
+    status: 'found'
   }
 }
 
@@ -90,24 +120,20 @@ async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise
     const name = await firstResult.$eval('a[aria-label^="Release:"]', el => el.textContent?.trim() || null).catch(() => null)
     const artist = await firstResult.$eval('a[aria-label^="Artist:"]', el => el.textContent?.trim() || null).catch(() => null)
     const coverUrl = await firstResult.$eval('img', el => el.getAttribute('src')).catch(() => null)
-    const link = await firstResult.$eval('a[href*="/release/"]', el => el.getAttribute('href')).catch(() => null)
-
-    // Discogs search results don't show price (that's in marketplace)
-    const priceMin: number | null = null
-    const priceMax: number | null = null
+    let link = await firstResult.$eval('a[href*="/release/"]', el => el.getAttribute('href')).catch(() => null)
 
     return {
       platform: 'discogs',
       name,
       artist,
-      priceMin,
-      priceMax,
+      priceMin: null,  // Price only available via API
+      priceMax: null,
       coverUrl,
       link: link ? `${DISCOGS_WEB_URL}${link}` : null,
       status: 'found'
     }
   } finally {
-    await browserPool.release(browser)
+    await browserPool.release(browser, page)
   }
 }
 

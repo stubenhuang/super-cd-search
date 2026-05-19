@@ -1,5 +1,6 @@
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
+import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult } from './types'
 import { notFound, queryError } from './types'
 
@@ -53,12 +54,52 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
       link = `${KOJIMA_WEB_URL}${link}`
     }
 
-    // Kojima typically doesn't show price on search results
-    // Price is on the product page
-    const priceMin: number | null = null
-    const priceMax: number | null = null
+    // Navigate to product page to get price
+    let priceMin: number | null = null
+    let priceMax: number | null = null
 
-    // Artist info not typically shown in search results
+    if (link) {
+      try {
+        await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
+        await new Promise(r => setTimeout(r, 2000))
+
+        // Try multiple price selectors for Shopify themes
+        const priceText = await page.evaluate(() => {
+          const selectors = [
+            '.price__regular .price-item--regular',
+            '.price__sale .price-item--sale',
+            '.product__price',
+            '.price-item',
+            '[data-product-price]',
+            '.product-single__price',
+            'span[data-product-price]'
+          ]
+          for (const sel of selectors) {
+            const el = document.querySelector(sel)
+            if (el && el.textContent) {
+              return el.textContent.trim()
+            }
+          }
+          return null
+        })
+
+        if (priceText) {
+          // Parse Japanese price format (e.g., "¥1,980" or "1,980円")
+          const match = priceText.match(/[\d,]+/)
+          if (match) {
+            const priceJPY = parseInt(match[0].replace(/,/g, ''), 10)
+            if (!isNaN(priceJPY)) {
+              // Convert JPY to USD
+              const priceUSD = await convertToUSDWithFallback(priceJPY, 'JPY')
+              priceMin = priceUSD
+              priceMax = priceUSD
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Kojima: failed to get price from product page:', err)
+      }
+    }
 
     return {
       platform: 'kojima',
@@ -71,7 +112,7 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
       status: 'found'
     }
   } finally {
-    await browserPool.release(browser)
+    await browserPool.release(browser, page)
   }
 }
 

@@ -1,30 +1,7 @@
 import { getDatabase } from './index'
+import type { HistoryBatch, HistoryEntry, QueryResult } from '../../shared/types'
 
-export interface QueryHistory {
-  id: number
-  catalogNumber: string
-  createdAt: string
-}
-
-export interface HistoryEntry {
-  query: QueryHistory
-  results: Array<{
-    platform: string
-    name: string | null
-    artist: string | null
-    priceMin: number | null
-    priceMax: number | null
-    coverUrl: string | null
-    link: string | null
-    status: string
-  }>
-}
-
-export interface HistoryBatch {
-  id: number
-  catalogNumber: string
-  createdAt: string
-}
+export type { HistoryBatch, HistoryEntry }
 
 export function getHistory(): HistoryBatch[] {
   const db = getDatabase()
@@ -70,14 +47,14 @@ export function getHistoryEntry(queryId: number): HistoryEntry | null {
       createdAt: query.created_at
     },
     results: results.map(r => ({
-      platform: r.platform,
+      platform: r.platform as QueryResult['platform'],
       name: r.name,
       artist: r.artist,
       priceMin: r.price_min,
       priceMax: r.price_max,
       coverUrl: r.cover_url,
       link: r.link,
-      status: r.status
+      status: r.status as QueryResult['status']
     }))
   }
 }

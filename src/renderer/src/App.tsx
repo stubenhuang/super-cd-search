@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
-import type { BatchQueryResult, BatchQueryProgress, QueryResult } from './electron-api'
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import type { BatchQueryResult, BatchQueryProgressEvent, QueryResult } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { HistoryView } from './History'
 import './App.css'
@@ -7,11 +7,15 @@ import './App.css'
 const PLATFORM_LABELS: Record<string, string> = {
   discogs: 'Discogs',
   ebay: 'eBay',
-  kojima: 'Kojima Rokuon',
-  mercari: 'Mercari'
+  kojima: 'Kojima Rokuon'
 }
 
-function PlatformResultRow({ result, isLowestPrice }: { result: QueryResult; isLowestPrice: boolean }) {
+interface PlatformResultRowProps {
+  result: QueryResult
+  isLowestPrice: boolean
+}
+
+const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice }: PlatformResultRowProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
@@ -19,10 +23,16 @@ function PlatformResultRow({ result, isLowestPrice }: { result: QueryResult; isL
     if (min === null && max === null) return '-'
     if (min === null || max === null) {
       const price = min ?? max
-      return price !== null ? `¥${price.toLocaleString()}` : '-'
+      return price !== null ? `$${price.toFixed(2)}` : '-'
     }
-    if (min === max) return `¥${min.toLocaleString()}`
-    return `¥${min.toLocaleString()} - ¥${max.toLocaleString()}`
+    if (min === max) return `$${min.toFixed(2)}`
+    return `$${min.toFixed(2)} - $${max.toFixed(2)}`
+  }
+
+  const handleViewClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+    e.preventDefault()
+    console.log('handleViewClick called with:', url)
+    window.electronAPI.openExternal(url).catch(err => console.error('openExternal error:', err))
   }
 
   return (
@@ -32,7 +42,6 @@ function PlatformResultRow({ result, isLowestPrice }: { result: QueryResult; isL
           {result.platform === 'discogs' && '唱片'}
           {result.platform === 'ebay' && 'EB'}
           {result.platform === 'kojima' && '小島'}
-          {result.platform === 'mercari' && 'メ'}
         </span>
         <span className="platform-label">{PLATFORM_LABELS[result.platform] || result.platform}</span>
       </div>
@@ -75,16 +84,21 @@ function PlatformResultRow({ result, isLowestPrice }: { result: QueryResult; isL
       </div>
       <div className="platform-link">
         {result.link && result.status === 'found' && (
-          <a href={result.link} target="_blank" rel="noopener noreferrer">
+          <a href={result.link} onClick={(e) => handleViewClick(e, result.link!)}>
             View
           </a>
         )}
       </div>
     </div>
   )
+})
+
+interface ResultCardProps {
+  catalogNumber: string
+  results: QueryResult[]
 }
 
-function ResultCard({ catalogNumber, results }: BatchQueryResult) {
+const ResultCard = React.memo(function ResultCard({ catalogNumber, results }: ResultCardProps) {
   const foundResult = results.find(r => r.status === 'found' && r.name)
   const displayName = foundResult?.name || catalogNumber
   const displayArtist = foundResult?.artist
@@ -114,14 +128,14 @@ function ResultCard({ catalogNumber, results }: BatchQueryResult) {
       </div>
     </div>
   )
-}
+})
 
 function App() {
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState<BatchQueryResult[]>([])
-  const [progress, setProgress] = useState<BatchQueryProgress[]>([])
+  const [progress, setProgress] = useState<BatchQueryProgressEvent[]>([])
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState<'results' | 'history'>('results')
   const [toast, setToast] = useState<string | null>(null)
@@ -161,7 +175,7 @@ function App() {
 
   useEffect(() => {
     const handleProgress = (...args: unknown[]) => {
-      const data = args[0] as BatchQueryProgress
+      const data = args[0] as BatchQueryProgressEvent
       setProgress(prev => [...prev, data])
     }
 
@@ -279,8 +293,8 @@ function App() {
                 )}
                 {results.length > 0 && (
                   <div className="results-area">
-                    {results.map((result, idx) => (
-                      <ResultCard key={idx} {...result} />
+                    {results.map((result) => (
+                      <ResultCard key={result.catalogNumber} {...result} />
                     ))}
                   </div>
                 )}

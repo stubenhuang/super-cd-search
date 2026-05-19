@@ -27,3 +27,26 @@ npm-debug.log*
 
 # Test
 coverage/
+
+# Test data files
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# Development scripts
+ralph/
+scripts/ralph/
+
+# Build artifacts
+build/
+release/
+super-cd.sh
+
+# Claude workspace
+.claude/
+
+# Documentation
+docs/
+tasks/
+CLAUDE.md

@@ -1,22 +1,12 @@
-export type QueryStatus = 'found' | 'not_found' | 'error'
+import type { QueryResult, QueryStatus, Platform } from '../../shared/types'
 
-export interface QueryResult {
-  platform: 'discogs' | 'ebay' | 'kojima' | 'mercari'
-  name: string | null
-  artist: string | null
-  priceMin: number | null
-  priceMax: number | null
-  coverUrl: string | null
-  link: string | null
-  status: QueryStatus
-  error?: string
-}
+export type { QueryResult, QueryStatus, Platform }
 
 export interface PlatformQuery {
   execute(catalogNumber: string): Promise<QueryResult>
 }
 
-export function notFound(platform: QueryResult['platform']): QueryResult {
+export function notFound(platform: Platform): QueryResult {
   return {
     platform,
     name: null,
@@ -29,7 +19,7 @@ export function notFound(platform: QueryResult['platform']): QueryResult {
   }
 }
 
-export function queryError(platform: QueryResult['platform'], message: string): QueryResult {
+export function queryError(platform: Platform, message: string): QueryResult {
   return {
     platform,
     name: null,
