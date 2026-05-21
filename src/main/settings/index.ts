@@ -15,7 +15,10 @@ const schema = {
       kojima: { type: 'string' as const, default: '' }
     },
     default: {}
-  }
+  },
+  proxyEnabled: { type: 'boolean' as const, default: false },
+  proxyHost: { type: 'string' as const, default: '' },
+  proxyPort: { type: 'number' as const, default: 1080 }
 } as const
 
 const Store = (electronStore as any).default || electronStore
@@ -38,7 +41,10 @@ export function getSettings(): Settings {
     discogsToken: store.get('discogsToken') as string || undefined,
     ebayClientId: store.get('ebayClientId') as string || undefined,
     ebayClientSecret: store.get('ebayClientSecret') as string || undefined,
-    cookies: store.get('cookies') as Cookies || undefined
+    cookies: store.get('cookies') as Cookies || undefined,
+    proxyEnabled: store.get('proxyEnabled') as boolean || undefined,
+    proxyHost: store.get('proxyHost') as string || undefined,
+    proxyPort: store.get('proxyPort') as number || undefined
   }
 }
 
