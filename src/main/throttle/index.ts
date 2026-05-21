@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron'
+import { ProxyAgent, fetch as undiciFetch, RequestInit as UndiciRequestInit } from 'undici'
+import { getSetting } from '../settings'
 
 interface DomainState {
   lastRequestTime: number
@@ -61,7 +63,20 @@ export async function throttledFetch(
 
     const executeRequest = async () => {
       try {
-        const response = await fetch(url, options)
+        let response: Response
+
+        const proxyEnabled = getSetting('proxyEnabled')
+        const proxyHost = getSetting('proxyHost')
+        const proxyPort = getSetting('proxyPort')
+
+        if (proxyEnabled && proxyHost && proxyPort) {
+          const agent = new ProxyAgent(`socks5://${proxyHost}:${proxyPort}`)
+          // Cast through unknown to bridge undici types with global types
+          response = await undiciFetch(url, { ...options, dispatcher: agent } as UndiciRequestInit) as unknown as Response
+        } else {
+          // Cast through unknown to bridge undici types with global types
+          response = await undiciFetch(url, options as UndiciRequestInit) as unknown as Response
+        }
 
         if (response.status === 429) {
           const backoff = backoffStates.get(domain) || { attempt: 0, nextDelay: BACKOFF_DELAYS[0] }
