@@ -221,6 +221,152 @@
   cursor: not-allowed;
 }
 
+.search-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cancel-button {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  background-color: var(--error-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.cancel-button:hover {
+  background-color: var(--error-hover);
+}
+
+/* Run Progress */
+.run-progress {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.progress-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.progress-percent {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-bar-track {
+  height: 4px;
+  background-color: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: var(--accent-color);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.progress-catalogs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.progress-catalog-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background-color: var(--bg-primary);
+  font-size: 12px;
+  transition: opacity 0.2s;
+}
+
+.progress-catalog-item.complete {
+  opacity: 0.6;
+}
+
+.progress-catalog-name {
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-platforms {
+  display: flex;
+  gap: 8px;
+}
+
+.progress-platform-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background-color: var(--bg-tertiary);
+}
+
+.platform-status-icon {
+  font-size: 12px;
+  width: 14px;
+  text-align: center;
+}
+
+.platform-status-label {
+  color: var(--text-secondary);
+}
+
+.progress-platform-status.pending {
+  opacity: 0.5;
+}
+
+.progress-platform-status.loading {
+  background-color: var(--accent-bg);
+}
+
+.progress-platform-status.loading .platform-status-icon {
+  animation: pulse-icon 1s ease-in-out infinite;
+}
+
+.progress-platform-status.complete .platform-status-icon {
+  color: var(--success-color);
+}
+
+.progress-platform-status.not_found .platform-status-icon {
+  color: var(--warning-color);
+}
+
+.progress-platform-status.error .platform-status-icon {
+  color: var(--error-color);
+}
+
+@keyframes pulse-icon {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .progress-area {
   padding: 16px;
   text-align: center;

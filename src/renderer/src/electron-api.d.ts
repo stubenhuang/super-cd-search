@@ -37,6 +37,7 @@ export interface IElectronAPI {
   deleteSetting: <K extends keyof Settings>(key: K) => Promise<void>
   getThrottleStatus: () => Promise<ThrottleStatus>
   executeBatchQuery: (catalogNumbers: string[]) => Promise<BatchQueryResult[]>
+  cancelBatchQuery: () => Promise<void>
   getHistory: () => Promise<HistoryBatch[]>
   getHistoryEntry: (queryId: number) => Promise<HistoryEntry | null>
   deleteHistoryEntry: (queryId: number) => Promise<void>

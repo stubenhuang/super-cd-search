@@ -13,8 +13,10 @@
   --border-color: #d1d1d1;
   --accent-color: #007aff;
   --accent-hover: #0056cc;
+  --accent-bg: #e5f1ff;
   --success-color: #34c759;
   --error-color: #ff3b30;
+  --error-hover: #d63029;
   --warning-color: #ff9500;
   --success-bg: #d1fae5;
   --success-text: #065f46;
@@ -37,6 +39,8 @@
     --border-color: #3a3a3c;
     --accent-color: #0a84ff;
     --accent-hover: #409cff;
+    --accent-bg: #1e3a5f;
+    --error-hover: #ff453a;
     --success-bg: #064e3b;
     --success-text: #6ee7b7;
     --error-bg: #7f1d1d;

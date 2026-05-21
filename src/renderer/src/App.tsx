@@ -139,6 +139,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState<'results' | 'history'>('results')
   const [toast, setToast] = useState<string | null>(null)
+  const [cancelled, setCancelled] = useState(false)
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
@@ -162,16 +163,25 @@ function App() {
     setIsLoading(true)
     setProgress([])
     setResults([])
+    setCancelled(false)
 
     try {
       const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers)
       setResults(batchResults)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Query failed')
+      if (!cancelled) {
+        setError(err instanceof Error ? err.message : 'Query failed')
+      }
     } finally {
       setIsLoading(false)
     }
-  }, [input, parseCatalogNumbers])
+  }, [input, parseCatalogNumbers, cancelled])
+
+  const handleCancel = useCallback(async () => {
+    setCancelled(true)
+    setIsLoading(false)
+    await window.electronAPI.cancelBatchQuery()
+  }, [])
 
   useEffect(() => {
     const handleProgress = (...args: unknown[]) => {
@@ -184,7 +194,20 @@ function App() {
 
   const completedCount = progress.filter(p => p.event === 'query:complete').length
   const totalCount = parseCatalogNumbers(input).length || 0
-  const progressText = totalCount > 0 ? `${completedCount}/${totalCount} CDs queried` : ''
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+
+  const progressByCatalog = useMemo(() => {
+    const map = new Map<string, Map<string, string>>()
+    for (const p of progress) {
+      if (!map.has(p.catalogNumber)) {
+        map.set(p.catalogNumber, new Map())
+      }
+      map.get(p.catalogNumber)!.set(p.platform, p.status)
+    }
+    return map
+  }, [progress])
+
+  const catalogNumbers = parseCatalogNumbers(input)
 
   const handleLoadHistory = useCallback(async (queryId: number) => {
     const entry = await window.electronAPI.getHistoryEntry(queryId)
@@ -241,13 +264,68 @@ function App() {
               rows={10}
             />
             {error && <div className="error-message">{error}</div>}
-            <button
-              className="search-button"
-              onClick={handleSearch}
-              disabled={isLoading}
-            >
-              {isLoading ? 'Searching...' : 'Search'}
-            </button>
+            <div className="search-actions">
+              <button
+                className="search-button"
+                onClick={handleSearch}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Searching...' : 'Search'}
+              </button>
+              {isLoading && (
+                <button
+                  className="cancel-button"
+                  onClick={handleCancel}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+            {(isLoading || progress.length > 0) && (
+              <div className="run-progress">
+                <div className="progress-summary">
+                  <span className="progress-label">{completedCount}/{totalCount} 完成</span>
+                  <span className="progress-percent">{progressPercent}%</span>
+                </div>
+                <div className="progress-bar-track">
+                  <div
+                    className="progress-bar-fill"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <div className="progress-catalogs">
+                  {catalogNumbers.map(cn => {
+                    const platforms = progressByCatalog.get(cn)
+                    const isComplete = platforms?.size === 3
+                    return (
+                      <div key={cn} className={`progress-catalog-item ${isComplete ? 'complete' : ''}`}>
+                        <span className="progress-catalog-name">{cn}</span>
+                        <div className="progress-platforms">
+                          {['discogs', 'ebay', 'kojima'].map(p => {
+                            const status = platforms?.get(p)
+                            return (
+                              <span
+                                key={p}
+                                className={`progress-platform-status ${status || 'pending'}`}
+                              >
+                                <span className="platform-status-icon">
+                                  {status === 'loading' && '⏳'}
+                                  {status === 'complete' && '✓'}
+                                  {status === 'not_found' && '−'}
+                                  {status === 'error' && '✗'}
+                                  {!status && '○'}
+                                </span>
+                                <span className="platform-status-label">{PLATFORM_LABELS[p]}</span>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </aside>
         <section className="right-panel">
@@ -267,9 +345,6 @@ function App() {
               </button>
             </div>
             <div className="panel-actions">
-              {activeTab === 'results' && progressText && (
-                <span className="progress-text">{progressText}</span>
-              )}
               {activeTab === 'results' && results.length > 0 && (
                 <button className="export-button" onClick={handleExport}>
                   Export to Excel

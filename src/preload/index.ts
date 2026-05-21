@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getThrottleStatus: (): Promise<ThrottleStatus> => ipcRenderer.invoke('getThrottleStatus'),
   executeBatchQuery: (catalogNumbers: string[]): Promise<BatchQueryResult[]> =>
     ipcRenderer.invoke('executeBatchQuery', catalogNumbers),
+  cancelBatchQuery: (): Promise<void> =>
+    ipcRenderer.invoke('cancelBatchQuery'),
   getHistory: (): Promise<HistoryBatch[]> => ipcRenderer.invoke('getHistory'),
   getHistoryEntry: (queryId: number): Promise<HistoryEntry | null> =>
     ipcRenderer.invoke('getHistoryEntry', queryId),

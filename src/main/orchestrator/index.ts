@@ -10,6 +10,8 @@ const MAX_CATALOG_NUMBERS = 10
 
 export type { BatchQueryProgress, BatchQueryResult }
 
+let abortController: AbortController | null = null
+
 function saveResults(catalogNumber: string, results: QueryResult[]): void {
   const db = getDatabase()
 
@@ -48,7 +50,11 @@ function emitProgress(event: string, data: BatchQueryProgress): void {
   }
 }
 
-async function queryAllPlatforms(catalogNumber: string): Promise<QueryResult[]> {
+async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal): Promise<QueryResult[]> {
+  if (signal.aborted) {
+    throw new Error('Aborted')
+  }
+
   emitProgress('query:start', { catalogNumber, platform: 'all', status: 'loading' })
 
   const platforms: Array<{ name: string; query: () => Promise<QueryResult> }> = [
@@ -57,28 +63,52 @@ async function queryAllPlatforms(catalogNumber: string): Promise<QueryResult[]> 
     { name: 'kojima', query: () => queryKojima(catalogNumber) }
   ]
 
-  const results = await Promise.all(
-    platforms.map(async ({ name, query }) => {
-      emitProgress('query:progress', { catalogNumber, platform: name, status: 'loading' })
-      try {
-        const result = await query()
-        emitProgress('query:progress', { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
-        return result
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        emitProgress('query:error', { catalogNumber, platform: name, status: 'error' })
-        return { platform: name as QueryResult['platform'], name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error' as const, error: message }
-      }
-    })
-  )
+  const results: QueryResult[] = []
 
-  saveResults(catalogNumber, results)
-  emitProgress('query:complete', { catalogNumber, platform: 'all', status: 'complete' })
+  for (const { name, query } of platforms) {
+    if (signal.aborted) {
+      emitProgress('query:cancelled', { catalogNumber, platform: name, status: 'error' })
+      throw new Error('Aborted')
+    }
+
+    emitProgress('query:progress', { catalogNumber, platform: name, status: 'loading' })
+    try {
+      const result = await query()
+      emitProgress('query:progress', { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
+      results.push(result)
+    } catch (err) {
+      if (signal.aborted) {
+        emitProgress('query:cancelled', { catalogNumber, platform: name, status: 'error' })
+        throw new Error('Aborted')
+      }
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      emitProgress('query:error', { catalogNumber, platform: name, status: 'error' })
+      results.push({ platform: name as QueryResult['platform'], name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error' as const, error: message })
+    }
+  }
+
+  if (!signal.aborted) {
+    saveResults(catalogNumber, results)
+    emitProgress('query:complete', { catalogNumber, platform: 'all', status: 'complete' })
+  }
 
   return results
 }
 
+export function cancelBatchQuery(): void {
+  if (abortController) {
+    abortController.abort()
+    abortController = null
+  }
+}
+
 export async function executeBatchQuery(catalogNumbers: string[]): Promise<BatchQueryResult[]> {
+  if (abortController) {
+    abortController.abort()
+  }
+  abortController = new AbortController()
+  const signal = abortController.signal
+
   const trimmed = catalogNumbers.map(c => c.trim()).filter(c => c.length > 0)
 
   if (trimmed.length === 0) {
@@ -90,13 +120,16 @@ export async function executeBatchQuery(catalogNumbers: string[]): Promise<Batch
   }
 
   const results: BatchQueryResult[] = []
-
-  const queue = [...trimmed]
+  let currentIndex = 0
 
   async function processNext(): Promise<void> {
-    while (queue.length > 0) {
-      const catalogNumber = queue.shift()!
-      const queryResults = await queryAllPlatforms(catalogNumber)
+    while (currentIndex < trimmed.length) {
+      if (signal.aborted) {
+        throw new Error('Aborted')
+      }
+      const idx = currentIndex++
+      const catalogNumber = trimmed[idx]!
+      const queryResults = await queryAllPlatforms(catalogNumber, signal)
       results.push({ catalogNumber, results: queryResults })
     }
   }
@@ -106,7 +139,18 @@ export async function executeBatchQuery(catalogNumbers: string[]): Promise<Batch
     () => processNext()
   )
 
-  await Promise.all(workers)
+  try {
+    await Promise.all(workers)
+  } catch (err) {
+    if (signal.aborted) {
+      emitProgress('query:batch-cancelled', { catalogNumber: '', platform: 'all', status: 'error' })
+    }
+    throw err
+  } finally {
+    if (abortController?.signal === signal) {
+      abortController = null
+    }
+  }
 
   return results
 }
