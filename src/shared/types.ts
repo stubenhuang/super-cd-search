@@ -25,6 +25,9 @@ export interface Settings {
   ebayClientId?: string
   ebayClientSecret?: string
   cookies?: Cookies
+  proxyEnabled?: boolean
+  proxyHost?: string
+  proxyPort?: number
 }
 
 export interface BatchQueryProgress {
