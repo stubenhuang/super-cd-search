@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { type Browser, type Page, executablePath } from 'puppeteer'
 import { generateFingerprint, type Fingerprint } from './fingerprint'
+import { getSetting } from '../settings'
 
 puppeteer.use(StealthPlugin())
 
@@ -78,16 +79,26 @@ class BrowserPool {
 
   private async createInstance(): Promise<BrowserInstance> {
     const fingerprint = generateFingerprint()
+    const args = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--disable-gpu'
+    ]
+
+    const proxyEnabled = getSetting('proxyEnabled')
+    const proxyHost = getSetting('proxyHost')
+    const proxyPort = getSetting('proxyPort')
+
+    if (proxyEnabled && proxyHost && proxyPort) {
+      args.push(`--proxy-server=socks5://${proxyHost}:${proxyPort}`)
+    }
+
     const browser = await puppeteer.launch({
       headless: true,
       executablePath: executablePath(),
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu'
-      ]
+      args
     })
 
     return { browser, fingerprint, inUse: false }
