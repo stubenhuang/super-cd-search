@@ -14,6 +14,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [cookiesDiscogs, setCookiesDiscogs] = useState('')
   const [cookiesEbay, setCookiesEbay] = useState('')
   const [cookiesKojima, setCookiesKojima] = useState('')
+  const [proxyEnabled, setProxyEnabled] = useState(false)
+  const [proxyHost, setProxyHost] = useState('')
+  const [proxyPort, setProxyPort] = useState(1080)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -31,6 +34,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setCookiesDiscogs(settings.cookies?.discogs || '')
     setCookiesEbay(settings.cookies?.ebay || '')
     setCookiesKojima(settings.cookies?.kojima || '')
+    setProxyEnabled(settings.proxyEnabled || false)
+    setProxyHost(settings.proxyHost || '')
+    setProxyPort(settings.proxyPort || 1080)
   }, [])
 
   const handleSave = async () => {
@@ -44,6 +50,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         ebay: cookiesEbay,
         kojima: cookiesKojima
       })
+      await window.electronAPI.setSetting('proxyEnabled', proxyEnabled)
+      await window.electronAPI.setSetting('proxyHost', proxyHost)
+      await window.electronAPI.setSetting('proxyPort', proxyPort)
       setToast('Settings saved successfully')
       setTimeout(() => setToast(null), 3000)
     } catch (err) {
@@ -129,6 +138,47 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 onChange={e => setCookiesKojima(e.target.value)}
                 placeholder="Paste cookies here..."
                 rows={3}
+              />
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <h3>SOCKS5 Proxy</h3>
+            <p className="section-help">Route all network traffic through a SOCKS5 proxy (optional)</p>
+            <div className="form-group">
+              <div className="toggle-container">
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={proxyEnabled}
+                    onChange={e => setProxyEnabled(e.target.checked)}
+                    aria-label="Enable SOCKS5 proxy"
+                  />
+                  <span className="toggle-slider" role="switch" aria-checked={proxyEnabled}></span>
+                </label>
+                <span className="toggle-label">Enable Proxy</span>
+              </div>
+            </div>
+            <div className="form-group">
+              <label htmlFor="proxyHost">Proxy Host</label>
+              <input
+                id="proxyHost"
+                type="text"
+                value={proxyHost}
+                onChange={e => setProxyHost(e.target.value)}
+                placeholder="e.g. 127.0.0.1"
+                disabled={!proxyEnabled}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="proxyPort">Proxy Port</label>
+              <input
+                id="proxyPort"
+                type="number"
+                value={proxyPort}
+                onChange={e => setProxyPort(parseInt(e.target.value, 10) || 1080)}
+                placeholder="e.g. 1080"
+                disabled={!proxyEnabled}
               />
             </div>
           </section>
