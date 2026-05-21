@@ -29,65 +29,67 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
     return `$${min.toFixed(2)} - $${max.toFixed(2)}`
   }
 
+  const getPriceLabel = (min: number | null, max: number | null): string => {
+    if (min === null && max === null) return ''
+    if (min === null || max === null) return '固定价格'
+    if (min === max) return '固定价格'
+    return '价格范围'
+  }
+
   const handleViewClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
     e.preventDefault()
-    console.log('handleViewClick called with:', url)
     window.electronAPI.openExternal(url).catch(err => console.error('openExternal error:', err))
   }
 
+  const cardClass = `platform-card ${result.status}${isLowestPrice ? ' lowest' : ''}`
+
   return (
-    <div className={`platform-result-row ${result.status}`}>
-      <div className="platform-info">
-        <span className="platform-icon">
-          {result.platform === 'discogs' && '唱片'}
-          {result.platform === 'ebay' && 'EB'}
-          {result.platform === 'kojima' && '小島'}
-        </span>
-        <span className="platform-label">{PLATFORM_LABELS[result.platform] || result.platform}</span>
-      </div>
-      <div className="platform-image">
-        {result.coverUrl && !imageError ? (
-          <>
-            {!imageLoaded && <div className="image-placeholder" />}
-            <img
-              src={result.coverUrl}
-              alt={result.name || 'Cover'}
-              className={`cover-thumbnail ${imageLoaded ? 'loaded' : ''}`}
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageError(true)}
-            />
-          </>
-        ) : (
-          <div className="image-placeholder">No image</div>
-        )}
-      </div>
-      <div className="platform-details">
-        {result.status === 'found' ? (
-          <>
-            <div className="name">{result.name || '-'}</div>
-            <div className="artist">{result.artist || '-'}</div>
-            <div className={`price ${isLowestPrice ? 'lowest-price' : ''}`}>
-              {formatPrice(result.priceMin, result.priceMax)}
-              {isLowestPrice && <span className="lowest-badge">Best</span>}
-            </div>
-          </>
-        ) : result.status === 'error' ? (
-          <div className="error-container">
-            <span className="error-badge">Error</span>
-            <span className="error-tooltip" title={result.error || 'Unknown error'}>⚠</span>
+    <div className={cardClass} data-platform={result.platform}>
+      {isLowestPrice ? (
+        <div className="lowest-bar">★ 最低价</div>
+      ) : (
+        <div className="brand-bar" />
+      )}
+      <div className="platform-card-content">
+        <div className="platform-card-name">{PLATFORM_LABELS[result.platform] || result.platform}</div>
+        <div className="platform-card-body">
+          <div className="platform-card-image">
+            {result.coverUrl && !imageError ? (
+              <>
+                {!imageLoaded && <div className="image-placeholder" />}
+                <img
+                  src={result.coverUrl}
+                  alt={result.name || 'Cover'}
+                  className={`cover-thumbnail ${imageLoaded ? 'loaded' : ''}`}
+                  onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageError(true)}
+                />
+              </>
+            ) : (
+              <div className="image-placeholder">无图</div>
+            )}
           </div>
-        ) : (
-          <div className="not-found-container">
-            <span className="not-found-badge">Not Found</span>
+          <div className="platform-card-details">
+            {result.status === 'found' ? (
+              <>
+                <div className="price">{formatPrice(result.priceMin, result.priceMax)}</div>
+                <div className="price-label">{getPriceLabel(result.priceMin, result.priceMax)}</div>
+                {result.link && (
+                  <a className="link" href={result.link} onClick={(e) => handleViewClick(e, result.link!)}>
+                    查看详情 →
+                  </a>
+                )}
+              </>
+            ) : result.status === 'error' ? (
+              <>
+                <div className="status-text">请求错误</div>
+                <div className="error-hint" title={result.error || 'Unknown error'}>⚠ {result.error || 'Error'}</div>
+              </>
+            ) : (
+              <div className="status-text">未找到</div>
+            )}
           </div>
-        )}
-      </div>
-      <div className="platform-link">
-        {result.link && result.status === 'found' && (
-          <a href={result.link} onClick={(e) => handleViewClick(e, result.link!)}>
-            View
-          </a>
-        )}
+        </div>
       </div>
     </div>
   )
@@ -113,10 +115,10 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results }: Re
   return (
     <div className="result-card">
       <div className="result-header">
-        <div className="result-catalog">{catalogNumber}</div>
-        {displayArtist && <div className="result-artist">{displayArtist}</div>}
+        <span className="result-catalog">{catalogNumber}</span>
+        <span className="result-title">{displayName}</span>
+        {displayArtist && <span className="result-artist">— {displayArtist}</span>}
       </div>
-      <div className="result-title">{displayName}</div>
       <div className="platform-results">
         {results.map((r, idx) => (
           <PlatformResultRow

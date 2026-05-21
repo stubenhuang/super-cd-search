@@ -406,202 +406,177 @@
 }
 
 .result-header {
-  margin-bottom: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .result-catalog {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.result-artist {
-  font-size: 12px;
   color: var(--text-secondary);
 }
 
 .result-title {
   font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
+  font-weight: 700;
   color: var(--text-primary);
+}
+
+.result-artist {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .platform-results {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 14px;
 }
 
-.platform-result-row {
-  display: grid;
-  grid-template-columns: 140px 60px 1fr 60px;
-  gap: 12px;
-  align-items: center;
-  padding: 12px;
-  border-radius: 6px;
+.platform-card {
+  flex: 1;
+  background-color: var(--bg-primary);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.platform-card.lowest {
   background-color: var(--bg-primary);
 }
 
-.platform-result-row.found {
-  border-left: 3px solid var(--success-color);
+.platform-card.not_found,
+.platform-card.error {
+  opacity: 0.5;
 }
 
-.platform-result-row.not_found {
-  border-left: 3px solid var(--warning-color);
-}
-
-.platform-result-row.error {
-  border-left: 3px solid var(--error-color);
-}
-
-.platform-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.platform-icon {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--bg-tertiary);
-  border-radius: 4px;
-  font-size: 10px;
+.platform-card .lowest-bar {
+  background-color: #34c759;
+  color: white;
+  text-align: center;
+  padding: 3px;
+  font-size: 11px;
   font-weight: 600;
 }
 
-.platform-label {
-  font-weight: 500;
-  font-size: 13px;
+.platform-card .brand-bar {
+  height: 3px;
+}
+
+.platform-card[data-platform="discogs"] .brand-bar {
+  background-color: #1a1a1a;
+}
+
+.platform-card[data-platform="ebay"] .brand-bar {
+  background-color: #e53238;
+}
+
+.platform-card[data-platform="kojima"] .brand-bar {
+  background-color: #ff9500;
+}
+
+.platform-card.not_found .brand-bar,
+.platform-card.error .brand-bar {
+  background-color: #ccc;
+}
+
+.platform-card-content {
+  padding: 12px;
+}
+
+.platform-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
   color: var(--text-primary);
 }
 
-.platform-image {
-  width: 50px;
-  min-height: 50px;
+.platform-card.not_found .platform-card-name,
+.platform-card.error .platform-card-name {
+  color: #999;
 }
 
-.image-placeholder {
-  width: 50px;
-  height: 50px;
+.platform-card-body {
+  display: flex;
+  gap: 10px;
+}
+
+.platform-card-image {
+  flex-shrink: 0;
+  width: 100px;
+  height: 100px;
+}
+
+.platform-card-image .image-placeholder {
+  width: 100px;
+  height: 100px;
   background-color: var(--bg-tertiary);
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 
-.cover-thumbnail {
-  width: 50px;
-  height: 50px;
+.platform-card-image .cover-thumbnail {
+  width: 100px;
+  height: 100px;
   object-fit: cover;
   border-radius: 4px;
   opacity: 0;
   transition: opacity 0.2s;
 }
 
-.cover-thumbnail.loaded {
+.platform-card-image .cover-thumbnail.loaded {
   opacity: 1;
 }
 
-.platform-details {
+.platform-card-details {
+  flex: 1;
   min-width: 0;
 }
 
-.platform-details .name {
-  font-size: 13px;
-  font-weight: 500;
+.platform-card-details .price {
+  font-size: 16px;
+  font-weight: 700;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.platform-details .artist {
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.platform-details .price {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--success-color);
-  margin-top: 2px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.platform-details .price.lowest-price {
+.platform-card.lowest .platform-card-details .price {
   color: #059669;
 }
 
-.lowest-badge {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background-color: var(--success-color);
-  color: white;
-  text-transform: uppercase;
-}
-
-.error-container,
-.not-found-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.error-badge {
+.platform-card-details .price-label {
   font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background-color: var(--error-bg);
-  color: var(--error-text);
-  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-top: 2px;
 }
 
-.error-tooltip {
-  cursor: help;
-  font-size: 14px;
-}
-
-.not-found-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background-color: var(--warning-bg);
-  color: var(--warning-text);
-  text-transform: uppercase;
-}
-
-.platform-details .error-text {
-  font-size: 12px;
-  color: var(--error-color);
-}
-
-.platform-details .not-found-text {
-  font-size: 12px;
+.platform-card-details .status-text {
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
-.platform-link a {
+.platform-card.error .platform-card-details .status-text {
+  color: var(--error-color);
+}
+
+.platform-card-details .error-hint {
+  font-size: 11px;
+  color: #bbb;
+  margin-top: 2px;
+  cursor: help;
+}
+
+.platform-card-details .link {
   font-size: 12px;
   color: var(--accent-color);
   text-decoration: none;
+  margin-top: 14px;
+  display: inline-block;
 }
 
-.platform-link a:hover {
+.platform-card-details .link:hover {
   text-decoration: underline;
 }
