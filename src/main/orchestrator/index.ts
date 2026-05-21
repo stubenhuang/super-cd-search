@@ -8,6 +8,17 @@ import type { QueryResult, BatchQueryProgress, BatchQueryResult } from '../../sh
 const MAX_CONCURRENT_CATALOGS = 3
 const MAX_CATALOG_NUMBERS = 10
 
+/**
+ * Normalize catalog number by inserting hyphen between letters and numbers if missing.
+ * E.g., "UCCG90530" -> "UCCG-90530"
+ */
+function normalizeCatalogNumber(catalogNumber: string): string {
+  const trimmed = catalogNumber.trim().toUpperCase()
+  // Match: letters followed directly by numbers (no hyphen)
+  // Insert hyphen between them
+  return trimmed.replace(/^([A-Z]+)(\d+)$/, '$1-$2')
+}
+
 export type { BatchQueryProgress, BatchQueryResult }
 
 let abortController: AbortController | null = null
@@ -109,7 +120,7 @@ export async function executeBatchQuery(catalogNumbers: string[]): Promise<Batch
   abortController = new AbortController()
   const signal = abortController.signal
 
-  const trimmed = catalogNumbers.map(c => c.trim()).filter(c => c.length > 0)
+  const trimmed = catalogNumbers.map(c => normalizeCatalogNumber(c)).filter(c => c.length > 0)
 
   if (trimmed.length === 0) {
     throw new Error('No catalog numbers provided')
