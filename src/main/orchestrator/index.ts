@@ -3,6 +3,7 @@ import { getDatabase } from '../database'
 import { queryDiscogs } from '../queries/discogs'
 import { queryEbay } from '../queries/ebay'
 import { queryKojima } from '../queries/kojima'
+import { queryHmv } from '../queries/hmv'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult } from '../../shared/types'
 
 const MAX_CONCURRENT_CATALOGS = 3
@@ -71,7 +72,8 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal): Pr
   const platforms: Array<{ name: string; query: () => Promise<QueryResult> }> = [
     { name: 'discogs', query: () => queryDiscogs(catalogNumber) },
     { name: 'ebay', query: () => queryEbay(catalogNumber) },
-    { name: 'kojima', query: () => queryKojima(catalogNumber) }
+    { name: 'kojima', query: () => queryKojima(catalogNumber) },
+    { name: 'hmv', query: () => queryHmv(catalogNumber) }
   ]
 
   const results: QueryResult[] = []
