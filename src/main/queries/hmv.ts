@@ -37,59 +37,75 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
       return notFound('hmv')
     }
 
-    // Find first product item using multiple possible selectors
-    const firstItem = await page.$('.liItem, .product-item, .item, .result-item')
+    // Find first product item - HMV uses li.list.clearfix inside .resultList
+    // Note: li.list alone matches many navigation tabs, need .clearfix to identify actual products
+    const firstItem = await page.$('.resultList > li.list.clearfix, li.list.clearfix')
     if (!firstItem) {
       return notFound('hmv')
     }
 
-    // Extract name
-    const name = await firstItem.$eval('h3, .product-name, .item-name, .title, a', el => el.textContent?.trim() || null).catch(() => null)
+    // Extract name from .itemText h3 a
+    const name = await firstItem.$eval('.itemText h3 a, .itemText .title a', el => el.textContent?.trim() || null).catch(() => null)
 
-    // Extract artist
-    const artist = await firstItem.$eval('.artist, .product-artist, .item-artist, .artist-name', el => el.textContent?.trim() || null).catch(() => null)
+    // Extract artist from .itemStates .name
+    const artist = await firstItem.$eval('.itemStates .name a, .itemStates .name', el => el.textContent?.trim() || null).catch(() => null)
 
-    // Extract cover image
-    let coverUrl = await firstItem.$eval('img', el => el.getAttribute('src') || el.getAttribute('data-src')).catch(() => null)
+    // Extract cover image from .itemImg img
+    let coverUrl = await firstItem.$eval('.itemImg img', el => el.getAttribute('src') || el.getAttribute('data-src')).catch(() => null)
     if (coverUrl && coverUrl.startsWith('//')) {
       coverUrl = `https:${coverUrl}`
     } else if (coverUrl && !coverUrl.startsWith('http')) {
       coverUrl = `${HMV_WEB_URL}${coverUrl}`
     }
 
-    // Extract link
-    let link = await firstItem.$eval('a', el => el.getAttribute('href')).catch(() => null)
+    // Extract link to product page from .itemImg a or h3 a
+    let link = await firstItem.$eval('.itemImg a, h3 a', el => el.getAttribute('href')).catch(() => null)
     if (link && !link.startsWith('http')) {
       link = `${HMV_WEB_URL}${link}`
     }
 
-    // Navigate to product page to get price
+    // Extract price from search results page (HMV shows price in .itemStates .price .right)
     let priceMin: number | null = null
     let priceMax: number | null = null
 
-    if (link) {
+    const priceText = await firstItem.$eval('.itemStates .price .right', el => el.textContent?.trim() || null).catch(() => null)
+
+    if (priceText) {
+      // Parse Japanese price format (e.g., "¥3,300")
+      const match = priceText.match(/[\d,]+/)
+      if (match) {
+        const priceJPY = parseInt(match[0].replace(/,/g, ''), 10)
+        if (!isNaN(priceJPY)) {
+          const priceUSD = await convertToUSDWithFallback(priceJPY, 'JPY')
+          priceMin = priceUSD
+          priceMax = priceUSD
+        }
+      }
+    }
+
+    // Fallback: navigate to product page if price not found on search page
+    if (priceMin === null && link) {
       try {
         await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
         await new Promise(r => setTimeout(r, 2000))
 
-        // Try multiple price selectors
+        // Try multiple price selectors - HMV uses .price inside .priceInfoBlock
         const priceText = await page.evaluate(() => {
-          const selectors = [
-            '.price',
-            '.product-price',
-            '.item-price',
-            '.price-value',
-            '[data-price]',
-            '.price-text',
-            '.basePrice'
+          // Try specific selectors first (main price)
+          const mainPriceSelectors = [
+            '.priceInfoBlock.fontLarge .price',
+            '.priceInfoBlock:not(.sale) .price',
+            '.priceInfoRight .price'
           ]
-          for (const sel of selectors) {
+          for (const sel of mainPriceSelectors) {
             const el = document.querySelector(sel)
-            if (el && el.textContent) {
+            if (el && el.textContent && !el.textContent.includes('OFF')) {
               return el.textContent.trim()
             }
           }
-          return null
+          // Fallback to any .price
+          const el = document.querySelector('.price')
+          return el?.textContent?.trim() || null
         })
 
         if (priceText) {
