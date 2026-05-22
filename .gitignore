@@ -45,6 +45,7 @@ super-cd.sh
 
 # Claude workspace
 .claude/
+.superpowers/
 
 # Documentation
 docs/
