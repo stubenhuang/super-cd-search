@@ -1,7 +1,11 @@
 import { ipcMain } from 'electron'
-import { fetch as undiciFetch, RequestInfo, RequestInit as UndiciRequestInit } from 'undici'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { getSetting } from '../settings'
+
+// Node.js native fetch supports agent option for custom connections
+interface NodeFetchOptions extends RequestInit {
+  agent?: SocksProxyAgent
+}
 
 interface DomainState {
   lastRequestTime: number
@@ -72,9 +76,9 @@ export async function throttledFetch(
 
         if (proxyEnabled && proxyHost && proxyPort) {
           const agent = new SocksProxyAgent(`socks5://${proxyHost}:${proxyPort}`)
-          response = await undiciFetch(url as RequestInfo, { ...options, dispatcher: agent } as unknown as UndiciRequestInit) as unknown as Response
+          response = await fetch(url, { ...options, agent } as NodeFetchOptions)
         } else {
-          response = await undiciFetch(url as RequestInfo, options as UndiciRequestInit) as unknown as Response
+          response = await fetch(url, options)
         }
 
         if (response.status === 429) {
