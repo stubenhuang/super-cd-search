@@ -130,7 +130,7 @@ export async function executeBatchQuery(catalogNumbers: string[]): Promise<Batch
     throw new Error(`Maximum ${MAX_CATALOG_NUMBERS} catalog numbers allowed`)
   }
 
-  const results: BatchQueryResult[] = []
+  const results: BatchQueryResult[] = new Array(trimmed.length)
   let currentIndex = 0
 
   async function processNext(): Promise<void> {
@@ -141,7 +141,7 @@ export async function executeBatchQuery(catalogNumbers: string[]): Promise<Batch
       const idx = currentIndex++
       const catalogNumber = trimmed[idx]!
       const queryResults = await queryAllPlatforms(catalogNumber, signal)
-      results.push({ catalogNumber, results: queryResults })
+      results[idx] = { catalogNumber, results: queryResults }
     }
   }
 

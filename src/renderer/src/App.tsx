@@ -10,6 +10,13 @@ const PLATFORM_LABELS: Record<string, string> = {
   kojima: 'Kojima Rokuon'
 }
 
+const PLATFORMS = ['discogs', 'ebay', 'kojima']
+
+function normalizeCatalogNumber(catalogNumber: string): string {
+  const trimmed = catalogNumber.trim().toUpperCase()
+  return trimmed.replace(/^([A-Z]+)(\d+)$/, '$1-$2')
+}
+
 interface PlatformResultRowProps {
   result: QueryResult
   isLowestPrice: boolean
@@ -145,7 +152,7 @@ function App() {
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
-    return lines
+    return lines.map(normalizeCatalogNumber)
   }, [])
 
   const handleSearch = useCallback(async () => {
@@ -201,6 +208,7 @@ function App() {
   const progressByCatalog = useMemo(() => {
     const map = new Map<string, Map<string, string>>()
     for (const p of progress) {
+      if (!PLATFORMS.includes(p.platform)) continue
       if (!map.has(p.catalogNumber)) {
         map.set(p.catalogNumber, new Map())
       }
@@ -298,12 +306,16 @@ function App() {
                 <div className="progress-catalogs">
                   {catalogNumbers.map(cn => {
                     const platforms = progressByCatalog.get(cn)
-                    const isComplete = platforms?.size === 3
+                    const isComplete = platforms?.size === PLATFORMS.length &&
+                      PLATFORMS.every(p => {
+                        const s = platforms?.get(p)
+                        return s === 'complete' || s === 'not_found' || s === 'error'
+                      })
                     return (
                       <div key={cn} className={`progress-catalog-item ${isComplete ? 'complete' : ''}`}>
                         <span className="progress-catalog-name">{cn}</span>
                         <div className="progress-platforms">
-                          {['discogs', 'ebay', 'kojima'].map(p => {
+                          {PLATFORMS.map(p => {
                             const status = platforms?.get(p)
                             return (
                               <span
