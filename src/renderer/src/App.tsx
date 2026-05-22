@@ -7,10 +7,11 @@ import './App.css'
 const PLATFORM_LABELS: Record<string, string> = {
   discogs: 'Discogs',
   ebay: 'eBay',
-  kojima: 'Kojima Rokuon'
+  kojima: 'Kojima Rokuon',
+  hmv: 'HMV Japan'
 }
 
-const PLATFORMS = ['discogs', 'ebay', 'kojima']
+const PLATFORMS = ['discogs', 'ebay', 'kojima', 'hmv']
 
 function normalizeCatalogNumber(catalogNumber: string): string {
   const trimmed = catalogNumber.trim().toUpperCase()
