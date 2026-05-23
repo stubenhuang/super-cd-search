@@ -1,4 +1,5 @@
 import type { QueryResult, QueryStatus, Platform } from '../../shared/types'
+import { convertToUSDWithFallback } from '../currency'
 
 export type { QueryResult, QueryStatus, Platform }
 
@@ -31,4 +32,13 @@ export function queryError(platform: Platform, message: string): QueryResult {
     status: 'error',
     error: message
   }
+}
+
+/** Parse Japanese price text (e.g., "¥3,300" or "1,980円") and convert to USD */
+export async function parseJPYPrice(text: string): Promise<number | null> {
+  const match = text.match(/[\d,]+/)
+  if (!match) return null
+  const priceJPY = parseInt(match[0].replace(/,/g, ''), 10)
+  if (isNaN(priceJPY)) return null
+  return convertToUSDWithFallback(priceJPY, 'JPY')
 }

@@ -1,8 +1,7 @@
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
-import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult } from './types'
-import { notFound, queryError } from './types'
+import { notFound, queryError, parseJPYPrice } from './types'
 
 const KOJIMA_WEB_URL = 'https://kojimarokuon.com'
 
@@ -84,16 +83,10 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
         })
 
         if (priceText) {
-          // Parse Japanese price format (e.g., "¥1,980" or "1,980円")
-          const match = priceText.match(/[\d,]+/)
-          if (match) {
-            const priceJPY = parseInt(match[0].replace(/,/g, ''), 10)
-            if (!isNaN(priceJPY)) {
-              // Convert JPY to USD
-              const priceUSD = await convertToUSDWithFallback(priceJPY, 'JPY')
-              priceMin = priceUSD
-              priceMax = priceUSD
-            }
+          const priceUSD = await parseJPYPrice(priceText)
+          if (priceUSD !== null) {
+            priceMin = priceUSD
+            priceMax = priceUSD
           }
         }
       } catch (err) {
