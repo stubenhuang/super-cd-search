@@ -41,7 +41,6 @@ scripts/ralph/
 # Build artifacts
 build/
 release/
-super-cd.sh
 
 # Claude workspace
 .claude/
