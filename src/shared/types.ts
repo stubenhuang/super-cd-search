@@ -34,7 +34,8 @@ export interface Settings {
 export interface BatchQueryProgress {
   catalogNumber: string
   platform: string
-  status: 'loading' | 'complete' | 'error' | 'not_found'
+  status: 'loading' | 'complete' | 'error' | 'not_found' | 'found'
+  results?: QueryResult[]
 }
 
 export interface BatchQueryResult {

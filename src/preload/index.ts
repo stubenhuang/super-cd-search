@@ -23,8 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteSetting: <K extends keyof Settings>(key: K): Promise<void> =>
     ipcRenderer.invoke('deleteSetting', key),
   getThrottleStatus: (): Promise<ThrottleStatus> => ipcRenderer.invoke('getThrottleStatus'),
-  executeBatchQuery: (catalogNumbers: string[]): Promise<BatchQueryResult[]> =>
-    ipcRenderer.invoke('executeBatchQuery', catalogNumbers),
+  executeBatchQuery: (catalogNumbers: string[], includeKojima?: boolean): Promise<BatchQueryResult[]> =>
+    ipcRenderer.invoke('executeBatchQuery', catalogNumbers, includeKojima),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
   getHistory: (): Promise<HistoryBatch[]> => ipcRenderer.invoke('getHistory'),

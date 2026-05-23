@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { BatchQueryResult, BatchQueryProgressEvent, QueryResult } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { HistoryView } from './History'
@@ -12,6 +12,8 @@ const PLATFORM_LABELS: Record<string, string> = {
 }
 
 const PLATFORMS = ['discogs', 'ebay', 'kojima', 'hmv']
+
+const DEFAULT_ENABLED_PLATFORMS = ['discogs', 'ebay', 'hmv']
 
 function normalizeCatalogNumber(catalogNumber: string): string {
   const trimmed = catalogNumber.trim().toUpperCase()
@@ -149,7 +151,13 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState<'results' | 'history'>('results')
   const [toast, setToast] = useState<string | null>(null)
-  const [cancelled, setCancelled] = useState(false)
+  const cancelledRef = useRef(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [kojimaEnabled, setKojimaEnabled] = useState(false)
+
+  const enabledPlatforms = useMemo(() => {
+    return kojimaEnabled ? PLATFORMS : DEFAULT_ENABLED_PLATFORMS
+  }, [kojimaEnabled])
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
@@ -173,23 +181,46 @@ function App() {
     setIsLoading(true)
     setProgress([])
     setResults([])
-    setCancelled(false)
+    setIsCancelling(false)
+    cancelledRef.current = false
 
     try {
-      const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers)
-      setResults(batchResults)
+      const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, kojimaEnabled)
+      // 合并结果，不覆盖已累积的结果
+      setResults(prev => {
+        const merged = [...prev]
+        for (const batch of batchResults) {
+          const existing = merged.find(r => r.catalogNumber === batch.catalogNumber)
+          if (!existing) {
+            merged.push(batch)
+          } else {
+            // 合并平台结果
+            for (const result of batch.results) {
+              const existingIdx = existing.results.findIndex(r => r.platform === result.platform)
+              if (existingIdx >= 0) {
+                existing.results[existingIdx] = result
+              } else {
+                existing.results.push(result)
+              }
+            }
+          }
+        }
+        return merged
+      })
     } catch (err) {
-      if (!cancelled) {
+      // 取消时不显示错误，其他错误才显示
+      if (!cancelledRef.current) {
         setError(err instanceof Error ? err.message : 'Query failed')
       }
     } finally {
       setIsLoading(false)
+      setIsCancelling(false)
     }
-  }, [input, parseCatalogNumbers, cancelled])
+  }, [input, parseCatalogNumbers, kojimaEnabled])
 
   const handleCancel = useCallback(async () => {
-    setCancelled(true)
-    setIsLoading(false)
+    cancelledRef.current = true
+    setIsCancelling(true)
     await window.electronAPI.cancelBatchQuery()
   }, [])
 
@@ -197,6 +228,34 @@ function App() {
     const handleProgress = (...args: unknown[]) => {
       const data = args[0] as BatchQueryProgressEvent
       setProgress(prev => [...prev, data])
+
+      // 实时更新结果（合并同个 catalog 的不同平台结果）
+      if (data.event === 'query:result' && data.results) {
+        const incomingResults = data.results
+        setResults(prev => {
+          const existing = prev.find(r => r.catalogNumber === data.catalogNumber)
+          if (existing) {
+            // 合并：保留已有平台结果，添加或更新新平台结果
+            const mergedResults = [...existing.results]
+            for (const newResult of incomingResults) {
+              const existingIdx = mergedResults.findIndex(r => r.platform === newResult.platform)
+              if (existingIdx >= 0) {
+                mergedResults[existingIdx] = newResult
+              } else {
+                mergedResults.push(newResult)
+              }
+            }
+            return prev.map(r => r.catalogNumber === data.catalogNumber ? { ...r, results: mergedResults } : r)
+          }
+          return [...prev, { catalogNumber: data.catalogNumber, results: incomingResults }]
+        })
+      }
+
+      // 取消完成
+      if (data.event === 'query:batch-cancelled') {
+        setIsCancelling(false)
+        setIsLoading(false)
+      }
     }
 
     window.electronAPI.receive('query:progress', handleProgress)
@@ -209,14 +268,14 @@ function App() {
   const progressByCatalog = useMemo(() => {
     const map = new Map<string, Map<string, string>>()
     for (const p of progress) {
-      if (!PLATFORMS.includes(p.platform)) continue
+      if (!enabledPlatforms.includes(p.platform)) continue
       if (!map.has(p.catalogNumber)) {
         map.set(p.catalogNumber, new Map())
       }
       map.get(p.catalogNumber)!.set(p.platform, p.status)
     }
     return map
-  }, [progress])
+  }, [progress, enabledPlatforms])
 
   const catalogNumbers = parseCatalogNumbers(input)
 
@@ -271,24 +330,41 @@ function App() {
               placeholder="Enter catalog numbers (one per line or comma-separated)&#10;&#10;Example:&#10;TOCP-53001&#10;BVCP-21002&#10;SRCL-3101"
               value={input}
               onChange={e => setInput(e.target.value)}
-              disabled={isLoading}
+              disabled={isLoading || isCancelling}
               rows={10}
             />
             {error && <div className="error-message">{error}</div>}
+            <div className="kojima-toggle">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={kojimaEnabled}
+                  onChange={e => setKojimaEnabled(e.target.checked)}
+                  disabled={isLoading || isCancelling}
+                />
+                <span>包含 Kojima Rokuon</span>
+                <span className="checkbox-hint">（其他渠道无结果时再勾选）</span>
+              </label>
+            </div>
             <div className="search-actions">
               <button
                 className="search-button"
                 onClick={handleSearch}
-                disabled={isLoading}
+                disabled={isLoading || isCancelling}
               >
-                {isLoading ? 'Searching...' : 'Search'}
+                {isCancelling ? 'Cancelling...' : isLoading ? 'Searching...' : 'Search'}
               </button>
               {isLoading && (
                 <button
-                  className="cancel-button"
+                  className="cancel-button-icon"
                   onClick={handleCancel}
+                  disabled={isCancelling}
+                  title="Cancel"
                 >
-                  Cancel
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
                 </button>
               )}
             </div>
@@ -307,8 +383,8 @@ function App() {
                 <div className="progress-catalogs">
                   {catalogNumbers.map(cn => {
                     const platforms = progressByCatalog.get(cn)
-                    const isComplete = platforms?.size === PLATFORMS.length &&
-                      PLATFORMS.every(p => {
+                    const isComplete = platforms?.size === enabledPlatforms.length &&
+                      enabledPlatforms.every(p => {
                         const s = platforms?.get(p)
                         return s === 'complete' || s === 'not_found' || s === 'error'
                       })
@@ -316,7 +392,7 @@ function App() {
                       <div key={cn} className={`progress-catalog-item ${isComplete ? 'complete' : ''}`}>
                         <span className="progress-catalog-name">{cn}</span>
                         <div className="progress-platforms">
-                          {PLATFORMS.map(p => {
+                          {enabledPlatforms.map(p => {
                             const status = platforms?.get(p)
                             return (
                               <span
@@ -375,7 +451,13 @@ function App() {
                     Search results will appear here.
                   </p>
                 )}
-                {progress.length > 0 && results.length === 0 && (
+                {isCancelling && (
+                  <div className="progress-area cancelling">
+                    <div className="spinner" />
+                    <p>正在取消...</p>
+                  </div>
+                )}
+                {!isCancelling && progress.length > 0 && results.length === 0 && (
                   <div className="progress-area">
                     <div className="spinner" />
                     <p>Querying...</p>

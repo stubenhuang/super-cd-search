@@ -62,7 +62,7 @@ function emitProgress(event: string, data: BatchQueryProgress): void {
   }
 }
 
-async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal): Promise<QueryResult[]> {
+async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, includeKojima = true): Promise<QueryResult[]> {
   if (signal.aborted) {
     throw new Error('Aborted')
   }
@@ -72,7 +72,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal): Pr
   const platforms: Array<{ name: string; query: () => Promise<QueryResult> }> = [
     { name: 'discogs', query: () => queryDiscogs(catalogNumber) },
     { name: 'ebay', query: () => queryEbay(catalogNumber) },
-    { name: 'kojima', query: () => queryKojima(catalogNumber) },
+    ...(includeKojima ? [{ name: 'kojima' as const, query: () => queryKojima(catalogNumber) }] : []),
     { name: 'hmv', query: () => queryHmv(catalogNumber) }
   ]
 
@@ -89,6 +89,8 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal): Pr
       const result = await query()
       emitProgress('query:progress', { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
       results.push(result)
+      // 单个平台完成就发送结果
+      emitProgress('query:result', { catalogNumber, platform: name, status: result.status, results: [result] })
     } catch (err) {
       if (signal.aborted) {
         emitProgress('query:cancelled', { catalogNumber, platform: name, status: 'error' })
@@ -96,7 +98,10 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal): Pr
       }
       const message = err instanceof Error ? err.message : 'Unknown error'
       emitProgress('query:error', { catalogNumber, platform: name, status: 'error' })
-      results.push({ platform: name as QueryResult['platform'], name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error' as const, error: message })
+      const errorResult = { platform: name as QueryResult['platform'], name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error' as const, error: message }
+      results.push(errorResult)
+      // 错误结果也发送
+      emitProgress('query:result', { catalogNumber, platform: name, status: 'error', results: [errorResult] })
     }
   }
 
@@ -115,7 +120,7 @@ export function cancelBatchQuery(): void {
   }
 }
 
-export async function executeBatchQuery(catalogNumbers: string[]): Promise<BatchQueryResult[]> {
+export async function executeBatchQuery(catalogNumbers: string[], includeKojima = true): Promise<BatchQueryResult[]> {
   if (abortController) {
     abortController.abort()
   }
@@ -138,12 +143,17 @@ export async function executeBatchQuery(catalogNumbers: string[]): Promise<Batch
   async function processNext(): Promise<void> {
     while (currentIndex < trimmed.length) {
       if (signal.aborted) {
-        throw new Error('Aborted')
+        return // 不抛出错误，直接返回以保留部��结果
       }
       const idx = currentIndex++
       const catalogNumber = trimmed[idx]!
-      const queryResults = await queryAllPlatforms(catalogNumber, signal)
-      results[idx] = { catalogNumber, results: queryResults }
+      try {
+        const queryResults = await queryAllPlatforms(catalogNumber, signal, includeKojima)
+        results[idx] = { catalogNumber, results: queryResults }
+      } catch {
+        // queryAllPlatforms 因取消而抛出错误时，直接返回
+        return
+      }
     }
   }
 
@@ -152,18 +162,17 @@ export async function executeBatchQuery(catalogNumbers: string[]): Promise<Batch
     () => processNext()
   )
 
-  try {
-    await Promise.all(workers)
-  } catch (err) {
-    if (signal.aborted) {
-      emitProgress('query:batch-cancelled', { catalogNumber: '', platform: 'all', status: 'error' })
-    }
-    throw err
-  } finally {
-    if (abortController?.signal === signal) {
-      abortController = null
-    }
+  await Promise.all(workers)
+
+  if (abortController?.signal === signal) {
+    abortController = null
   }
 
-  return results
+  // 如果是被取消的，发送取消事件
+  if (signal.aborted) {
+    emitProgress('query:batch-cancelled', { catalogNumber: '', platform: 'all', status: 'error' })
+  }
+
+  // 返回部分结果（过滤掉未处理的条目）
+  return results.filter(r => r !== undefined)
 }
