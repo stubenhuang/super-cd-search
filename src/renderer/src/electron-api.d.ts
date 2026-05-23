@@ -1,6 +1,7 @@
 import type {
   QueryResult,
   QueryStatus,
+  Platform,
   Settings,
   Cookies,
   ThrottleStatus,
@@ -13,6 +14,7 @@ import type {
 export type {
   QueryResult,
   QueryStatus,
+  Platform,
   Settings,
   Cookies,
   ThrottleStatus,

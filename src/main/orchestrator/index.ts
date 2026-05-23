@@ -4,21 +4,12 @@ import { queryDiscogs } from '../queries/discogs'
 import { queryEbay } from '../queries/ebay'
 import { queryKojima } from '../queries/kojima'
 import { queryHmv } from '../queries/hmv'
+import { normalizeCatalogNumber } from '../../shared/utils'
+import { QueryEvents } from '../../shared/events'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult } from '../../shared/types'
 
 const MAX_CONCURRENT_CATALOGS = 3
 const MAX_CATALOG_NUMBERS = 10
-
-/**
- * Normalize catalog number by inserting hyphen between letters and numbers if missing.
- * E.g., "UCCG90530" -> "UCCG-90530"
- */
-function normalizeCatalogNumber(catalogNumber: string): string {
-  const trimmed = catalogNumber.trim().toUpperCase()
-  // Match: letters followed directly by numbers (no hyphen)
-  // Insert hyphen between them
-  return trimmed.replace(/^([A-Z]+)(\d+)$/, '$1-$2')
-}
 
 export type { BatchQueryProgress, BatchQueryResult }
 
@@ -67,7 +58,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, inc
     throw new Error('Aborted')
   }
 
-  emitProgress('query:start', { catalogNumber, platform: 'all', status: 'loading' })
+  emitProgress(QueryEvents.START, { catalogNumber, platform: 'all', status: 'loading' })
 
   const platforms: Array<{ name: string; query: () => Promise<QueryResult> }> = [
     { name: 'discogs', query: () => queryDiscogs(catalogNumber) },
@@ -80,34 +71,32 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, inc
 
   for (const { name, query } of platforms) {
     if (signal.aborted) {
-      emitProgress('query:cancelled', { catalogNumber, platform: name, status: 'error' })
+      emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
       throw new Error('Aborted')
     }
 
-    emitProgress('query:progress', { catalogNumber, platform: name, status: 'loading' })
+    emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: 'loading' })
     try {
       const result = await query()
-      emitProgress('query:progress', { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
+      emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
       results.push(result)
-      // 单个平台完成就发送结果
-      emitProgress('query:result', { catalogNumber, platform: name, status: result.status, results: [result] })
+      emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: result.status, results: [result] })
     } catch (err) {
       if (signal.aborted) {
-        emitProgress('query:cancelled', { catalogNumber, platform: name, status: 'error' })
+        emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
         throw new Error('Aborted')
       }
       const message = err instanceof Error ? err.message : 'Unknown error'
-      emitProgress('query:error', { catalogNumber, platform: name, status: 'error' })
+      emitProgress(QueryEvents.ERROR, { catalogNumber, platform: name, status: 'error' })
       const errorResult = { platform: name as QueryResult['platform'], name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error' as const, error: message }
       results.push(errorResult)
-      // 错误结果也发送
-      emitProgress('query:result', { catalogNumber, platform: name, status: 'error', results: [errorResult] })
+      emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: 'error', results: [errorResult] })
     }
   }
 
   if (!signal.aborted) {
     saveResults(catalogNumber, results)
-    emitProgress('query:complete', { catalogNumber, platform: 'all', status: 'complete' })
+    emitProgress(QueryEvents.COMPLETE, { catalogNumber, platform: 'all', status: 'complete' })
   }
 
   return results
@@ -143,7 +132,7 @@ export async function executeBatchQuery(catalogNumbers: string[], includeKojima 
   async function processNext(): Promise<void> {
     while (currentIndex < trimmed.length) {
       if (signal.aborted) {
-        return // 不抛出错误，直接返回以保留部��结果
+        return
       }
       const idx = currentIndex++
       const catalogNumber = trimmed[idx]!
@@ -151,7 +140,6 @@ export async function executeBatchQuery(catalogNumbers: string[], includeKojima 
         const queryResults = await queryAllPlatforms(catalogNumber, signal, includeKojima)
         results[idx] = { catalogNumber, results: queryResults }
       } catch {
-        // queryAllPlatforms 因取消而抛出错误时，直接返回
         return
       }
     }
@@ -168,11 +156,9 @@ export async function executeBatchQuery(catalogNumbers: string[], includeKojima 
     abortController = null
   }
 
-  // 如果是被取消的，发送取消事件
   if (signal.aborted) {
-    emitProgress('query:batch-cancelled', { catalogNumber: '', platform: 'all', status: 'error' })
+    emitProgress(QueryEvents.BATCH_CANCELLED, { catalogNumber: '', platform: 'all', status: 'error' })
   }
 
-  // 返回部分结果（过滤掉未处理的条目）
   return results.filter(r => r !== undefined)
 }

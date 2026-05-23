@@ -1,23 +1,33 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryResult, BatchQueryProgressEvent, QueryResult } from './electron-api'
+import type { BatchQueryResult, BatchQueryProgressEvent, QueryResult, Platform } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { HistoryView } from './History'
+import { normalizeCatalogNumber } from '../../shared/utils'
+import { QueryEvents } from '../../shared/events'
 import './App.css'
 
-const PLATFORM_LABELS: Record<string, string> = {
+const PLATFORM_LABELS: Record<Platform, string> = {
   discogs: 'Discogs',
   ebay: 'eBay',
   kojima: 'Kojima Rokuon',
   hmv: 'HMV Japan'
 }
 
-const PLATFORMS = ['discogs', 'ebay', 'kojima', 'hmv']
+const PLATFORMS: Platform[] = ['discogs', 'ebay', 'kojima', 'hmv']
 
-const DEFAULT_ENABLED_PLATFORMS = ['discogs', 'ebay', 'hmv']
+const DEFAULT_ENABLED_PLATFORMS: Platform[] = ['discogs', 'ebay', 'hmv']
 
-function normalizeCatalogNumber(catalogNumber: string): string {
-  const trimmed = catalogNumber.trim().toUpperCase()
-  return trimmed.replace(/^([A-Z]+)(\d+)$/, '$1-$2')
+function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]): QueryResult[] {
+  const merged = [...existing]
+  for (const newResult of incoming) {
+    const idx = merged.findIndex(r => r.platform === newResult.platform)
+    if (idx >= 0) {
+      merged[idx] = newResult
+    } else {
+      merged.push(newResult)
+    }
+  }
+  return merged
 }
 
 interface PlatformResultRowProps {
@@ -130,9 +140,9 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results }: Re
         {displayArtist && <span className="result-artist">— {displayArtist}</span>}
       </div>
       <div className="platform-results">
-        {results.map((r, idx) => (
+        {results.map(r => (
           <PlatformResultRow
-            key={idx}
+            key={r.platform}
             result={r}
             isLowestPrice={r.status === 'found' && r.priceMin !== null && r.priceMin === lowestPrice}
           />
@@ -186,29 +196,22 @@ function App() {
 
     try {
       const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, kojimaEnabled)
-      // 合并结果，不覆盖已累积的结果
       setResults(prev => {
         const merged = [...prev]
         for (const batch of batchResults) {
-          const existing = merged.find(r => r.catalogNumber === batch.catalogNumber)
-          if (!existing) {
-            merged.push(batch)
-          } else {
-            // 合并平台结果
-            for (const result of batch.results) {
-              const existingIdx = existing.results.findIndex(r => r.platform === result.platform)
-              if (existingIdx >= 0) {
-                existing.results[existingIdx] = result
-              } else {
-                existing.results.push(result)
-              }
+          const existingIdx = merged.findIndex(r => r.catalogNumber === batch.catalogNumber)
+          if (existingIdx >= 0) {
+            merged[existingIdx] = {
+              ...merged[existingIdx],
+              results: mergePlatformResults(merged[existingIdx].results, batch.results)
             }
+          } else {
+            merged.push(batch)
           }
         }
         return merged
       })
     } catch (err) {
-      // 取消时不显示错误，其他错误才显示
       if (!cancelledRef.current) {
         setError(err instanceof Error ? err.message : 'Query failed')
       }
@@ -229,30 +232,23 @@ function App() {
       const data = args[0] as BatchQueryProgressEvent
       setProgress(prev => [...prev, data])
 
-      // 实时更新结果（合并同个 catalog 的不同平台结果）
-      if (data.event === 'query:result' && data.results) {
+      if (data.event === QueryEvents.RESULT && data.results) {
         const incomingResults = data.results
         setResults(prev => {
-          const existing = prev.find(r => r.catalogNumber === data.catalogNumber)
-          if (existing) {
-            // 合并：保留已有平台结果，添加或更新新平台结果
-            const mergedResults = [...existing.results]
-            for (const newResult of incomingResults) {
-              const existingIdx = mergedResults.findIndex(r => r.platform === newResult.platform)
-              if (existingIdx >= 0) {
-                mergedResults[existingIdx] = newResult
-              } else {
-                mergedResults.push(newResult)
-              }
+          const existingIdx = prev.findIndex(r => r.catalogNumber === data.catalogNumber)
+          if (existingIdx >= 0) {
+            const merged = [...prev]
+            merged[existingIdx] = {
+              ...merged[existingIdx],
+              results: mergePlatformResults(merged[existingIdx].results, incomingResults)
             }
-            return prev.map(r => r.catalogNumber === data.catalogNumber ? { ...r, results: mergedResults } : r)
+            return merged
           }
           return [...prev, { catalogNumber: data.catalogNumber, results: incomingResults }]
         })
       }
 
-      // 取消完成
-      if (data.event === 'query:batch-cancelled') {
+      if (data.event === QueryEvents.BATCH_CANCELLED) {
         setIsCancelling(false)
         setIsLoading(false)
       }
@@ -261,14 +257,15 @@ function App() {
     window.electronAPI.receive('query:progress', handleProgress)
   }, [])
 
-  const completedCount = progress.filter(p => p.event === 'query:complete').length
-  const totalCount = parseCatalogNumbers(input).length || 0
+  const completedCount = progress.filter(p => p.event === QueryEvents.COMPLETE).length
+  const catalogNumbers = useMemo(() => parseCatalogNumbers(input), [input, parseCatalogNumbers])
+  const totalCount = catalogNumbers.length || 0
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
   const progressByCatalog = useMemo(() => {
     const map = new Map<string, Map<string, string>>()
     for (const p of progress) {
-      if (!enabledPlatforms.includes(p.platform)) continue
+      if (!(enabledPlatforms as readonly string[]).includes(p.platform)) continue
       if (!map.has(p.catalogNumber)) {
         map.set(p.catalogNumber, new Map())
       }
@@ -276,8 +273,6 @@ function App() {
     }
     return map
   }, [progress, enabledPlatforms])
-
-  const catalogNumbers = parseCatalogNumbers(input)
 
   const handleLoadHistory = useCallback(async (queryId: number) => {
     const entry = await window.electronAPI.getHistoryEntry(queryId)

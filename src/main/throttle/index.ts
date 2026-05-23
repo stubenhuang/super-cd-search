@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { getSetting } from '../settings'
+import type { ThrottleStatus } from '../../shared/types'
 
 // Node.js native fetch supports agent option for custom connections
 interface NodeFetchOptions extends RequestInit {
@@ -128,15 +129,6 @@ export async function throttledFetch(
     state.pending.push(executeRequest)
     processQueue(domain)
   })
-}
-
-export interface ThrottleStatus {
-  domains: Record<string, {
-    pendingRequests: number
-    active: boolean
-    backoffAttempt: number | null
-    nextBackoffDelay: number | null
-  }>
 }
 
 export function getThrottleStatus(): ThrottleStatus {
