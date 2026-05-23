@@ -1,62 +1,57 @@
+/* === Global Reset === */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+/* === Warm Paper Theme (Light only - matches vintage record store aesthetic) === */
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-tertiary: #e8e8e8;
-  --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --border-color: #d1d1d1;
-  --accent-color: #007aff;
-  --accent-hover: #0056cc;
-  --accent-bg: #e5f1ff;
-  --success-color: #34c759;
-  --error-color: #ff3b30;
-  --error-hover: #d63029;
-  --warning-color: #ff9500;
-  --success-bg: #d1fae5;
-  --success-text: #065f46;
-  --error-bg: #fee2e2;
-  --error-text: #991b1b;
-  --error-border: #fecaca;
-  --warning-bg: #fef3c7;
-  --warning-text: #92400e;
-  --info-bg: #dbeafe;
-  --info-text: #1e40af;
-}
+  /* Warm paper palette */
+  --bg-primary: #F5F0E8;
+  --bg-secondary: #EDE6DA;
+  --bg-tertiary: #E5DCCF;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-primary: #1c1c1e;
-    --bg-secondary: #2c2c2e;
-    --bg-tertiary: #3a3a3c;
-    --text-primary: #ffffff;
-    --text-secondary: #8e8e93;
-    --border-color: #3a3a3c;
-    --accent-color: #0a84ff;
-    --accent-hover: #409cff;
-    --accent-bg: #1e3a5f;
-    --error-hover: #ff453a;
-    --success-bg: #064e3b;
-    --success-text: #6ee7b7;
-    --error-bg: #7f1d1d;
-    --error-text: #fca5a5;
-    --error-border: #991b1b;
-    --warning-bg: #78350f;
-    --warning-text: #fcd34d;
-    --info-bg: #1e3a5f;
-    --info-text: #93c5fd;
-  }
+  /* Text colors */
+  --text-primary: #2C2520;
+  --text-secondary: #6B5D4D;
+  --text-muted: #9A8B78;
+
+  /* Accent - warm copper */
+  --accent-color: #B8860B;
+  --accent-hover: #9A7209;
+  --accent-light: #DAA520;
+  --accent-bg: rgba(184, 134, 11, 0.1);
+
+  /* Status colors */
+  --success-color: #5D7A4A;
+  --error-color: #A63D40;
+  --error-hover: #8B3235;
+  --warning-color: #B8860B;
+
+  /* Status backgrounds */
+  --success-bg: rgba(93, 122, 74, 0.1);
+  --success-text: #3D5A2A;
+  --error-bg: rgba(166, 61, 64, 0.1);
+  --error-text: #7A2D2F;
+  --error-border: rgba(166, 61, 64, 0.3);
+  --warning-bg: rgba(184, 134, 11, 0.1);
+  --warning-text: #7A5A08;
+  --info-bg: rgba(0, 102, 179, 0.1);
+  --info-text: #004A80;
+
+  /* Border */
+  --border-color: rgba(44, 37, 32, 0.15);
 }
 
 html, body, #root {
   height: 100%;
   width: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* Remove dark mode - vintage aesthetic works best in light */

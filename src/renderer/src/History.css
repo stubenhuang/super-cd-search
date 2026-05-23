@@ -1,53 +1,65 @@
+/* === History View - Vintage Record Store Theme === */
+
 .history-view {
-  padding: 16px;
+  padding: 20px;
 }
 
 .history-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .history-header h2 {
-  font-size: 16px;
-  font-weight: 600;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .clear-all-button {
-  padding: 4px 12px;
+  padding: 8px 16px;
   border: 1px solid var(--error-border);
-  border-radius: 4px;
-  background: none;
+  border-radius: 8px;
+  background: transparent;
   color: var(--error-text);
+  font-family: 'DM Sans', sans-serif;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .clear-all-button:hover {
-  background-color: var(--error-bg);
+  background: var(--error-bg);
+  border-color: var(--error-color);
+  color: var(--error-color);
 }
 
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .history-entry {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
-  background-color: var(--bg-secondary);
+  padding: 16px 20px;
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: background-color 0.15s;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(44, 37, 32, 0.06);
 }
 
 .history-entry:hover {
-  background-color: var(--bg-tertiary);
+  border-color: var(--accent-color);
+  box-shadow: 0 4px 16px rgba(44, 37, 32, 0.1);
+  transform: translateY(-1px);
 }
 
 .history-info {
@@ -55,36 +67,45 @@
 }
 
 .history-catalog {
+  font-family: 'JetBrains Mono', monospace;
   font-weight: 500;
   font-size: 14px;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.02em;
 }
 
 .history-date {
+  font-family: 'DM Sans', sans-serif;
   font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 2px;
+  color: var(--text-muted);
+  margin-top: 4px;
 }
 
 .delete-button {
-  background: none;
-  border: none;
+  background: transparent;
+  border: 1px solid transparent;
   font-size: 18px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 0 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
   line-height: 1;
+  transition: all 0.15s ease;
 }
 
 .delete-button:hover {
   color: var(--error-color);
+  background: var(--error-bg);
+  border-color: var(--error-border);
 }
 
 .history-empty {
-  padding: 24px;
+  padding: 48px 20px;
   text-align: center;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 18px;
 }
