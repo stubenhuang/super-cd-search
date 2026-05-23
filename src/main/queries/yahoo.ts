@@ -36,16 +36,21 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
       return notFound('yahoo')
     }
 
-    const name = await firstItem.$eval('.SearchResult_SearchResultItem__detailLink__G4Top', el => el.textContent?.trim() || null).catch(() => null)
-
-    let link = await firstItem.$eval('.SearchResult_SearchResultItem__detailLink__G4Top', el => el.getAttribute('href')).catch(() => null)
-
-    let coverUrl = await firstItem.$eval('.ItemImageLink_SearchResultItemImageLink__imageSource__RDUwW', el => el.getAttribute('src')).catch(() => null)
+    const { name, link, coverUrl, priceText, storeName } = await firstItem.evaluate(el => {
+      const text = (sel: string) => el.querySelector(sel)?.textContent?.trim() ?? null
+      const attr = (sel: string, a: string) => el.querySelector(sel)?.getAttribute(a) ?? null
+      return {
+        name: text('.SearchResult_SearchResultItem__detailLink__G4Top'),
+        link: attr('.SearchResult_SearchResultItem__detailLink__G4Top', 'href'),
+        coverUrl: attr('.ItemImageLink_SearchResultItemImageLink__imageSource__RDUwW', 'src'),
+        priceText: text('.ItemPrice_ItemPrice__2t7fx'),
+        storeName: text('.ItemStore_SearchResultItemStore__Ft4En')
+      }
+    })
 
     let priceMin: number | null = null
     let priceMax: number | null = null
 
-    const priceText = await firstItem.$eval('.ItemPrice_ItemPrice__2t7fx', el => el.textContent?.trim() || null).catch(() => null)
     if (priceText) {
       const priceUSD = await parseJPYPrice(priceText)
       if (priceUSD !== null) {
@@ -53,8 +58,6 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
         priceMax = priceUSD
       }
     }
-
-    const storeName = await firstItem.$eval('.ItemStore_SearchResultItemStore__Ft4En', el => el.textContent?.trim() || null).catch(() => null)
 
     return {
       platform: 'yahoo',
