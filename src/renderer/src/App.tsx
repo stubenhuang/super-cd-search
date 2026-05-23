@@ -156,7 +156,8 @@ function App() {
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [results, setResults] = useState<BatchQueryResult[]>([])
+  const [results, setResults] = useState<Map<string, QueryResult[]>>(new Map())
+  const [catalogOrder, setCatalogOrder] = useState<string[]>([])
   const [progress, setProgress] = useState<BatchQueryProgressEvent[]>([])
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState<'results' | 'history'>('results')
@@ -190,24 +191,18 @@ function App() {
     setError(null)
     setIsLoading(true)
     setProgress([])
-    setResults([])
+    setResults(new Map())
+    setCatalogOrder(catalogNumbers)
     setIsCancelling(false)
     cancelledRef.current = false
 
     try {
       const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, kojimaEnabled)
       setResults(prev => {
-        const merged = [...prev]
+        const merged = new Map(prev)
         for (const batch of batchResults) {
-          const existingIdx = merged.findIndex(r => r.catalogNumber === batch.catalogNumber)
-          if (existingIdx >= 0) {
-            merged[existingIdx] = {
-              ...merged[existingIdx],
-              results: mergePlatformResults(merged[existingIdx].results, batch.results)
-            }
-          } else {
-            merged.push(batch)
-          }
+          const existing = merged.get(batch.catalogNumber) || []
+          merged.set(batch.catalogNumber, mergePlatformResults(existing, batch.results))
         }
         return merged
       })
@@ -235,16 +230,10 @@ function App() {
       if (data.event === QueryEvents.RESULT && data.results) {
         const incomingResults = data.results
         setResults(prev => {
-          const existingIdx = prev.findIndex(r => r.catalogNumber === data.catalogNumber)
-          if (existingIdx >= 0) {
-            const merged = [...prev]
-            merged[existingIdx] = {
-              ...merged[existingIdx],
-              results: mergePlatformResults(merged[existingIdx].results, incomingResults)
-            }
-            return merged
-          }
-          return [...prev, { catalogNumber: data.catalogNumber, results: incomingResults }]
+          const newMap = new Map(prev)
+          const existing = newMap.get(data.catalogNumber) || []
+          newMap.set(data.catalogNumber, mergePlatformResults(existing, incomingResults))
+          return newMap
         })
       }
 
@@ -277,18 +266,23 @@ function App() {
   const handleLoadHistory = useCallback(async (queryId: number) => {
     const entry = await window.electronAPI.getHistoryEntry(queryId)
     if (entry) {
-      setResults([{
-        catalogNumber: entry.query.catalogNumber,
-        results: entry.results
-      }])
+      setCatalogOrder([entry.query.catalogNumber])
+      setResults(new Map([[entry.query.catalogNumber, entry.results]]))
       setActiveTab('results')
     }
   }, [])
 
   const handleExport = useCallback(async () => {
-    if (results.length === 0) return
+    if (results.size === 0) return
+    const orderedResults: BatchQueryResult[] = catalogOrder
+      .map(catalogNumber => ({
+        catalogNumber,
+        results: results.get(catalogNumber) || []
+      }))
+      .filter(r => r.results.length > 0)
+    if (orderedResults.length === 0) return
     try {
-      const filePath = await window.electronAPI.exportToExcel(results)
+      const filePath = await window.electronAPI.exportToExcel(orderedResults)
       if (filePath) {
         setToast(`Exported to ${filePath}`)
         setTimeout(() => setToast(null), 4000)
@@ -297,7 +291,7 @@ function App() {
       setToast('Export failed')
       setTimeout(() => setToast(null), 4000)
     }
-  }, [results])
+  }, [results, catalogOrder])
 
   return (
     <div className="app-container">
@@ -431,7 +425,7 @@ function App() {
               </button>
             </div>
             <div className="panel-actions">
-              {activeTab === 'results' && results.length > 0 && (
+              {activeTab === 'results' && results.size > 0 && (
                 <button className="export-button" onClick={handleExport}>
                   Export to Excel
                 </button>
@@ -441,7 +435,7 @@ function App() {
           <div className="panel-content">
             {activeTab === 'results' && (
               <>
-                {results.length === 0 && progress.length === 0 && (
+                {results.size === 0 && progress.length === 0 && (
                   <p className="placeholder-text">
                     Search results will appear here.
                   </p>
@@ -452,17 +446,19 @@ function App() {
                     <p>正在取消...</p>
                   </div>
                 )}
-                {!isCancelling && progress.length > 0 && results.length === 0 && (
+                {!isCancelling && progress.length > 0 && results.size === 0 && (
                   <div className="progress-area">
                     <div className="spinner" />
                     <p>Querying...</p>
                   </div>
                 )}
-                {results.length > 0 && (
+                {results.size > 0 && (
                   <div className="results-area">
-                    {results.map((result) => (
-                      <ResultCard key={result.catalogNumber} {...result} />
-                    ))}
+                    {catalogOrder.map((catalogNumber) => {
+                      const resultData = results.get(catalogNumber)
+                      if (!resultData) return null
+                      return <ResultCard key={catalogNumber} catalogNumber={catalogNumber} results={resultData} />
+                    })}
                   </div>
                 )}
               </>
