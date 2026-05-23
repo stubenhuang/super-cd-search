@@ -47,6 +47,9 @@ super-cd.sh
 .claude/
 .superpowers/
 
+# Playwright MCP
+.playwright-mcp/
+
 # Documentation
 docs/
 tasks/
