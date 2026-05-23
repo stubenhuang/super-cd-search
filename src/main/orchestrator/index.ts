@@ -4,6 +4,7 @@ import { queryDiscogs } from '../queries/discogs'
 import { queryEbay } from '../queries/ebay'
 import { queryKojima } from '../queries/kojima'
 import { queryHmv } from '../queries/hmv'
+import { queryYahoo } from '../queries/yahoo'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { QueryEvents } from '../../shared/events'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult } from '../../shared/types'
@@ -64,7 +65,8 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, inc
     { name: 'discogs', query: () => queryDiscogs(catalogNumber) },
     { name: 'ebay', query: () => queryEbay(catalogNumber) },
     ...(includeKojima ? [{ name: 'kojima' as const, query: () => queryKojima(catalogNumber) }] : []),
-    { name: 'hmv', query: () => queryHmv(catalogNumber) }
+    { name: 'hmv', query: () => queryHmv(catalogNumber) },
+    { name: 'yahoo', query: () => queryYahoo(catalogNumber) }
   ]
 
   const results: QueryResult[] = []

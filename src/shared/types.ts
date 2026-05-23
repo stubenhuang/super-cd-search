@@ -1,6 +1,6 @@
 export type QueryStatus = 'found' | 'not_found' | 'error'
 
-export type Platform = 'discogs' | 'ebay' | 'kojima' | 'hmv'
+export type Platform = 'discogs' | 'ebay' | 'kojima' | 'hmv' | 'yahoo'
 
 export interface QueryResult {
   platform: Platform
@@ -19,6 +19,7 @@ export interface Cookies {
   ebay?: string
   kojima?: string
   hmv?: string
+  yahoo?: string
 }
 
 export interface Settings {

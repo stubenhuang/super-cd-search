@@ -10,12 +10,13 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   discogs: 'Discogs',
   ebay: 'eBay',
   kojima: 'Kojima Rokuon',
-  hmv: 'HMV Japan'
+  hmv: 'HMV Japan',
+  yahoo: 'Yahoo Shopping'
 }
 
-const PLATFORMS: Platform[] = ['discogs', 'ebay', 'kojima', 'hmv']
+const PLATFORMS: Platform[] = ['discogs', 'ebay', 'kojima', 'hmv', 'yahoo']
 
-const DEFAULT_ENABLED_PLATFORMS: Platform[] = ['discogs', 'ebay', 'hmv']
+const DEFAULT_ENABLED_PLATFORMS: Platform[] = ['discogs', 'ebay', 'hmv', 'yahoo']
 
 function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]): QueryResult[] {
   const merged = [...existing]
