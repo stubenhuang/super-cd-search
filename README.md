@@ -1,72 +1,74 @@
 # Super CD Search
 
-An Electron desktop app for batch-querying CD information by catalog number across multiple platforms.
+一款 Electron 桌面应用，支持通过目录号在多个平台批量查询 CD 信息。
 
-## Features
+## 功能特性
 
-- **Multi-platform search**: Query CD information from Discogs, eBay, and Kojima Rokuon
-- **Batch processing**: Search multiple catalog numbers at once
-- **Price comparison**: Compare prices across different platforms
-- **History tracking**: View previous search results
-- **Export to Excel**: Export search results to .xlsx format
+- **多平台搜索**：从 Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping 查询 CD 信息
+- **批量处理**：同时搜索多个目录号
+- **价格对比**：跨平台比较价格
+- **历史记录**：查看历史搜索结果
+- **导出 Excel**：将搜索结果导出为 .xlsx 格式
 
-## Platforms Supported
+## 支持平台
 
-| Platform | Method | Notes |
-|----------|--------|-------|
-| Discogs | API + Web Scraping | Requires API token for best results |
-| eBay | API + Web Scraping | Requires OAuth credentials |
-| Kojima Rokuon | Web Scraping | Japanese CD retailer |
+| 平台 | 方式 | 备注 |
+|------|------|------|
+| Discogs | API + 网页抓取 | 需配置 API Token 以获得最佳结果 |
+| eBay | API + 网页抓取 | 需配置 OAuth 凭证 |
+| Kojima Rokuon | 网页抓取 | 日本 CD 零售商 |
+| HMV Japan | 网页抓取 | 日本 CD 零售商 |
+| Yahoo Shopping | 网页抓取 | 日本电商平台 |
 
-## Installation
+## 安装
 
-### Prerequisites
+### 环境要求
 
 - Node.js 18+
 - npm
 
-### Development
+### 开发
 
 ```bash
-# Install dependencies
+# 安装依赖
 npm install
 
-# Rebuild native module (better-sqlite3)
+# 重新构建原生模块 (better-sqlite3)
 npm run rebuild
 
-# Start development server
+# 启动开发服务器
 npm run dev
 ```
 
-### Build
+### 构建
 
 ```bash
-# Build for production
+# 生产构建
 npm run build
 
-# Package as macOS app (DMG/ZIP)
+# 打包为 macOS 应用 (DMG/ZIP)
 npm run dist
 ```
 
-## Configuration
+## 配置
 
-API credentials can be configured in the Settings panel:
+可在设置面板中配置 API 凭证：
 
-- **Discogs API Token**: Personal access token from Discogs
-- **eBay Client ID**: OAuth client ID from eBay Developer Portal
-- **eBay Client Secret**: OAuth client secret from eBay Developer Portal
+- **Discogs API Token**：Discogs 个人访问令牌
+- **eBay Client ID**：eBay 开发者门户 OAuth 客户端 ID
+- **eBay Client Secret**：eBay 开发者门户 OAuth 客户端密钥
 
-Credentials are stored locally with encryption.
+凭证使用加密方式本地存储。
 
-## Tech Stack
+## 技术栈
 
-- **Electron** - Desktop application framework
-- **React** - UI components
-- **TypeScript** - Type safety
-- **better-sqlite3** - Local database (SQLite)
-- **Puppeteer** - Web scraping
-- **ExcelJS** - Excel export
+- **Electron** - 桌面应用框架
+- **React** - UI 组件
+- **TypeScript** - 类型安全
+- **better-sqlite3** - 本地数据库 (SQLite)
+- **Puppeteer** - 网页抓取
+- **ExcelJS** - Excel 导出
 
-## License
+## 许可证
 
-ISC
+MIT
