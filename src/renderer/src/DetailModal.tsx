@@ -3,10 +3,10 @@ import type { QueryResult, CDDetails } from './electron-api'
 
 const PLATFORM_PRIORITY: Record<string, number> = {
   discogs: 0,
-  ebay: 1,
-  hmv: 2,
+  hmv: 1,
+  kojima: 2,
   yahoo: 3,
-  kojima: 4
+  ebay: 4
 }
 
 const DETAIL_LABELS: Record<keyof CDDetails, string> = {
