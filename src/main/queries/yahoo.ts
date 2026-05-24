@@ -2,6 +2,7 @@ import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
+import { tryLLMParse } from '../llm/parser'
 
 const YAHOO_SHOPPING_URL = 'https://shopping.yahoo.co.jp'
 
@@ -130,6 +131,11 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
         priceMax = priceUSD
       }
     }
+
+    // Try LLM parsing first
+    const html = await page.content()
+    const llmResult = await tryLLMParse('yahoo', catalogNumber, html)
+    if (llmResult) return llmResult
 
     // Try to get details from product page
     let details: CDDetails | undefined

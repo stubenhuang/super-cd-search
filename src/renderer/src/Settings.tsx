@@ -17,6 +17,16 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [proxyEnabled, setProxyEnabled] = useState(false)
   const [proxyHost, setProxyHost] = useState('')
   const [proxyPort, setProxyPort] = useState(1080)
+  const [llmEnabled, setLlmEnabled] = useState(false)
+  const [llmApiBaseUrl, setLlmApiBaseUrl] = useState('https://api.openai.com/v1')
+  const [llmApiKey, setLlmApiKey] = useState('')
+  const [llmModel, setLlmModel] = useState('gpt-4o-mini')
+  const [llmTemperature, setLlmTemperature] = useState(0)
+  const [llmPlatformDiscogs, setLlmPlatformDiscogs] = useState(true)
+  const [llmPlatformEbay, setLlmPlatformEbay] = useState(true)
+  const [llmPlatformKojima, setLlmPlatformKojima] = useState(true)
+  const [llmPlatformHmv, setLlmPlatformHmv] = useState(true)
+  const [llmPlatformYahoo, setLlmPlatformYahoo] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -37,6 +47,17 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setProxyEnabled(settings.proxyEnabled || false)
     setProxyHost(settings.proxyHost || '')
     setProxyPort(settings.proxyPort || 1080)
+    const llm = settings.llm
+    setLlmEnabled(llm?.enabled || false)
+    setLlmApiBaseUrl(llm?.apiBaseUrl || 'https://api.openai.com/v1')
+    setLlmApiKey(llm?.apiKey || '')
+    setLlmModel(llm?.model || 'gpt-4o-mini')
+    setLlmTemperature(llm?.temperature ?? 0)
+    setLlmPlatformDiscogs(llm?.platformEnabled?.discogs ?? true)
+    setLlmPlatformEbay(llm?.platformEnabled?.ebay ?? true)
+    setLlmPlatformKojima(llm?.platformEnabled?.kojima ?? true)
+    setLlmPlatformHmv(llm?.platformEnabled?.hmv ?? true)
+    setLlmPlatformYahoo(llm?.platformEnabled?.yahoo ?? true)
   }, [])
 
   const handleSave = async () => {
@@ -53,6 +74,20 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       await window.electronAPI.setSetting('proxyEnabled', proxyEnabled)
       await window.electronAPI.setSetting('proxyHost', proxyHost)
       await window.electronAPI.setSetting('proxyPort', proxyPort)
+      await window.electronAPI.setSetting('llm', {
+        enabled: llmEnabled,
+        apiBaseUrl: llmApiBaseUrl,
+        apiKey: llmApiKey,
+        model: llmModel,
+        temperature: llmTemperature,
+        platformEnabled: {
+          discogs: llmPlatformDiscogs,
+          ebay: llmPlatformEbay,
+          kojima: llmPlatformKojima,
+          hmv: llmPlatformHmv,
+          yahoo: llmPlatformYahoo
+        }
+      })
       setToast('Settings saved successfully')
       setTimeout(() => setToast(null), 3000)
     } catch (err) {
@@ -180,6 +215,143 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 placeholder="e.g. 1080"
                 disabled={!proxyEnabled}
               />
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <h3>LLM Configuration</h3>
+            <p className="section-help">
+              Configure an OpenAI-compatible API for intelligent content parsing
+            </p>
+
+            <div className="form-group">
+              <div className="toggle-container">
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={llmEnabled}
+                    onChange={e => setLlmEnabled(e.target.checked)}
+                    aria-label="Enable LLM parsing"
+                  />
+                  <span className="toggle-slider" role="switch" aria-checked={llmEnabled}></span>
+                </label>
+                <span className="toggle-label">Enable LLM Parsing</span>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="llmApiBaseUrl">API Base URL</label>
+              <input
+                id="llmApiBaseUrl"
+                type="text"
+                value={llmApiBaseUrl}
+                onChange={e => setLlmApiBaseUrl(e.target.value)}
+                placeholder="https://api.openai.com/v1"
+                disabled={!llmEnabled}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="llmApiKey">API Key</label>
+              <input
+                id="llmApiKey"
+                type="password"
+                value={llmApiKey}
+                onChange={e => setLlmApiKey(e.target.value)}
+                placeholder="sk-..."
+                disabled={!llmEnabled}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="llmModel">Model</label>
+              <input
+                id="llmModel"
+                type="text"
+                value={llmModel}
+                onChange={e => setLlmModel(e.target.value)}
+                placeholder="gpt-4o-mini"
+                disabled={!llmEnabled}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="llmTemperature">Temperature ({llmTemperature.toFixed(1)})</label>
+              <input
+                id="llmTemperature"
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={llmTemperature}
+                onChange={e => setLlmTemperature(parseFloat(e.target.value))}
+                disabled={!llmEnabled}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Platform Selection</label>
+              <p className="section-help" style={{ marginTop: '4px', marginBottom: '12px' }}>
+                Choose which platforms use LLM for parsing
+              </p>
+              <div className="platform-toggles">
+                <div className="toggle-container">
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={llmPlatformDiscogs}
+                      onChange={e => setLlmPlatformDiscogs(e.target.checked)}
+                      disabled={!llmEnabled}
+                    />
+                    <span className="toggle-slider" role="switch"></span>
+                  </label>
+                  <span className="toggle-label">Discogs</span>
+                </div>
+                <div className="toggle-container">
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={llmPlatformEbay}
+                      onChange={e => setLlmPlatformEbay(e.target.checked)}
+                      disabled={!llmEnabled}
+                    />
+                  </label>
+                  <span className="toggle-label">eBay</span>
+                </div>
+                <div className="toggle-container">
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={llmPlatformKojima}
+                      onChange={e => setLlmPlatformKojima(e.target.checked)}
+                      disabled={!llmEnabled}
+                    />
+                  </label>
+                  <span className="toggle-label">Kojima</span>
+                </div>
+                <div className="toggle-container">
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={llmPlatformHmv}
+                      onChange={e => setLlmPlatformHmv(e.target.checked)}
+                      disabled={!llmEnabled}
+                    />
+                  </label>
+                  <span className="toggle-label">HMV</span>
+                </div>
+                <div className="toggle-container">
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={llmPlatformYahoo}
+                      onChange={e => setLlmPlatformYahoo(e.target.checked)}
+                      disabled={!llmEnabled}
+                    />
+                  </label>
+                  <span className="toggle-label">Yahoo</span>
+                </div>
+              </div>
             </div>
           </section>
         </div>

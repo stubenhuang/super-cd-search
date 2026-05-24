@@ -2,6 +2,7 @@ import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
+import { tryLLMParse } from '../llm/parser'
 
 const HMV_WEB_URL = 'https://www.hmv.co.jp'
 
@@ -167,6 +168,11 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
     if (link && !link.startsWith('http')) {
       link = `${HMV_WEB_URL}${link}`
     }
+
+    // Try LLM parsing first
+    const html = await page.content()
+    const llmResult = await tryLLMParse('hmv', catalogNumber, html)
+    if (llmResult) return llmResult
 
     let priceMin: number | null = null
     let priceMax: number | null = null

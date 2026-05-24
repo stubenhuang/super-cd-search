@@ -5,6 +5,7 @@ import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
 import { type Page, type ElementHandle } from 'puppeteer'
+import { tryLLMParse } from '../llm/parser'
 
 const EBAY_API_URL = 'https://api.ebay.com'
 const EBAY_WEB_URL = 'https://www.ebay.com'
@@ -274,6 +275,11 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
     if (noResults) {
       return { success: true, result: notFound('ebay') }
     }
+
+    // Try LLM parsing first
+    const html = await page.content()
+    const llmResult = await tryLLMParse('ebay', catalogNumber, html)
+    if (llmResult) return { success: true, result: llmResult }
 
     // Scroll down to load results
     await humanScroll(page)

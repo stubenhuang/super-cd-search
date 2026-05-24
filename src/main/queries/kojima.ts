@@ -2,6 +2,7 @@ import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
+import { tryLLMParse } from '../llm/parser'
 
 const KOJIMA_WEB_URL = 'https://kojimarokuon.com'
 
@@ -159,6 +160,11 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
     if (link && !link.startsWith('http')) {
       link = `${KOJIMA_WEB_URL}${link}`
     }
+
+    // Try LLM parsing first
+    const html = await page.content()
+    const llmResult = await tryLLMParse('kojima', catalogNumber, html)
+    if (llmResult) return llmResult
 
     // Navigate to product page for price and details
     let priceMin: number | null = null

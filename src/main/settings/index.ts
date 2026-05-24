@@ -1,7 +1,7 @@
 import electronStore from 'electron-store'
-import type { Settings, Cookies } from '../../shared/types'
+import type { Settings, Cookies, LLMSettings } from '../../shared/types'
 
-export type { Settings, Cookies }
+export type { Settings, Cookies, LLMSettings }
 
 const schema = {
   discogsToken: { type: 'string' as const, default: '' },
@@ -18,7 +18,29 @@ const schema = {
   },
   proxyEnabled: { type: 'boolean' as const, default: false },
   proxyHost: { type: 'string' as const, default: '' },
-  proxyPort: { type: 'number' as const, default: 1080 }
+  proxyPort: { type: 'number' as const, default: 1080 },
+  llm: {
+    type: 'object' as const,
+    properties: {
+      enabled: { type: 'boolean' as const, default: false },
+      apiBaseUrl: { type: 'string' as const, default: 'https://api.openai.com/v1' },
+      apiKey: { type: 'string' as const, default: '' },
+      model: { type: 'string' as const, default: 'gpt-4o-mini' },
+      temperature: { type: 'number' as const, default: 0 },
+      platformEnabled: {
+        type: 'object' as const,
+        properties: {
+          discogs: { type: 'boolean' as const, default: true },
+          ebay: { type: 'boolean' as const, default: true },
+          kojima: { type: 'boolean' as const, default: true },
+          hmv: { type: 'boolean' as const, default: true },
+          yahoo: { type: 'boolean' as const, default: true }
+        },
+        default: {}
+      }
+    },
+    default: {}
+  }
 } as const
 
 const Store = (electronStore as any).default || electronStore
@@ -44,7 +66,8 @@ export function getSettings(): Settings {
     cookies: store.get('cookies') as Cookies || undefined,
     proxyEnabled: store.get('proxyEnabled') as boolean || undefined,
     proxyHost: store.get('proxyHost') as string || undefined,
-    proxyPort: store.get('proxyPort') as number || undefined
+    proxyPort: store.get('proxyPort') as number || undefined,
+    llm: store.get('llm') as LLMSettings | undefined
   }
 }
 

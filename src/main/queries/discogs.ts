@@ -5,6 +5,7 @@ import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult } from './types'
 import type { CDDetails } from '../../shared/types'
 import { notFound, queryError } from './types'
+import { tryLLMParse } from '../llm/parser'
 
 const DISCOGS_API_URL = 'https://api.discogs.com'
 const DISCOGS_WEB_URL = 'https://www.discogs.com'
@@ -161,6 +162,11 @@ async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise
     if (!firstResult) {
       return notFound('discogs')
     }
+
+    // Try LLM parsing first
+    const html = await page.content()
+    const llmResult = await tryLLMParse('discogs', catalogNumber, html)
+    if (llmResult) return llmResult
 
     // Extract data using updated selectors for new Discogs layout
     const name = await firstResult.$eval('a[aria-label^="Release:"]', el => el.textContent?.trim() || null).catch(() => null)

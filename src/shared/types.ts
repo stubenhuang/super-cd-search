@@ -31,6 +31,21 @@ export interface Cookies {
   yahoo?: string
 }
 
+export interface LLMSettings {
+  enabled: boolean
+  apiBaseUrl: string
+  apiKey: string
+  model: string
+  temperature: number
+  platformEnabled: {
+    discogs: boolean
+    ebay: boolean
+    kojima: boolean
+    hmv: boolean
+    yahoo: boolean
+  }
+}
+
 export interface Settings {
   discogsToken?: string
   ebayClientId?: string
@@ -39,6 +54,7 @@ export interface Settings {
   proxyEnabled?: boolean
   proxyHost?: string
   proxyPort?: number
+  llm?: LLMSettings
 }
 
 export interface BatchQueryProgress {
