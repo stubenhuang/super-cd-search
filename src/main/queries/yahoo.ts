@@ -1,9 +1,81 @@
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
-import type { QueryResult } from './types'
+import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 
 const YAHOO_SHOPPING_URL = 'https://shopping.yahoo.co.jp'
+
+async function getYahooProductDetails(page: import('puppeteer').Page, link: string): Promise<CDDetails> {
+  const details: CDDetails = { label: null, format: null, country: null, released: null, genre: null }
+
+  try {
+    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await new Promise(r => setTimeout(r, 2000))
+
+    // Extract product details from the page
+    const productDetails = await page.evaluate(() => {
+      const result: { format?: string; released?: string; label?: string; genre?: string } = {}
+
+      // Look for product specification tables (common in Yahoo Shopping product pages)
+      const specTables = document.querySelectorAll('table, .specTable, .productSpec, dl')
+      for (const table of specTables) {
+        const rows = table.querySelectorAll('tr, dt, .specRow')
+        for (const row of rows) {
+          const keyEl = row.querySelector('th, dt, .label') || row
+          const valueEl = row.querySelector('td, dd, .value') || row.nextElementSibling
+          const key = keyEl?.textContent?.trim() || ''
+          const value = valueEl?.textContent?.trim() || ''
+
+          if (key.includes('フォーマット') || key.includes('形式') || key.includes('Format')) {
+            result.format = value
+          } else if (key.includes('発売日') || key.includes('Release') || key.includes('発売')) {
+            result.released = value
+          } else if (key.includes('レーベル') || key.includes('Label') || key.includes('厂牌')) {
+            result.label = value
+          } else if (key.includes('ジャンル') || key.includes('Genre') || key.includes('ジャンル')) {
+            result.genre = value
+          }
+        }
+      }
+
+      // Look for description text with key:value patterns
+      const descEl = document.querySelector('.productDescription, .itemDescription, [class*="description"], [class*="Description"]')
+      if (descEl) {
+        const text = descEl.textContent || ''
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+
+        for (const line of lines) {
+          const colonMatch = line.match(/^(.+?)[:：]\s*(.+)$/)
+          if (colonMatch) {
+            const [, key, value] = colonMatch
+
+            if (!result.format && (key.includes('フォーマット') || key.includes('形式') || key.includes('Format'))) {
+              result.format = value
+            } else if (!result.released && (key.includes('発売日') || key.includes('Release') || key.includes('発売'))) {
+              result.released = value
+            } else if (!result.label && (key.includes('レーベル') || key.includes('Label'))) {
+              result.label = value
+            } else if (!result.genre && (key.includes('ジャンル') || key.includes('Genre'))) {
+              result.genre = value
+            }
+          }
+        }
+      }
+
+      return result
+    })
+
+    if (productDetails.format) details.format = productDetails.format
+    if (productDetails.released) details.released = productDetails.released
+    if (productDetails.label) details.label = productDetails.label
+    if (productDetails.genre) details.genre = productDetails.genre
+
+  } catch (err) {
+    console.warn('Yahoo: failed to get details from product page:', err)
+  }
+
+  return details
+}
 
 async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
   const { browser, page } = await browserPool.acquire()
@@ -27,7 +99,7 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
     await new Promise(r => setTimeout(r, 3000))
 
     const bodyText = await page.evaluate(() => document.body.innerText)
-    if (bodyText.includes('見つかりません') || bodyText.includes('検索条件��一致する商品が見つかりませんでした')) {
+    if (bodyText.includes('見つかりません') || bodyText.includes('検索条件に一致する商品が見つかりませんでした')) {
       return notFound('yahoo')
     }
 
@@ -59,6 +131,14 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
       }
     }
 
+    // Try to get details from product page
+    let details: CDDetails | undefined
+    if (link) {
+      details = await getYahooProductDetails(page, link)
+      const hasDetails = details.label || details.format || details.released || details.genre
+      if (!hasDetails) details = undefined
+    }
+
     return {
       platform: 'yahoo',
       name,
@@ -67,7 +147,8 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
       priceMax,
       coverUrl,
       link,
-      status: 'found'
+      status: 'found',
+      details
     }
   } finally {
     await browserPool.release(browser, page)

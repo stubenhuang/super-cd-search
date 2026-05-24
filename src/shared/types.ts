@@ -2,6 +2,14 @@ export type QueryStatus = 'found' | 'not_found' | 'error'
 
 export type Platform = 'discogs' | 'ebay' | 'kojima' | 'hmv' | 'yahoo'
 
+export interface CDDetails {
+  label: string | null
+  format: string | null
+  country: string | null
+  released: string | null
+  genre: string | null
+}
+
 export interface QueryResult {
   platform: Platform
   name: string | null
@@ -12,6 +20,7 @@ export interface QueryResult {
   link: string | null
   status: QueryStatus
   error?: string
+  details?: CDDetails
 }
 
 export interface Cookies {

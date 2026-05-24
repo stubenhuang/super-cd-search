@@ -3,6 +3,7 @@ import { throttledFetch } from '../throttle'
 import { browserPool } from '../browser'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult } from './types'
+import type { CDDetails } from '../../shared/types'
 import { notFound, queryError } from './types'
 
 const DISCOGS_API_URL = 'https://api.discogs.com'
@@ -35,6 +36,47 @@ async function getDiscogsPriceRange(releaseId: number, token: string): Promise<{
   }
 
   return { min: null, max: null }
+}
+
+async function getReleaseDetails(releaseId: number, token: string): Promise<CDDetails> {
+  try {
+    const url = `${DISCOGS_API_URL}/releases/${releaseId}?token=${token}`
+    const response = await throttledFetch('api.discogs.com', url)
+
+    if (!response.ok) {
+      return { label: null, format: null, country: null, released: null, genre: null }
+    }
+
+    const data = await response.json() as {
+      labels?: Array<{ name?: string }>
+      formats?: Array<{ name?: string; descriptions?: string[] }>
+      country?: string
+      year?: string
+      genres?: string[]
+      styles?: string[]
+    }
+
+    const formatParts: string[] = []
+    if (data.formats?.length) {
+      for (const f of data.formats) {
+        if (f.name) formatParts.push(f.name)
+        if (f.descriptions?.length) formatParts.push(...f.descriptions)
+      }
+    }
+
+    const genreParts = [...(data.genres || []), ...(data.styles || [])]
+
+    return {
+      label: data.labels?.[0]?.name || null,
+      format: formatParts.length > 0 ? formatParts.join(', ') : null,
+      country: data.country || null,
+      released: data.year || null,
+      genre: genreParts.length > 0 ? genreParts.join(', ') : null
+    }
+  } catch (err) {
+    console.warn('Discogs release details failed:', err)
+    return { label: null, format: null, country: null, released: null, genre: null }
+  }
 }
 
 async function queryDiscogsApi(catalogNumber: string, token: string): Promise<QueryResult> {
@@ -73,6 +115,9 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
   // Get price range from price_suggestions API (VG to NM)
   const prices = await getDiscogsPriceRange(first.id, token)
 
+  // Get release details
+  const details = await getReleaseDetails(first.id, token)
+
   return {
     platform: 'discogs',
     name,
@@ -81,7 +126,8 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
     priceMax: prices.max,
     coverUrl: first.cover_image || null,
     link: first.uri ? `${DISCOGS_WEB_URL}${first.uri}` : null,
-    status: 'found'
+    status: 'found',
+    details
   }
 }
 

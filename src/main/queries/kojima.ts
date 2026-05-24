@@ -1,9 +1,116 @@
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
-import type { QueryResult } from './types'
+import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 
 const KOJIMA_WEB_URL = 'https://kojimarokuon.com'
+
+async function getKojimaProductDetails(page: import('puppeteer').Page, link: string): Promise<{ price: number | null; details: CDDetails }> {
+  const details: CDDetails = { label: null, format: null, country: null, released: null, genre: null }
+  let price: number | null = null
+
+  try {
+    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await new Promise(r => setTimeout(r, 2000))
+
+    // Extract price
+    const priceText = await page.evaluate(() => {
+      const selectors = [
+        '.price__regular .price-item--regular',
+        '.price__sale .price-item--sale',
+        '.product__price',
+        '.price-item',
+        '[data-product-price]',
+        '.product-single__price',
+        'span[data-product-price]'
+      ]
+      for (const sel of selectors) {
+        const el = document.querySelector(sel)
+        if (el && el.textContent) {
+          return el.textContent.trim()
+        }
+      }
+      return null
+    })
+
+    if (priceText) {
+      price = await parseJPYPrice(priceText)
+    }
+
+    // Extract product details from Shopify product page
+    const productDetails = await page.evaluate(() => {
+      const result: { format?: string; released?: string; label?: string; genre?: string; artist?: string } = {}
+
+      // Look for product description/accordion content
+      const descriptionEl = document.querySelector('.product__description, .rte, .product-description, [data-product-description]') as HTMLElement | null
+      if (descriptionEl) {
+        const text = descriptionEl.innerText || ''
+        const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean)
+
+        for (const line of lines) {
+          const colonMatch = line.match(/^(.+?)[:：]\s*(.+)$/)
+          if (colonMatch) {
+            const [, key, value] = colonMatch
+            const keyLower = key.toLowerCase()
+
+            if (keyLower.includes('format') || keyLower.includes('フォーマット') || keyLower.includes('形式')) {
+              result.format = value
+            } else if (keyLower.includes('release') || keyLower.includes('発売') || keyLower.includes('date')) {
+              result.released = value
+            } else if (keyLower.includes('label') || keyLower.includes('レーベル')) {
+              result.label = value
+            } else if (keyLower.includes('genre') || keyLower.includes('ジャンル')) {
+              result.genre = value
+            } else if (keyLower.includes('artist') || keyLower.includes('アーティスト')) {
+              result.artist = value
+            }
+          }
+        }
+      }
+
+      // Look for variant/select options (often contain format info)
+      const variantSelects = document.querySelectorAll('select[name="id"] option, .variant__button-label')
+      for (const opt of variantSelects) {
+        const text = opt.textContent?.trim() || ''
+        if (text.includes('CD') || text.includes('SACD') || text.includes('LP') || text.includes('Vinyl')) {
+          if (!result.format) result.format = text
+        }
+      }
+
+      // Look for product meta fields (common in Shopify themes)
+      const metaFields = document.querySelectorAll('.product__meta, .product-meta, .product-details')
+      for (const meta of metaFields) {
+        const text = meta.textContent?.trim() || ''
+        if (text.includes('Release')) {
+          const match = text.match(/Release[:：]?\s*(\d{4}[\-\/\.]\d{1,2}[\-\/\.]\d{1,2}|\d{4})/)
+          if (match) result.released = match[1]
+        }
+      }
+
+      // Check for product tags or categories
+      const tags = document.querySelectorAll('.product-tags a, .product__tags a, .tag')
+      const tagTexts = Array.from(tags).map(t => t.textContent?.trim()).filter(Boolean)
+      if (tagTexts.length > 0 && !result.genre) {
+        result.genre = tagTexts.slice(0, 3).join(' / ')
+      }
+
+      return result
+    })
+
+    if (productDetails.format) details.format = productDetails.format
+    if (productDetails.released) details.released = productDetails.released
+    if (productDetails.label) details.label = productDetails.label
+    if (productDetails.genre) details.genre = productDetails.genre
+
+    // Kojima Rokuon is Japan-based
+    details.country = 'Japan'
+
+  } catch (err) {
+    console.warn('Kojima: failed to get details from product page:', err)
+  }
+
+  return { price, details }
+}
 
 async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
   const { browser, page } = await browserPool.acquire()
@@ -53,44 +160,19 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
       link = `${KOJIMA_WEB_URL}${link}`
     }
 
-    // Navigate to product page to get price
+    // Navigate to product page for price and details
     let priceMin: number | null = null
     let priceMax: number | null = null
+    let details: CDDetails | undefined
 
     if (link) {
-      try {
-        await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
-        await new Promise(r => setTimeout(r, 2000))
+      const productData = await getKojimaProductDetails(page, link)
+      priceMin = productData.price
+      priceMax = productData.price
 
-        // Try multiple price selectors for Shopify themes
-        const priceText = await page.evaluate(() => {
-          const selectors = [
-            '.price__regular .price-item--regular',
-            '.price__sale .price-item--sale',
-            '.product__price',
-            '.price-item',
-            '[data-product-price]',
-            '.product-single__price',
-            'span[data-product-price]'
-          ]
-          for (const sel of selectors) {
-            const el = document.querySelector(sel)
-            if (el && el.textContent) {
-              return el.textContent.trim()
-            }
-          }
-          return null
-        })
-
-        if (priceText) {
-          const priceUSD = await parseJPYPrice(priceText)
-          if (priceUSD !== null) {
-            priceMin = priceUSD
-            priceMax = priceUSD
-          }
-        }
-      } catch (err) {
-        console.warn('Kojima: failed to get price from product page:', err)
+      if (productData.details.label || productData.details.format ||
+          productData.details.released || productData.details.genre) {
+        details = productData.details
       }
     }
 
@@ -102,7 +184,8 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
       priceMax,
       coverUrl,
       link,
-      status: 'found'
+      status: 'found',
+      details
     }
   } finally {
     await browserPool.release(browser, page)

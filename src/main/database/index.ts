@@ -50,6 +50,11 @@ function runMigrations(db: Database.Database): void {
       cover_url TEXT,
       link TEXT,
       status TEXT NOT NULL DEFAULT 'not_found' CHECK(status IN ('found', 'not_found', 'error')),
+      label TEXT,
+      format TEXT,
+      country TEXT,
+      released TEXT,
+      genre TEXT,
       FOREIGN KEY (query_id) REFERENCES queries(id) ON DELETE CASCADE
     );
 

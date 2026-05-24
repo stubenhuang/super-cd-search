@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { BatchQueryResult, BatchQueryProgressEvent, QueryResult, Platform } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { HistoryView } from './History'
+import { DetailModal } from './DetailModal'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { QueryEvents } from '../../shared/events'
 import './App.css'
@@ -119,9 +120,10 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
 interface ResultCardProps {
   catalogNumber: string
   results: QueryResult[]
+  onTitleClick: (catalogNumber: string) => void
 }
 
-const ResultCard = React.memo(function ResultCard({ catalogNumber, results }: ResultCardProps) {
+const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick }: ResultCardProps) {
   const foundResult = results.find(r => r.status === 'found' && r.name)
   const displayName = foundResult?.name || catalogNumber
   const displayArtist = foundResult?.artist
@@ -137,7 +139,13 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results }: Re
     <div className="result-card">
       <div className="result-header">
         <span className="result-catalog">{catalogNumber}</span>
-        <span className="result-title">{displayName}</span>
+        <span
+          className="result-title"
+          onClick={() => onTitleClick(catalogNumber)}
+          title="点击查看详细信息"
+        >
+          {displayName}
+        </span>
         {displayArtist && <span className="result-artist">— {displayArtist}</span>}
       </div>
       <div className="platform-results">
@@ -166,6 +174,8 @@ function App() {
   const cancelledRef = useRef(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [kojimaEnabled, setKojimaEnabled] = useState(false)
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null)
 
   const enabledPlatforms = useMemo(() => {
     return kojimaEnabled ? PLATFORMS : DEFAULT_ENABLED_PLATFORMS
@@ -293,6 +303,11 @@ function App() {
       setTimeout(() => setToast(null), 4000)
     }
   }, [results, catalogOrder])
+
+  const handleTitleClick = useCallback((catalogNumber: string) => {
+    setSelectedCatalog(catalogNumber)
+    setShowDetailModal(true)
+  }, [])
 
   return (
     <div className="app-container">
@@ -458,7 +473,14 @@ function App() {
                     {catalogOrder.map((catalogNumber) => {
                       const resultData = results.get(catalogNumber)
                       if (!resultData) return null
-                      return <ResultCard key={catalogNumber} catalogNumber={catalogNumber} results={resultData} />
+                      return (
+                        <ResultCard
+                          key={catalogNumber}
+                          catalogNumber={catalogNumber}
+                          results={resultData}
+                          onTitleClick={handleTitleClick}
+                        />
+                      )
                     })}
                   </div>
                 )}
@@ -471,6 +493,14 @@ function App() {
         </section>
       </main>
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      {showDetailModal && selectedCatalog && (
+        <DetailModal
+          isOpen={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
+          catalogNumber={selectedCatalog}
+          results={results.get(selectedCatalog) || []}
+        />
+      )}
       {toast && <div className="app-toast">{toast}</div>}
     </div>
   )

@@ -27,7 +27,7 @@ export function getHistoryEntry(queryId: number): HistoryEntry | null {
   if (!query) return null
 
   const results = db.prepare(`
-    SELECT platform, name, artist, price_min, price_max, cover_url, link, status
+    SELECT platform, name, artist, price_min, price_max, cover_url, link, status, label, format, country, released, genre
     FROM results WHERE query_id = ?
   `).all(queryId) as Array<{
     platform: string
@@ -38,6 +38,11 @@ export function getHistoryEntry(queryId: number): HistoryEntry | null {
     cover_url: string | null
     link: string | null
     status: string
+    label: string | null
+    format: string | null
+    country: string | null
+    released: string | null
+    genre: string | null
   }>
 
   return {
@@ -54,7 +59,10 @@ export function getHistoryEntry(queryId: number): HistoryEntry | null {
       priceMax: r.price_max,
       coverUrl: r.cover_url,
       link: r.link,
-      status: r.status as QueryResult['status']
+      status: r.status as QueryResult['status'],
+      details: (r.label || r.format || r.country || r.released || r.genre)
+        ? { label: r.label, format: r.format, country: r.country, released: r.released, genre: r.genre }
+        : undefined
     }))
   }
 }

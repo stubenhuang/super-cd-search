@@ -21,8 +21,8 @@ function saveResults(catalogNumber: string, results: QueryResult[]): void {
 
   const insertQuery = db.prepare('INSERT INTO queries (catalog_number) VALUES (?)')
   const insertResult = db.prepare(`
-    INSERT INTO results (query_id, platform, name, artist, price_min, price_max, cover_url, link, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO results (query_id, platform, name, artist, price_min, price_max, cover_url, link, status, label, format, country, released, genre)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const transaction = db.transaction(() => {
@@ -39,7 +39,12 @@ function saveResults(catalogNumber: string, results: QueryResult[]): void {
         result.priceMax,
         result.coverUrl,
         result.link,
-        result.status
+        result.status,
+        result.details?.label || null,
+        result.details?.format || null,
+        result.details?.country || null,
+        result.details?.released || null,
+        result.details?.genre || null
       )
     }
   })
@@ -142,7 +147,10 @@ export async function executeBatchQuery(catalogNumbers: string[], includeKojima 
         const queryResults = await queryAllPlatforms(catalogNumber, signal, includeKojima)
         results[idx] = { catalogNumber, results: queryResults }
       } catch {
-        return
+        // Continue processing next catalog even if this one failed
+        if (signal.aborted) {
+          return
+        }
       }
     }
   }

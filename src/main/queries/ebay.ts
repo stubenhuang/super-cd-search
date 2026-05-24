@@ -2,7 +2,7 @@ import { getSetting } from '../settings'
 import { throttledFetch } from '../throttle'
 import { browserPool } from '../browser'
 import { convertToUSDWithFallback, type Currency } from '../currency'
-import type { QueryResult } from './types'
+import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
 import { type Page, type ElementHandle } from 'puppeteer'
 
@@ -98,6 +98,12 @@ async function queryEbayApi(catalogNumber: string): Promise<QueryResult> {
 
   const prices = await Promise.all(pricePromises)
 
+  // Get item details if we have a URL
+  let details: CDDetails | undefined
+  if (first.itemWebUrl) {
+    details = await getEbayItemDetails(first.itemWebUrl, token)
+  }
+
   return {
     platform: 'ebay',
     name: first.title,
@@ -106,8 +112,59 @@ async function queryEbayApi(catalogNumber: string): Promise<QueryResult> {
     priceMax: prices.length > 0 ? Math.max(...prices) : null,
     coverUrl: first.image?.imageUrl || null,
     link: first.itemWebUrl || null,
-    status: 'found'
+    status: 'found',
+    details
   }
+}
+
+async function getEbayItemDetails(itemWebUrl: string, token: string): Promise<CDDetails> {
+  const details: CDDetails = { label: null, format: null, country: null, released: null, genre: null }
+
+  try {
+    // Extract item ID from URL (e.g., /itm/123456789 or /itm/123456789?...)
+    const itemIdMatch = itemWebUrl.match(/\/itm\/(\d+)/)
+    if (!itemIdMatch) return details
+
+    const itemId = itemIdMatch[1]
+    const url = `${EBAY_API_URL}/buy/browse/v1/item/${itemId}`
+
+    const response = await throttledFetch('api.ebay.com', url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (!response.ok) return details
+
+    const data = await response.json()
+    const localizedAspects = data.localizedAspects as Array<{
+      name: string
+      value: string
+    }> | undefined
+
+    if (localizedAspects) {
+      for (const aspect of localizedAspects) {
+        const nameLower = aspect.name.toLowerCase()
+        if (nameLower.includes('format') || nameLower.includes('type')) {
+          details.format = aspect.value
+        } else if (nameLower.includes('label') || nameLower.includes('record label')) {
+          details.label = aspect.value
+        } else if (nameLower.includes('release') || nameLower.includes('year')) {
+          details.released = aspect.value
+        } else if (nameLower.includes('genre') || nameLower.includes('style')) {
+          details.genre = aspect.value
+        } else if (nameLower.includes('country') || nameLower.includes('region')) {
+          details.country = aspect.value
+        } else if (nameLower.includes('artist')) {
+          // Could extract artist from aspects but we already have it from title
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('eBay: failed to get item details:', err)
+  }
+
+  return details
 }
 
 // Mimic human-like mouse movements
@@ -309,6 +366,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
         coverUrl,
         link,
         status: 'found'
+        // eBay doesn't provide detailed metadata like label/format/country
       }
     }
   } catch (err) {

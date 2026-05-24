@@ -1,7 +1,7 @@
-import type { QueryResult, QueryStatus, Platform } from '../../shared/types'
+import type { QueryResult, QueryStatus, Platform, CDDetails } from '../../shared/types'
 import { convertToUSDWithFallback } from '../currency'
 
-export type { QueryResult, QueryStatus, Platform }
+export type { QueryResult, QueryStatus, Platform, CDDetails }
 
 export interface PlatformQuery {
   execute(catalogNumber: string): Promise<QueryResult>
