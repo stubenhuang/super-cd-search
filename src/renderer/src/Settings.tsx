@@ -294,63 +294,57 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               <p className="section-help" style={{ marginTop: '4px', marginBottom: '12px' }}>
                 Choose which platforms use LLM for parsing
               </p>
-              <div className="platform-toggles">
-                <div className="toggle-container">
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={llmPlatformDiscogs}
-                      onChange={e => setLlmPlatformDiscogs(e.target.checked)}
-                      disabled={!llmEnabled}
-                    />
-                    <span className="toggle-slider" role="switch"></span>
-                  </label>
-                  <span className="toggle-label">Discogs</span>
-                </div>
-                <div className="toggle-container">
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={llmPlatformEbay}
-                      onChange={e => setLlmPlatformEbay(e.target.checked)}
-                      disabled={!llmEnabled}
-                    />
-                  </label>
-                  <span className="toggle-label">eBay</span>
-                </div>
-                <div className="toggle-container">
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={llmPlatformKojima}
-                      onChange={e => setLlmPlatformKojima(e.target.checked)}
-                      disabled={!llmEnabled}
-                    />
-                  </label>
-                  <span className="toggle-label">Kojima</span>
-                </div>
-                <div className="toggle-container">
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={llmPlatformHmv}
-                      onChange={e => setLlmPlatformHmv(e.target.checked)}
-                      disabled={!llmEnabled}
-                    />
-                  </label>
-                  <span className="toggle-label">HMV</span>
-                </div>
-                <div className="toggle-container">
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={llmPlatformYahoo}
-                      onChange={e => setLlmPlatformYahoo(e.target.checked)}
-                      disabled={!llmEnabled}
-                    />
-                  </label>
-                  <span className="toggle-label">Yahoo</span>
-                </div>
+              <div className="platform-checkboxes">
+                <label className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformDiscogs}
+                    onChange={e => setLlmPlatformDiscogs(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="checkbox-box"></span>
+                  <span className="checkbox-label">Discogs</span>
+                </label>
+                <label className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformEbay}
+                    onChange={e => setLlmPlatformEbay(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="checkbox-box"></span>
+                  <span className="checkbox-label">eBay</span>
+                </label>
+                <label className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformKojima}
+                    onChange={e => setLlmPlatformKojima(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="checkbox-box"></span>
+                  <span className="checkbox-label">Kojima</span>
+                </label>
+                <label className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformHmv}
+                    onChange={e => setLlmPlatformHmv(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="checkbox-box"></span>
+                  <span className="checkbox-label">HMV</span>
+                </label>
+                <label className="checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformYahoo}
+                    onChange={e => setLlmPlatformYahoo(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="checkbox-box"></span>
+                  <span className="checkbox-label">Yahoo</span>
+                </label>
               </div>
             </div>
           </section>
