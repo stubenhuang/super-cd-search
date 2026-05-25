@@ -40,6 +40,8 @@ interface PlatformResultRowProps {
 const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice }: PlatformResultRowProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const [proxiedImage, setProxiedImage] = useState<string | null>(null)
+  const [triedProxy, setTriedProxy] = useState(false)
 
   const formatPrice = (min: number | null, max: number | null): string => {
     if (min === null && max === null) return '-'
@@ -65,6 +67,33 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
 
   const cardClass = `platform-card ${result.status}${isLowestPrice ? ' lowest' : ''}`
 
+  // Try to fetch image through proxy when direct loading fails
+  const handleImageError = async () => {
+    if (triedProxy) {
+      setImageError(true)
+      return
+    }
+    setTriedProxy(true)
+    setImageLoaded(false)
+
+    if (result.coverUrl) {
+      try {
+        const imageData = await window.electronAPI.fetchImage(result.coverUrl)
+        if (imageData) {
+          setProxiedImage(`data:${imageData.mimeType};base64,${imageData.base64}`)
+        } else {
+          setImageError(true)
+        }
+      } catch {
+        setImageError(true)
+      }
+    } else {
+      setImageError(true)
+    }
+  }
+
+  const imageSrc = proxiedImage || result.coverUrl
+
   return (
     <div className={cardClass} data-platform={result.platform}>
       {isLowestPrice ? (
@@ -76,15 +105,15 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
         <div className="platform-card-name">{PLATFORM_LABELS[result.platform] || result.platform}</div>
         <div className="platform-card-body">
           <div className="platform-card-image">
-            {result.coverUrl && !imageError ? (
+            {imageSrc && !imageError ? (
               <>
                 {!imageLoaded && <div className="image-placeholder" />}
                 <img
-                  src={result.coverUrl}
+                  src={imageSrc}
                   alt={result.name || 'Cover'}
                   className={`cover-thumbnail ${imageLoaded ? 'loaded' : ''}`}
                   onLoad={() => setImageLoaded(true)}
-                  onError={() => setImageError(true)}
+                  onError={handleImageError}
                 />
               </>
             ) : (
