@@ -134,7 +134,7 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
 
     // Try LLM parsing first
     const html = await page.content()
-    const llmResult = await tryLLMParse('yahoo', catalogNumber, html)
+    const llmResult = await tryLLMParse('yahoo', catalogNumber, html, searchUrl)
     if (llmResult) return llmResult
 
     // Try to get details from product page

@@ -7,7 +7,10 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
+type SectionKey = 'api' | 'cookies' | 'proxy' | 'llm'
+
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
+  const [activeSection, setActiveSection] = useState<SectionKey>('api')
   const [discogsToken, setDiscogsToken] = useState('')
   const [ebayClientId, setEbayClientId] = useState('')
   const [ebayClientSecret, setEbayClientSecret] = useState('')
@@ -100,262 +103,374 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
   if (!isOpen) return null
 
-  return (
-    <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-panel" onClick={e => e.stopPropagation()}>
-        <div className="settings-header">
-          <h2>Settings</h2>
-          <button className="close-button" onClick={onClose}>&times;</button>
-        </div>
-        <div className="settings-content">
-          <section className="settings-section">
-            <h3>API Tokens</h3>
-            <div className="form-group">
-              <label htmlFor="discogsToken">Discogs API Token</label>
-              <input
-                id="discogsToken"
-                type="password"
-                value={discogsToken}
-                onChange={e => setDiscogsToken(e.target.value)}
-                placeholder="Your Discogs API token"
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="ebayClientId">eBay Client ID</label>
-              <input
-                id="ebayClientId"
-                type="text"
-                value={ebayClientId}
-                onChange={e => setEbayClientId(e.target.value)}
-                placeholder="Your eBay Client ID"
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="ebayClientSecret">eBay Client Secret</label>
-              <input
-                id="ebayClientSecret"
-                type="password"
-                value={ebayClientSecret}
-                onChange={e => setEbayClientSecret(e.target.value)}
-                placeholder="Your eBay Client Secret"
-              />
-            </div>
-          </section>
+  const navItems: { key: SectionKey; icon: string; label: string }[] = [
+    { key: 'api', icon: '◆', label: 'API Tokens' },
+    { key: 'cookies', icon: '◈', label: 'Cookies' },
+    { key: 'proxy', icon: '◉', label: 'Proxy' },
+    { key: 'llm', icon: '◇', label: 'LLM Config' }
+  ]
 
-          <section className="settings-section">
-            <h3>Cookies</h3>
-            <p className="section-help">Paste cookies for authenticated scraping (optional)</p>
-            <div className="form-group">
-              <label htmlFor="cookiesDiscogs">Discogs Cookies</label>
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'api':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              Configure API credentials for each platform. Tokens are stored securely and encrypted.
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◆</span> Discogs
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◆</span>
+                  Personal Access Token
+                </label>
+                <div className="st-input-wrap">
+                  <input
+                    type="password"
+                    className="st-input"
+                    value={discogsToken}
+                    onChange={e => setDiscogsToken(e.target.value)}
+                    placeholder="Your Discogs API token"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◆</span> eBay
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span>
+                  Client ID
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  value={ebayClientId}
+                  onChange={e => setEbayClientId(e.target.value)}
+                  placeholder="Your eBay Client ID"
+                />
+              </div>
+              <div className="st-deco-divider">
+                <div className="st-deco-line"></div>
+                <div className="st-deco-diamond"></div>
+                <div className="st-deco-line"></div>
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span>
+                  Client Secret
+                </label>
+                <input
+                  type="password"
+                  className="st-input"
+                  value={ebayClientSecret}
+                  onChange={e => setEbayClientSecret(e.target.value)}
+                  placeholder="Your eBay Client Secret"
+                />
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'cookies':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              Paste browser cookies for authenticated scraping. This allows access to region-restricted content.
+            </div>
+            <div className="st-field">
+              <label className="st-label">
+                <span className="st-label-icon">◈</span> Discogs Cookies
+              </label>
               <textarea
-                id="cookiesDiscogs"
+                className="st-textarea"
                 value={cookiesDiscogs}
                 onChange={e => setCookiesDiscogs(e.target.value)}
-                placeholder="Paste cookies here..."
+                placeholder="Paste cookies string here..."
                 rows={3}
               />
             </div>
-            <div className="form-group">
-              <label htmlFor="cookiesEbay">eBay Cookies</label>
+            <div className="st-field">
+              <label className="st-label">
+                <span className="st-label-icon">◈</span> eBay Cookies
+              </label>
               <textarea
-                id="cookiesEbay"
+                className="st-textarea"
                 value={cookiesEbay}
                 onChange={e => setCookiesEbay(e.target.value)}
-                placeholder="Paste cookies here..."
+                placeholder="Paste cookies string here..."
                 rows={3}
               />
             </div>
-            <div className="form-group">
-              <label htmlFor="cookiesKojima">Kojima Rokuon Cookies</label>
+            <div className="st-field">
+              <label className="st-label">
+                <span className="st-label-icon">◈</span> Kojima Rokuon Cookies
+              </label>
               <textarea
-                id="cookiesKojima"
+                className="st-textarea"
                 value={cookiesKojima}
                 onChange={e => setCookiesKojima(e.target.value)}
-                placeholder="Paste cookies here..."
+                placeholder="Paste cookies string here..."
                 rows={3}
               />
             </div>
-          </section>
+          </div>
+        )
 
-          <section className="settings-section">
-            <h3>SOCKS5 Proxy</h3>
-            <p className="section-help">Route all network traffic through a SOCKS5 proxy (optional)</p>
-            <div className="form-group">
-              <div className="toggle-container">
-                <label className="toggle-switch">
+      case 'proxy':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              Route all network traffic through a SOCKS5 proxy for privacy or region access.
+            </div>
+            <div className="st-toggle-row">
+              <div className="st-toggle-info">
+                <span className="st-toggle-title">Enable SOCKS5 Proxy</span>
+                <span className="st-toggle-desc">All requests will be routed through the proxy</span>
+              </div>
+              <label className="st-switch">
+                <input
+                  type="checkbox"
+                  checked={proxyEnabled}
+                  onChange={e => setProxyEnabled(e.target.checked)}
+                />
+                <span className="st-slider"></span>
+              </label>
+            </div>
+            <div className={proxyEnabled ? '' : 'st-section-disabled'}>
+              <div className="st-inline-fields">
+                <div className="st-field">
+                  <label className="st-label">
+                    <span className="st-label-icon">◈</span> Host
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={proxyEnabled}
-                    onChange={e => setProxyEnabled(e.target.checked)}
-                    aria-label="Enable SOCKS5 proxy"
+                    type="text"
+                    className="st-input"
+                    value={proxyHost}
+                    onChange={e => setProxyHost(e.target.value)}
+                    placeholder="127.0.0.1"
+                    disabled={!proxyEnabled}
                   />
-                  <span className="toggle-slider" role="switch" aria-checked={proxyEnabled}></span>
-                </label>
-                <span className="toggle-label">Enable Proxy</span>
+                </div>
+                <div className="st-field">
+                  <label className="st-label">
+                    <span className="st-label-icon">◈</span> Port
+                  </label>
+                  <input
+                    type="number"
+                    className="st-input"
+                    value={proxyPort}
+                    onChange={e => setProxyPort(parseInt(e.target.value, 10) || 1080)}
+                    placeholder="1080"
+                    disabled={!proxyEnabled}
+                  />
+                </div>
               </div>
             </div>
-            <div className="form-group">
-              <label htmlFor="proxyHost">Proxy Host</label>
-              <input
-                id="proxyHost"
-                type="text"
-                value={proxyHost}
-                onChange={e => setProxyHost(e.target.value)}
-                placeholder="e.g. 127.0.0.1"
-                disabled={!proxyEnabled}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="proxyPort">Proxy Port</label>
-              <input
-                id="proxyPort"
-                type="number"
-                value={proxyPort}
-                onChange={e => setProxyPort(parseInt(e.target.value, 10) || 1080)}
-                placeholder="e.g. 1080"
-                disabled={!proxyEnabled}
-              />
-            </div>
-          </section>
+          </div>
+        )
 
-          <section className="settings-section">
-            <h3>LLM Configuration</h3>
-            <p className="section-help">
-              Configure an OpenAI-compatible API for intelligent content parsing
-            </p>
-
-            <div className="form-group">
-              <div className="toggle-container">
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={llmEnabled}
-                    onChange={e => setLlmEnabled(e.target.checked)}
-                    aria-label="Enable LLM parsing"
-                  />
-                  <span className="toggle-slider" role="switch" aria-checked={llmEnabled}></span>
-                </label>
-                <span className="toggle-label">Enable LLM Parsing</span>
+      case 'llm':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              Configure an OpenAI-compatible API for intelligent content parsing and metadata extraction.
+            </div>
+            <div className="st-toggle-row">
+              <div className="st-toggle-info">
+                <span className="st-toggle-title">Enable LLM Parsing</span>
+                <span className="st-toggle-desc">Use AI to extract structured data from web pages</span>
               </div>
+              <label className="st-switch">
+                <input
+                  type="checkbox"
+                  checked={llmEnabled}
+                  onChange={e => setLlmEnabled(e.target.checked)}
+                />
+                <span className="st-slider"></span>
+              </label>
             </div>
-
-            <div className="form-group">
-              <label htmlFor="llmApiBaseUrl">API Base URL</label>
-              <input
-                id="llmApiBaseUrl"
-                type="text"
-                value={llmApiBaseUrl}
-                onChange={e => setLlmApiBaseUrl(e.target.value)}
-                placeholder="https://api.openai.com/v1"
-                disabled={!llmEnabled}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="llmApiKey">API Key</label>
-              <input
-                id="llmApiKey"
-                type="password"
-                value={llmApiKey}
-                onChange={e => setLlmApiKey(e.target.value)}
-                placeholder="sk-..."
-                disabled={!llmEnabled}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="llmModel">Model</label>
-              <input
-                id="llmModel"
-                type="text"
-                value={llmModel}
-                onChange={e => setLlmModel(e.target.value)}
-                placeholder="gpt-4o-mini"
-                disabled={!llmEnabled}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="llmTemperature">Temperature ({llmTemperature.toFixed(1)})</label>
-              <input
-                id="llmTemperature"
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={llmTemperature}
-                onChange={e => setLlmTemperature(parseFloat(e.target.value))}
-                disabled={!llmEnabled}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Platform Selection</label>
-              <p className="section-help" style={{ marginTop: '4px', marginBottom: '12px' }}>
-                Choose which platforms use LLM for parsing
-              </p>
-              <div className="platform-checkboxes">
-                <label className="checkbox-item">
+            <div className={llmEnabled ? '' : 'st-section-disabled'}>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> API Base URL
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  value={llmApiBaseUrl}
+                  onChange={e => setLlmApiBaseUrl(e.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                  disabled={!llmEnabled}
+                />
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> API Key
+                </label>
+                <input
+                  type="password"
+                  className="st-input"
+                  value={llmApiKey}
+                  onChange={e => setLlmApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  disabled={!llmEnabled}
+                />
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> Model
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  value={llmModel}
+                  onChange={e => setLlmModel(e.target.value)}
+                  placeholder="gpt-4o-mini"
+                  disabled={!llmEnabled}
+                />
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> Temperature
+                </label>
+                <div className="st-range-wrap">
+                  <input
+                    type="range"
+                    className="st-range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={llmTemperature}
+                    onChange={e => setLlmTemperature(parseFloat(e.target.value))}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="st-range-value">{llmTemperature.toFixed(1)}</span>
+                </div>
+              </div>
+              <div className="st-deco-divider">
+                <div className="st-deco-line"></div>
+                <div className="st-deco-diamond"></div>
+                <div className="st-deco-line"></div>
+              </div>
+              <label className="st-label" style={{ marginBottom: '12px' }}>
+                <span className="st-label-icon">◈</span> Platform Selection
+              </label>
+              <div className="st-platform-grid">
+                <label className={`st-check-item ${llmPlatformDiscogs ? 'checked' : ''}`}>
                   <input
                     type="checkbox"
                     checked={llmPlatformDiscogs}
                     onChange={e => setLlmPlatformDiscogs(e.target.checked)}
                     disabled={!llmEnabled}
                   />
-                  <span className="checkbox-box"></span>
-                  <span className="checkbox-label">Discogs</span>
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">Discogs</span>
                 </label>
-                <label className="checkbox-item">
+                <label className={`st-check-item ${llmPlatformEbay ? 'checked' : ''}`}>
                   <input
                     type="checkbox"
                     checked={llmPlatformEbay}
                     onChange={e => setLlmPlatformEbay(e.target.checked)}
                     disabled={!llmEnabled}
                   />
-                  <span className="checkbox-box"></span>
-                  <span className="checkbox-label">eBay</span>
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">eBay</span>
                 </label>
-                <label className="checkbox-item">
+                <label className={`st-check-item ${llmPlatformKojima ? 'checked' : ''}`}>
                   <input
                     type="checkbox"
                     checked={llmPlatformKojima}
                     onChange={e => setLlmPlatformKojima(e.target.checked)}
                     disabled={!llmEnabled}
                   />
-                  <span className="checkbox-box"></span>
-                  <span className="checkbox-label">Kojima</span>
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">Kojima</span>
                 </label>
-                <label className="checkbox-item">
+                <label className={`st-check-item ${llmPlatformHmv ? 'checked' : ''}`}>
                   <input
                     type="checkbox"
                     checked={llmPlatformHmv}
                     onChange={e => setLlmPlatformHmv(e.target.checked)}
                     disabled={!llmEnabled}
                   />
-                  <span className="checkbox-box"></span>
-                  <span className="checkbox-label">HMV</span>
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">HMV</span>
                 </label>
-                <label className="checkbox-item">
+                <label className={`st-check-item ${llmPlatformYahoo ? 'checked' : ''}`}>
                   <input
                     type="checkbox"
                     checked={llmPlatformYahoo}
                     onChange={e => setLlmPlatformYahoo(e.target.checked)}
                     disabled={!llmEnabled}
                   />
-                  <span className="checkbox-box"></span>
-                  <span className="checkbox-label">Yahoo</span>
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">Yahoo</span>
                 </label>
               </div>
             </div>
-          </section>
+          </div>
+        )
+    }
+  }
+
+  return (
+    <div className="settings-overlay" onClick={onClose}>
+      <div className="settings-panel" onClick={e => e.stopPropagation()}>
+        {/* Sidebar */}
+        <nav className="settings-sidebar">
+          <div className="settings-sidebar-header">
+            <h2>Settings</h2>
+            <div className="st-divider">
+              <div className="st-divider-line"></div>
+              <div className="st-divider-diamond"></div>
+            </div>
+          </div>
+          <div className="settings-nav">
+            {navItems.map(item => (
+              <button
+                key={item.key}
+                className={`settings-nav-item ${activeSection === item.key ? 'active' : ''}`}
+                onClick={() => setActiveSection(item.key)}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="settings-sidebar-footer">
+            <button className="st-close-button" onClick={onClose}>
+              <span>✕</span> Close
+            </button>
+          </div>
+        </nav>
+
+        {/* Main Content */}
+        <div className="settings-main">
+          <div className="settings-content-header">
+            <h3>{navItems.find(i => i.key === activeSection)?.label}</h3>
+            <span className="st-section-badge">Configuration</span>
+          </div>
+          <div className="settings-scroll">
+            {renderContent()}
+          </div>
+          <footer className="settings-footer">
+            <span className="st-footer-hint">Changes apply on next search</span>
+            <div className="st-footer-actions">
+              <button className="st-btn-cancel" onClick={onClose}>Cancel</button>
+              <button className="st-btn-save" onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </footer>
         </div>
-        <div className="settings-footer">
-          <button className="cancel-button" onClick={onClose}>Cancel</button>
-          <button className="save-button" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-        {toast && <div className="toast">{toast}</div>}
+
+        {toast && <div className={`st-toast ${toast.includes('Failed') ? 'error' : ''}`}>{toast}</div>}
       </div>
     </div>
   )

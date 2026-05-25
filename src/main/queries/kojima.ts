@@ -163,7 +163,7 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
 
     // Try LLM parsing first
     const html = await page.content()
-    const llmResult = await tryLLMParse('kojima', catalogNumber, html)
+    const llmResult = await tryLLMParse('kojima', catalogNumber, html, searchUrl)
     if (llmResult) return llmResult
 
     // Navigate to product page for price and details

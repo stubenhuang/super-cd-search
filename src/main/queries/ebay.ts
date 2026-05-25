@@ -278,7 +278,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
 
     // Try LLM parsing first
     const html = await page.content()
-    const llmResult = await tryLLMParse('ebay', catalogNumber, html)
+    const llmResult = await tryLLMParse('ebay', catalogNumber, html, searchUrl)
     if (llmResult) return { success: true, result: llmResult }
 
     // Scroll down to load results

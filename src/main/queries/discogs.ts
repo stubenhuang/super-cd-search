@@ -165,7 +165,7 @@ async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise
 
     // Try LLM parsing first
     const html = await page.content()
-    const llmResult = await tryLLMParse('discogs', catalogNumber, html)
+    const llmResult = await tryLLMParse('discogs', catalogNumber, html, searchUrl)
     if (llmResult) return llmResult
 
     // Extract data using updated selectors for new Discogs layout

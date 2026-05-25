@@ -171,7 +171,7 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
 
     // Try LLM parsing first
     const html = await page.content()
-    const llmResult = await tryLLMParse('hmv', catalogNumber, html)
+    const llmResult = await tryLLMParse('hmv', catalogNumber, html, searchUrl)
     if (llmResult) return llmResult
 
     let priceMin: number | null = null
