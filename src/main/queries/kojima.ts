@@ -161,10 +161,16 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
       link = `${KOJIMA_WEB_URL}${link}`
     }
 
-    // Try LLM parsing first
+    // Try LLM parsing first, but preserve our extracted coverUrl
     const html = await page.content()
     const llmResult = await tryLLMParse('kojima', catalogNumber, html, searchUrl)
-    if (llmResult) return llmResult
+    if (llmResult) {
+      // Use our extracted coverUrl if LLM didn't find one
+      if (!llmResult.coverUrl && coverUrl) {
+        llmResult.coverUrl = coverUrl
+      }
+      return llmResult
+    }
 
     // Navigate to product page for price and details
     let priceMin: number | null = null

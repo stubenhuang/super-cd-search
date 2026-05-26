@@ -157,11 +157,45 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
     const name = await firstItem.$eval('.itemText h3 a, .itemText .title a', el => el.textContent?.trim() || null).catch(() => null)
     const artist = await firstItem.$eval('.itemStates .name a, .itemStates .name', el => el.textContent?.trim() || null).catch(() => null)
 
-    let coverUrl = await firstItem.$eval('.itemImg img', el => el.getAttribute('src') || el.getAttribute('data-src')).catch(() => null)
-    if (coverUrl && coverUrl.startsWith('//')) {
-      coverUrl = `https:${coverUrl}`
-    } else if (coverUrl && !coverUrl.startsWith('http')) {
-      coverUrl = `${HMV_WEB_URL}${coverUrl}`
+    // Try multiple selectors and attributes for image (handle lazy loading)
+    let coverUrl = await firstItem.$eval('.itemImg img', el => {
+      return el.getAttribute('src') ||
+             el.getAttribute('data-src') ||
+             el.getAttribute('data-original') ||
+             el.getAttribute('data-lazy-src') ||
+             el.getAttribute('data-srcset')?.split(' ')[0] ||
+             null
+    }).catch(() => null)
+
+    // Fallback 1: try direct img selector
+    if (!coverUrl) {
+      coverUrl = await firstItem.$eval('img', el => {
+        return el.getAttribute('src') ||
+               el.getAttribute('data-src') ||
+               el.getAttribute('data-original') ||
+               el.getAttribute('data-lazy-src') ||
+               el.getAttribute('data-srcset')?.split(' ')[0] ||
+               null
+      }).catch(() => null)
+    }
+
+    // Fallback 2: try picture/source element
+    if (!coverUrl) {
+      coverUrl = await firstItem.$eval('picture source, source', el => {
+        return el.getAttribute('srcset')?.split(' ')[0] || null
+      }).catch(() => null)
+    }
+
+    // Handle URL format
+    if (coverUrl) {
+      // Skip placeholder images
+      if (coverUrl.includes('blank.') || coverUrl.includes('spacer.') || coverUrl.includes('1x1') || coverUrl === 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7') {
+        coverUrl = null
+      } else if (coverUrl.startsWith('//')) {
+        coverUrl = `https:${coverUrl}`
+      } else if (!coverUrl.startsWith('http')) {
+        coverUrl = `${HMV_WEB_URL}${coverUrl}`
+      }
     }
 
     let link = await firstItem.$eval('.itemImg a, h3 a', el => el.getAttribute('href')).catch(() => null)
@@ -169,10 +203,15 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
       link = `${HMV_WEB_URL}${link}`
     }
 
-    // Try LLM parsing first
+    // Try LLM parsing, but preserve our extracted coverUrl as fallback
     const html = await page.content()
     const llmResult = await tryLLMParse('hmv', catalogNumber, html, searchUrl)
-    if (llmResult) return llmResult
+    if (llmResult) {
+      if (!llmResult.coverUrl && coverUrl) {
+        llmResult.coverUrl = coverUrl
+      }
+      return llmResult
+    }
 
     let priceMin: number | null = null
     let priceMax: number | null = null

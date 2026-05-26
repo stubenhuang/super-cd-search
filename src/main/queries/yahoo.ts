@@ -132,10 +132,16 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
       }
     }
 
-    // Try LLM parsing first
+    // Try LLM parsing first, but preserve our extracted coverUrl
     const html = await page.content()
     const llmResult = await tryLLMParse('yahoo', catalogNumber, html, searchUrl)
-    if (llmResult) return llmResult
+    if (llmResult) {
+      // Use our extracted coverUrl if LLM didn't find one
+      if (!llmResult.coverUrl && coverUrl) {
+        llmResult.coverUrl = coverUrl
+      }
+      return llmResult
+    }
 
     // Try to get details from product page
     let details: CDDetails | undefined
