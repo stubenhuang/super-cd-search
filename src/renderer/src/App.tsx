@@ -190,6 +190,41 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
   )
 })
 
+// Play completion sound using Web Audio API
+function playCompletionSound(): void {
+  try {
+    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+
+    // Create a pleasant completion chime
+    const playTone = (frequency: number, startTime: number, duration: number, volume: number = 0.3) => {
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(frequency, startTime)
+
+      gainNode.gain.setValueAtTime(0, startTime)
+      gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
+
+      oscillator.start(startTime)
+      oscillator.stop(startTime + duration)
+    }
+
+    const now = audioContext.currentTime
+    // Play a pleasant two-tone chime
+    playTone(523.25, now, 0.15, 0.2)        // C5
+    playTone(659.25, now + 0.15, 0.2, 0.25) // E5
+    playTone(783.99, now + 0.35, 0.25, 0.3) // G5
+
+  } catch {
+    // Audio context may not be available in some environments
+  }
+}
+
 function App() {
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -205,6 +240,7 @@ function App() {
   const [kojimaEnabled, setKojimaEnabled] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null)
+  const prevIsLoadingRef = useRef(false)
 
   const enabledPlatforms = useMemo(() => {
     return kojimaEnabled ? PLATFORMS : DEFAULT_ENABLED_PLATFORMS
@@ -286,9 +322,18 @@ function App() {
     window.electronAPI.receive('query:progress', handleProgress)
   }, [])
 
+  // Play completion sound when search finishes
+  useEffect(() => {
+    if (prevIsLoadingRef.current && !isLoading && !cancelledRef.current && results.size > 0) {
+      playCompletionSound()
+    }
+    prevIsLoadingRef.current = isLoading
+  }, [isLoading, results.size])
+
   const completedCount = progress.filter(p => p.event === QueryEvents.COMPLETE).length
   const catalogNumbers = useMemo(() => parseCatalogNumbers(input), [input, parseCatalogNumbers])
-  const totalCount = catalogNumbers.length || 0
+  // Use catalogOrder for progress calculation to keep progress at 100% after completion
+  const totalCount = catalogOrder.length || catalogNumbers.length || 0
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
   const progressByCatalog = useMemo(() => {
