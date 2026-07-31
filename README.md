@@ -40,6 +40,16 @@ npm run rebuild
 npm run dev
 ```
 
+### 测试
+
+```bash
+# 运行单元测试
+npm test
+
+# 运行单元测试并检查覆盖率（要求各指标 ≥ 70%）
+npm run test:coverage
+```
+
 ### 构建
 
 ```bash
