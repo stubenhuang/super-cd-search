@@ -10,7 +10,11 @@ interface NodeFetchOptions extends RequestInit {
 
 interface DomainState {
   lastRequestTime: number
-  pending: Array<() => void>
+  pending: Array<{
+    run: () => void
+    minDelay: number
+    maxDelay: number
+  }>
   active: boolean
 }
 
@@ -27,6 +31,11 @@ const MAX_DELAY = 6000
 const BACKOFF_DELAYS = [2000, 4000, 8000]
 const MAX_RETRIES = 3
 
+export interface ThrottleOptions {
+  minDelay?: number
+  maxDelay?: number
+}
+
 function getDomainState(domain: string): DomainState {
   let state = domainStates.get(domain)
   if (!state) {
@@ -36,25 +45,25 @@ function getDomainState(domain: string): DomainState {
   return state
 }
 
-function getRandomDelay(): number {
-  return MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY)
+function getRandomDelay(minDelay: number, maxDelay: number): number {
+  return minDelay + Math.random() * (maxDelay - minDelay)
 }
 
 function processQueue(domain: string): void {
   const state = domainStates.get(domain)
   if (!state || state.active || state.pending.length === 0) return
 
+  const next = state.pending[0]
   const now = Date.now()
   const elapsed = now - state.lastRequestTime
-  const requiredDelay = getRandomDelay()
+  const requiredDelay = getRandomDelay(next.minDelay, next.maxDelay)
   const remaining = Math.max(0, requiredDelay - elapsed)
 
   setTimeout(() => {
-    const next = state.pending.shift()
-    if (next) {
+    const entry = state.pending.shift()
+    if (entry) {
       state.active = true
-      state.lastRequestTime = Date.now()
-      next()
+      entry.run()
     }
   }, remaining)
 }
@@ -62,8 +71,12 @@ function processQueue(domain: string): void {
 export async function throttledFetch(
   domain: string,
   url: string,
-  options?: RequestInit
+  options?: RequestInit,
+  throttle?: ThrottleOptions
 ): Promise<Response> {
+  const minDelay = throttle?.minDelay ?? MIN_DELAY
+  const maxDelay = throttle?.maxDelay ?? MAX_DELAY
+
   return new Promise<Response>((resolve, reject) => {
     const state = getDomainState(domain)
 
@@ -101,13 +114,13 @@ export async function throttledFetch(
             backoff.attempt++
             backoff.nextDelay = BACKOFF_DELAYS[Math.min(backoff.attempt, BACKOFF_DELAYS.length - 1)]
             state.active = false
-            state.lastRequestTime = Date.now()
 
             try {
-              const retryResponse = await throttledFetch(domain, url, options)
+              const retryResponse = await throttledFetch(domain, url, options, throttle)
               backoffStates.delete(domain)
               resolve(retryResponse)
             } catch (err) {
+              backoffStates.delete(domain)
               reject(err)
             }
           }, backoff.nextDelay)
@@ -117,16 +130,18 @@ export async function throttledFetch(
 
         backoffStates.delete(domain)
         state.active = false
+        state.lastRequestTime = Date.now()
         resolve(response)
         processQueue(domain)
       } catch (err) {
         state.active = false
+        state.lastRequestTime = Date.now()
         reject(err)
         processQueue(domain)
       }
     }
 
-    state.pending.push(executeRequest)
+    state.pending.push({ run: executeRequest, minDelay, maxDelay })
     processQueue(domain)
   })
 }

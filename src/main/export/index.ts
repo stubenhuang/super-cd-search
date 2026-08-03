@@ -5,6 +5,7 @@ import { downloadImage } from '../image'
 
 const IMAGE_SIZE = 60 // pixels
 const ROW_HEIGHT = 120
+const EXPORT_IMAGE_SIZE = 120 // pixels (source resolution for the 60px cell)
 
 /**
  * Format price range for display
@@ -147,7 +148,7 @@ export async function exportToExcel(results: BatchQueryResult[]): Promise<string
     const cdInfo = getCDInfo(result.results)
 
     if (cdInfo.coverUrl) {
-      imagePromises.set(i, downloadImage(cdInfo.coverUrl))
+      imagePromises.set(i, downloadImage(cdInfo.coverUrl, EXPORT_IMAGE_SIZE))
     }
   }
 

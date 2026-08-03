@@ -10,6 +10,9 @@ import { tryLLMParse } from '../llm/parser'
 const EBAY_API_URL = 'https://api.ebay.com'
 const EBAY_WEB_URL = 'https://www.ebay.com'
 
+// Light throttle for token-authenticated API calls.
+const API_THROTTLE = { minDelay: 300, maxDelay: 800 }
+
 // Alternative eBay domains to try if main domain blocks
 const EBAY_ALT_DOMAINS = [
   'https://www.ebay.co.uk',
@@ -19,6 +22,9 @@ const EBAY_ALT_DOMAINS = [
 
 let accessToken: string | null = null
 let tokenExpiry: number = 0
+
+const itemDetailsCache = new Map<string, { details: CDDetails; fetchedAt: number }>()
+const ITEM_CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
 async function getEbayAccessToken(): Promise<string | null> {
   if (accessToken && Date.now() < tokenExpiry) {
@@ -34,14 +40,19 @@ async function getEbayAccessToken(): Promise<string | null> {
 
   try {
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
-    const response = await throttledFetch('api.ebay.com', `${EBAY_API_URL}/identity/v1/oauth2/token`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
+    const response = await throttledFetch(
+      'api.ebay.com',
+      `${EBAY_API_URL}/identity/v1/oauth2/token`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope'
       },
-      body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope'
-    })
+      API_THROTTLE
+    )
 
     if (!response.ok) {
       return null
@@ -68,7 +79,7 @@ async function queryEbayApi(catalogNumber: string): Promise<QueryResult> {
     headers: {
       'Authorization': `Bearer ${token}`
     }
-  })
+  }, API_THROTTLE)
 
   if (!response.ok) {
     throw new Error(`eBay API returned ${response.status}`)
@@ -88,22 +99,19 @@ async function queryEbayApi(catalogNumber: string): Promise<QueryResult> {
 
   const first = items[0]
 
-  // Convert prices to USD
-  const pricePromises = items
-    .filter(i => i.price && parseFloat(i.price.value) > 0)
-    .map(async i => {
-      const amount = parseFloat(i.price!.value)
-      const currency = i.price!.currency as Currency
-      return await convertToUSDWithFallback(amount, currency)
-    })
-
-  const prices = await Promise.all(pricePromises)
-
-  // Get item details if we have a URL
-  let details: CDDetails | undefined
-  if (first.itemWebUrl) {
-    details = await getEbayItemDetails(first.itemWebUrl, token)
-  }
+  // Convert prices and fetch item details concurrently.
+  const [prices, details] = await Promise.all([
+    Promise.all(
+      items
+        .filter(i => i.price && parseFloat(i.price.value) > 0)
+        .map(async i => {
+          const amount = parseFloat(i.price!.value)
+          const currency = i.price!.currency as Currency
+          return await convertToUSDWithFallback(amount, currency)
+        })
+    ),
+    first.itemWebUrl ? getEbayItemDetails(first.itemWebUrl, token) : Promise.resolve(undefined)
+  ])
 
   return {
     platform: 'ebay',
@@ -127,13 +135,18 @@ async function getEbayItemDetails(itemWebUrl: string, token: string): Promise<CD
     if (!itemIdMatch) return details
 
     const itemId = itemIdMatch[1]
+    const cached = itemDetailsCache.get(itemId)
+    if (cached && Date.now() - cached.fetchedAt < ITEM_CACHE_TTL) {
+      return cached.details
+    }
+
     const url = `${EBAY_API_URL}/buy/browse/v1/item/${itemId}`
 
     const response = await throttledFetch('api.ebay.com', url, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
-    })
+    }, API_THROTTLE)
 
     if (!response.ok) return details
 
@@ -161,6 +174,12 @@ async function getEbayItemDetails(itemWebUrl: string, token: string): Promise<CD
         }
       }
     }
+
+    itemDetailsCache.set(itemId, { details: { ...details }, fetchedAt: Date.now() })
+    if (itemDetailsCache.size > 500) {
+      const oldest = itemDetailsCache.keys().next().value
+      if (oldest !== undefined) itemDetailsCache.delete(oldest)
+    }
   } catch (err) {
     console.warn('eBay: failed to get item details:', err)
   }
@@ -168,122 +187,48 @@ async function getEbayItemDetails(itemWebUrl: string, token: string): Promise<CD
   return details
 }
 
-// Mimic human-like mouse movements
-async function humanMouseMove(page: Page, targetX: number, targetY: number): Promise<void> {
-  const viewport = page.viewport()
-  if (!viewport) return
-
-  const startX = Math.random() * viewport.width
-  const startY = Math.random() * viewport.height
-
-  // Create a curved path with multiple steps
-  const steps = 10 + Math.floor(Math.random() * 10)
-  for (let i = 0; i <= steps; i++) {
-    const progress = i / steps
-    const curveProgress = Math.sin(progress * Math.PI / 2) // Ease-out curve
-    const x = startX + (targetX - startX) * curveProgress + (Math.random() - 0.5) * 20
-    const y = startY + (targetY - startY) * curveProgress + (Math.random() - 0.5) * 20
-    await page.mouse.move(x, y)
-    await new Promise(r => setTimeout(r, 20 + Math.random() * 30))
-  }
-}
-
-// Random scroll to mimic reading behavior
-async function humanScroll(page: Page): Promise<void> {
-  const scrollAmount = 100 + Math.floor(Math.random() * 200)
-  await page.evaluate((amount: number) => {
-    window.scrollBy(0, amount)
-  }, scrollAmount)
-  await new Promise(r => setTimeout(r, 500 + Math.random() * 1000))
-}
-
 // Check if page is blocked
 async function isPageBlocked(page: Page): Promise<boolean> {
-  const bodyText = await page.evaluate(() => document.body.innerText)
-  return bodyText.includes('Access Denied') ||
-         bodyText.includes('Checking your browser') ||
-         bodyText.includes('Just a moment') ||
-         bodyText.includes('blocked') ||
-         bodyText.includes('captcha')
-}
-
-// Accept cookie consent banners
-async function acceptCookies(page: Page): Promise<void> {
-  const consentSelectors = [
-    '#gdpr-banner-accept',
-    '.gdpr-banner .accept',
-    'button[data-testid="uc-accept-all"]',
-    '[id*="accept-all"]',
-    '[class*="accept-all"]',
-    'button[title*="Accept"]',
-    '[id*="consent"] button',
-    '#onetrust-accept-btn-handler',
-    '.cc-accept',
-    '.cookie-accept'
-  ]
-
-  for (const selector of consentSelectors) {
-    const btn = await page.$(selector)
-    if (btn) {
-      try {
-        await btn.click()
-        await new Promise(r => setTimeout(r, 1000))
-        return
-      } catch {}
-    }
-  }
+  // Lightweight probe: title plus a bounded slice of body text avoids reading
+  // the full page layout (innerText) just to detect a challenge page.
+  const probe = await page.evaluate(() => {
+    const bodyText = (document.body?.textContent || '').slice(0, 1000)
+    return `${document.title}\n${bodyText}`
+  })
+  return probe.includes('Access Denied') ||
+         probe.includes('Checking your browser') ||
+         probe.includes('Just a moment') ||
+         probe.includes('blocked') ||
+         probe.includes('captcha')
 }
 
 async function queryEbayDomain(page: Page, domain: string, catalogNumber: string): Promise<{ success: boolean; result?: QueryResult }> {
   try {
     console.log(`eBay: trying domain ${domain}`)
 
-    // Navigate to homepage first to establish session
-    await page.goto(domain, { waitUntil: 'networkidle2', timeout: 30000 })
-
-    // Check if blocked on homepage
-    if (await isPageBlocked(page)) {
-      console.warn(`eBay: ${domain} blocked on homepage`)
-      return { success: false }
-    }
-
-    // Accept cookies if present
-    await acceptCookies(page)
-
-    // Random delay mimicking human reading
-    await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000))
-
-    // Do some random scrolling on homepage
-    await humanScroll(page)
-    await new Promise(r => setTimeout(r, 500 + Math.random() * 1000))
-
     // Use direct URL navigation (more reliable than search box interaction)
     const searchUrl = `${domain}/sch/i.html?_nkw=${encodeURIComponent(catalogNumber)}`
-    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 45000 })
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
-    // Wait for results
-    await new Promise(r => setTimeout(r, 3000 + Math.random() * 2000))
+    // Short one-time settle delay (balanced anti-detection pacing).
+    await new Promise(r => setTimeout(r, 500 + Math.random() * 500))
 
     // Check if blocked
     if (await isPageBlocked(page)) {
-      console.warn(`eBay: ${domain} blocked on search results`)
+      console.warn(`eBay: ${domain} blocked`)
       return { success: false }
     }
 
-    // Check for no results
+    // Wait for either result items or the no-results banner.
+    await page.waitForSelector(
+      '.srp-results, .srp-results .s-item, li.s-item, .brw-river-item, [data-listing-id], .srp-rail__no-results, .srp-no-results',
+      { timeout: 8000 }
+    ).catch(() => null)
+
     const noResults = await page.$('.srp-rail__no-results, .srp-no-results')
     if (noResults) {
       return { success: true, result: notFound('ebay') }
     }
-
-    // Try LLM parsing first
-    const html = await page.content()
-    const llmResult = await tryLLMParse('ebay', catalogNumber, html, searchUrl)
-    if (llmResult) return { success: true, result: llmResult }
-
-    // Scroll down to load results
-    await humanScroll(page)
-    await new Promise(r => setTimeout(r, 1000))
 
     // Try to find items
     const itemSelectors = [
@@ -328,8 +273,14 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
       return { success: true, result: notFound('ebay') }
     }
 
-    // Extract title
+    // DOM extraction first; only fall back to LLM when the key field is missing.
     const name = await firstItem.$eval('.s-item__title, h3, [class*="title"]', (el: Element) => el.textContent?.trim() || null).catch(() => null)
+
+    if (!name) {
+      const html = await page.content()
+      const llmResult = await tryLLMParse('ebay', catalogNumber, html, searchUrl)
+      if (llmResult) return { success: true, result: llmResult }
+    }
 
     // Extract image
     const coverUrl = await firstItem.$eval('img', (el: Element) => el.getAttribute('src') || el.getAttribute('data-src')).catch(() => null)

@@ -11,7 +11,10 @@ async function getYahooProductDetails(page: import('puppeteer').Page, link: stri
 
   try {
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    await new Promise(r => setTimeout(r, 2000))
+    await page.waitForSelector(
+      'table, .specTable, .productSpec, .productDescription, .itemDescription, [class*="description"]',
+      { timeout: 5000 }
+    ).catch(() => null)
 
     // Extract product details from the page
     const productDetails = await page.evaluate(() => {
@@ -97,13 +100,9 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
 
     const searchUrl = `${YAHOO_SHOPPING_URL}/search/${encodeURIComponent(catalogNumber)}/0/?first=1&tab_ex=commerce`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await new Promise(r => setTimeout(r, 3000))
 
-    const bodyText = await page.evaluate(() => document.body.innerText)
-    if (bodyText.includes('見つかりません') || bodyText.includes('検索条件に一致する商品が見つかりませんでした')) {
-      return notFound('yahoo')
-    }
-
+    // Wait for the first search result item.
+    await page.waitForSelector('.SearchResult_SearchResultItem__mJ7vY', { timeout: 8000 }).catch(() => null)
     const firstItem = await page.$('.SearchResult_SearchResultItem__mJ7vY')
     if (!firstItem) {
       return notFound('yahoo')
@@ -132,15 +131,17 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
       }
     }
 
-    // Try LLM parsing first, but preserve our extracted coverUrl
-    const html = await page.content()
-    const llmResult = await tryLLMParse('yahoo', catalogNumber, html, searchUrl)
-    if (llmResult) {
-      // Use our extracted coverUrl if LLM didn't find one
-      if (!llmResult.coverUrl && coverUrl) {
-        llmResult.coverUrl = coverUrl
+    // DOM extraction first; only fall back to LLM when the key field is missing.
+    if (!name) {
+      const html = await page.content()
+      const llmResult = await tryLLMParse('yahoo', catalogNumber, html, searchUrl)
+      if (llmResult) {
+        // Use our extracted coverUrl if LLM didn't find one
+        if (!llmResult.coverUrl && coverUrl) {
+          llmResult.coverUrl = coverUrl
+        }
+        return llmResult
       }
-      return llmResult
     }
 
     // Try to get details from product page

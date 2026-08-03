@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
 import http from 'http'
 import type { AddressInfo } from 'net'
+import { nativeImage } from 'electron'
 
 const { mockGetSetting } = vi.hoisted(() => ({
   mockGetSetting: vi.fn()
@@ -109,5 +110,96 @@ describe('downloadImage', () => {
 
     // No SOCKS server is listening on port 1, so the request errors -> null
     expect(await downloadImage(`${baseUrl}/proxy`)).toBeNull()
+  })
+
+  it('caches successful downloads by URL and size', async () => {
+    let hits = 0
+    handler = (_req, res) => {
+      hits++
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'image/png')
+      res.end(Buffer.from([1, 2, 3]))
+    }
+
+    const first = await downloadImage(`${baseUrl}/cached.png`)
+    const second = await downloadImage(`${baseUrl}/cached.png`)
+
+    expect(hits).toBe(1)
+    expect(first).toEqual(second)
+  })
+
+  it('merges concurrent downloads for the same URL', async () => {
+    let hits = 0
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    handler = (_req, res) => {
+      hits++
+      setTimeout(() => {
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'image/png')
+        res.end(Buffer.from([1]))
+        release()
+      }, 10)
+    }
+
+    const firstPromise = downloadImage(`${baseUrl}/merged.png`)
+    await gate
+    const secondPromise = downloadImage(`${baseUrl}/merged.png`)
+    const [first, second] = await Promise.all([firstPromise, secondPromise])
+
+    expect(hits).toBe(1)
+    expect(first).toEqual(second)
+  })
+
+  it('resizes images to the requested size as JPEG', async () => {
+    const jpegBuffer = Buffer.from([0xff, 0xd8, 0xff])
+    vi.mocked(nativeImage.createFromBuffer).mockImplementation(() => ({
+      isEmpty: () => false,
+      resize: vi.fn(() => ({ toJPEG: vi.fn(() => jpegBuffer) }))
+    }))
+
+    handler = (_req, res) => {
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'image/png')
+      res.end(Buffer.from([9, 9]))
+    }
+
+    const result = await downloadImage(`${baseUrl}/resize.png`, 240)
+
+    expect(result).toEqual({ base64: jpegBuffer.toString('base64'), mimeType: 'image/jpeg' })
+    const results = vi.mocked(nativeImage.createFromBuffer).mock.results
+    const image = results[results.length - 1].value as {
+      resize: ReturnType<typeof vi.fn>
+    }
+    expect(image.resize).toHaveBeenCalledWith({ width: 240 })
+  })
+
+  it('limits concurrent downloads to four', async () => {
+    let active = 0
+    let maxActive = 0
+    const pending: Array<() => void> = []
+    handler = (_req, res) => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      pending.push(() => {
+        active--
+        res.statusCode = 200
+        res.end(Buffer.from([1]))
+      })
+    }
+
+    const urls = Array.from({ length: 6 }, (_, i) => `${baseUrl}/concurrent-${i}`)
+    const promises = urls.map(url => downloadImage(url))
+
+    await vi.waitFor(() => expect(pending.length).toBe(4))
+    expect(maxActive).toBe(4)
+
+    // Completing one request frees a slot for the next queued download.
+    pending.shift()!()
+    await vi.waitFor(() => expect(pending.length).toBe(4))
+
+    while (pending.length > 0) pending.shift()!()
+    await Promise.all(promises)
+    expect(maxActive).toBe(4)
   })
 })

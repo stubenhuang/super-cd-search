@@ -29,6 +29,7 @@ function createYahooPage() {
     setCookie: vi.fn().mockResolvedValue(undefined),
     setExtraHTTPHeaders: vi.fn().mockResolvedValue(undefined),
     goto: vi.fn().mockResolvedValue(undefined),
+    waitForSelector: vi.fn().mockResolvedValue({}),
     evaluate: vi.fn(),
     $: vi.fn().mockResolvedValue(firstItem),
     content: vi.fn().mockResolvedValue('<html></html>'),
@@ -60,6 +61,8 @@ beforeEach(() => {
 describe('queryYahoo', () => {
   it('returns not_found when search has no results', async () => {
     const { page, browser } = createYahooPage()
+    page.waitForSelector.mockRejectedValue(new Error('timeout'))
+    page.$ = vi.fn().mockResolvedValue(null)
     page.evaluate = createDomEvaluate(['<body>検索条件に一致する商品が見つかりませんでした</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
@@ -72,8 +75,9 @@ describe('queryYahoo', () => {
 
   it('returns not_found when no result item exists', async () => {
     const { page, browser } = createYahooPage()
-    page.evaluate = createDomEvaluate(['<body>normal page</body>'])
+    page.waitForSelector.mockRejectedValue(new Error('timeout'))
     page.$ = vi.fn().mockResolvedValue(null)
+    page.evaluate = createDomEvaluate(['<body>normal page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
     const result = await runWithFakeTimers(() => queryYahoo('ABC-123'))
@@ -83,7 +87,6 @@ describe('queryYahoo', () => {
   it('extracts search result data, price and spec table details', async () => {
     const { page, browser } = createYahooPage()
     page.evaluate = createDomEvaluate([
-      '<body>normal search page</body>',
       '<table>' +
         '<tr><th>フォーマット</th><td>CD</td></tr>' +
         '<tr><th>発売日</th><td>2024/02/02</td></tr>' +
@@ -112,7 +115,6 @@ describe('queryYahoo', () => {
   it('parses description text when no spec table exists', async () => {
     const { page, browser } = createYahooPage()
     page.evaluate = createDomEvaluate([
-      '<body>normal search page</body>',
       '<div class="productDescription">フォーマット: CD\n発売日: 2024-02-02\nレーベル: Y Label\nジャンル: Rock</div>'
     ])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
@@ -128,15 +130,43 @@ describe('queryYahoo', () => {
 
   it('omits details when the product page has none', async () => {
     const { page, browser } = createYahooPage()
-    page.evaluate = createDomEvaluate(['<body>normal search page</body>', '<body>nothing here</body>'])
+    page.evaluate = createDomEvaluate(['<body>nothing here</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
     const result = await runWithFakeTimers(() => queryYahoo('ABC-123'))
     expect(result.details).toBeUndefined()
   })
 
-  it('prefers LLM results but falls back to the extracted cover image', async () => {
+  it('prefers DOM extraction and skips LLM when the name is found', async () => {
     const { page, browser } = createYahooPage()
+    page.evaluate = createDomEvaluate(['<body>nothing here</body>'])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+    mockTryLLMParse.mockResolvedValue({
+      platform: 'yahoo',
+      name: 'LLM Album',
+      artist: null,
+      priceMin: null,
+      priceMax: null,
+      coverUrl: null,
+      link: null,
+      status: 'found'
+    })
+
+    const result = await runWithFakeTimers(() => queryYahoo('ABC-123'))
+
+    expect(result.name).toBe('Yahoo Album')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
+  })
+
+  it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+    const { page, browser, firstItem } = createYahooPage()
+    firstItem.evaluate.mockImplementation(async () => ({
+      name: null,
+      link: 'https://store.example.com/item/1',
+      coverUrl: 'https://cdn.example.com/cover.jpg',
+      priceText: '¥1,980',
+      storeName: 'Test Store'
+    }))
     page.evaluate = createDomEvaluate(['<body>normal search page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
     mockTryLLMParse.mockResolvedValue({
@@ -154,6 +184,7 @@ describe('queryYahoo', () => {
 
     expect(result.name).toBe('LLM Album')
     expect(result.coverUrl).toBe('https://cdn.example.com/cover.jpg')
+    expect(mockTryLLMParse).toHaveBeenCalled()
   })
 
   it('returns a query error when the browser fails', async () => {

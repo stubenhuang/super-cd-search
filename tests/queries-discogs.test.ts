@@ -117,7 +117,7 @@ describe('queryDiscogs', () => {
     it('keeps null prices when price suggestions are incomplete', async () => {
       mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
         if (url.includes('/database/search')) {
-          return okJson({ results: [{ id: 1, title: 'A - B', catno: 'X-1' }] })
+          return okJson({ results: [{ id: 99, title: 'A - B', catno: 'X-1' }] })
         }
         if (url.includes('/marketplace/price_suggestions')) {
           return okJson({ 'Very Good (VG)': { value: 10, currency: 'USD' } })
@@ -165,7 +165,8 @@ describe('queryDiscogs', () => {
         return undefined
       })
       const { page, browser } = createDiscogsPage()
-      page.evaluate.mockResolvedValue('No results found for your search')
+      page.waitForSelector.mockRejectedValue(new Error('timeout'))
+      page.$ = vi.fn().mockResolvedValue(null)
       mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
       const result = await queryDiscogs('NOPE-1')
@@ -176,6 +177,7 @@ describe('queryDiscogs', () => {
     it('returns not_found when no result list item exists', async () => {
       mockGetSetting.mockImplementation((key: string) => (key === 'discogsToken' ? undefined : undefined))
       const { page, browser } = createDiscogsPage()
+      page.waitForSelector.mockRejectedValue(new Error('timeout'))
       page.$ = vi.fn().mockResolvedValue(null)
       mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
@@ -183,9 +185,20 @@ describe('queryDiscogs', () => {
       expect(result.status).toBe('not_found')
     })
 
-    it('prefers LLM parsing when available', async () => {
+    it('uses DOM extraction first and skips LLM when the name is found', async () => {
       mockGetSetting.mockImplementation((key: string) => (key === 'discogsToken' ? undefined : undefined))
       const { page, browser } = createDiscogsPage()
+      mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+      const result = await queryDiscogs('UCCG-90530')
+      expect(result.name).toBe('Some Album')
+      expect(mockTryLLMParse).not.toHaveBeenCalled()
+    })
+
+    it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+      mockGetSetting.mockImplementation((key: string) => (key === 'discogsToken' ? undefined : undefined))
+      const { page, browser, firstResult } = createDiscogsPage()
+      firstResult.$eval.mockResolvedValue(null)
       mockBrowserPool.acquire.mockResolvedValue({ browser, page })
       mockTryLLMParse.mockResolvedValue({
         platform: 'discogs',

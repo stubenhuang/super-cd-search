@@ -31,6 +31,7 @@ function createKojimaPage() {
     setCookie: vi.fn().mockResolvedValue(undefined),
     setExtraHTTPHeaders: vi.fn().mockResolvedValue(undefined),
     goto: vi.fn().mockResolvedValue(undefined),
+    waitForSelector: vi.fn().mockResolvedValue({}),
     evaluate: vi.fn(),
     $: vi.fn().mockResolvedValue(firstItem),
     content: vi.fn().mockResolvedValue('<html></html>'),
@@ -62,6 +63,8 @@ beforeEach(() => {
 describe('queryKojima', () => {
   it('returns not_found when search has no results', async () => {
     const { page, browser } = createKojimaPage()
+    page.waitForSelector.mockRejectedValue(new Error('timeout'))
+    page.$ = vi.fn().mockResolvedValue(null)
     page.evaluate = createDomEvaluate(['<body>検索結果は見つかりませんでした</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
@@ -79,8 +82,9 @@ describe('queryKojima', () => {
 
   it('returns not_found when no card is present', async () => {
     const { page, browser } = createKojimaPage()
-    page.evaluate = createDomEvaluate(['<body>normal page</body>'])
+    page.waitForSelector.mockRejectedValue(new Error('timeout'))
     page.$ = vi.fn().mockResolvedValue(null)
+    page.evaluate = createDomEvaluate(['<body>normal page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
     const result = await runWithFakeTimers(() => queryKojima('ABC-123'))
@@ -90,7 +94,6 @@ describe('queryKojima', () => {
   it('extracts card data and product page details with price', async () => {
     const { page, browser } = createKojimaPage()
     page.evaluate = createDomEvaluate([
-      '<body>normal search page</body>',
       '<div class="price__regular"><span class="price-item--regular">¥3,300</span></div>',
       '<div class="product__description">Format: SACD\n発売日: 2024-01-15\nレーベル: Test Label\nジャンル: Jazz\nアーティスト: Someone</div>'
     ])
@@ -114,7 +117,6 @@ describe('queryKojima', () => {
   it('extracts variant options, meta fields and tags when no description exists', async () => {
     const { page, browser } = createKojimaPage()
     page.evaluate = createDomEvaluate([
-      '<body>normal search page</body>',
       '<div class="product__price">¥1,000</div>',
       '<select name="id"><option>SACD</option></select>' +
         '<div class="product__meta">Release: 2024</div>' +
@@ -131,8 +133,36 @@ describe('queryKojima', () => {
     expect(result.details?.label).toBeNull()
   })
 
-  it('prefers LLM results but falls back to the extracted cover image', async () => {
+  it('prefers DOM extraction and skips LLM when the name is found', async () => {
     const { page, browser } = createKojimaPage()
+    page.evaluate = createDomEvaluate([
+      '<div class="product__price">¥2,000</div>',
+      '<div class="product__description"></div>'
+    ])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+    mockTryLLMParse.mockResolvedValue({
+      platform: 'kojima',
+      name: 'LLM Album',
+      artist: null,
+      priceMin: null,
+      priceMax: null,
+      coverUrl: null,
+      link: null,
+      status: 'found'
+    })
+
+    const result = await runWithFakeTimers(() => queryKojima('ABC-123'))
+
+    expect(result.name).toBe('Kojima Album')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
+  })
+
+  it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+    const { page, browser, firstItem } = createKojimaPage()
+    firstItem.$eval.mockImplementation(async (selector: string) => {
+      if (selector === '.card__media img') return '//cdn.kojima.example/cover.jpg'
+      return null
+    })
     page.evaluate = createDomEvaluate(['<body>normal search page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
     mockTryLLMParse.mockResolvedValue({
@@ -150,7 +180,7 @@ describe('queryKojima', () => {
 
     expect(result.name).toBe('LLM Album')
     expect(result.coverUrl).toBe('https://cdn.kojima.example/cover.jpg')
-    expect(mockBrowserPool.release).toHaveBeenCalled()
+    expect(mockTryLLMParse).toHaveBeenCalled()
   })
 
   it('returns a query error when the browser fails', async () => {

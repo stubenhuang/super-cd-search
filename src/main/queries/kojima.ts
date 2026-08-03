@@ -12,7 +12,10 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
 
   try {
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    await new Promise(r => setTimeout(r, 2000))
+    await page.waitForSelector(
+      '.price__regular, .price-item, .product__price, .product__description, .product-specs, [data-product-price], .price',
+      { timeout: 5000 }
+    ).catch(() => null)
 
     // Extract price
     const priceText = await page.evaluate(() => {
@@ -132,15 +135,9 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
 
     const searchUrl = `${KOJIMA_WEB_URL}/search/?q=${encodeURIComponent(catalogNumber)}`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await new Promise(r => setTimeout(r, 3000))
 
-    // Check for no results
-    const bodyText = await page.evaluate(() => document.body.innerText)
-    if (bodyText.includes('見つかりませんでした') || bodyText.includes('結果がありません') || bodyText.includes('0件の結果')) {
-      return notFound('kojima')
-    }
-
-    // Shopify standard card structure
+    // Wait for the Shopify standard card structure.
+    await page.waitForSelector('.card', { timeout: 8000 }).catch(() => null)
     const firstItem = await page.$('.card')
     if (!firstItem) {
       return notFound('kojima')
@@ -161,15 +158,17 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
       link = `${KOJIMA_WEB_URL}${link}`
     }
 
-    // Try LLM parsing first, but preserve our extracted coverUrl
-    const html = await page.content()
-    const llmResult = await tryLLMParse('kojima', catalogNumber, html, searchUrl)
-    if (llmResult) {
-      // Use our extracted coverUrl if LLM didn't find one
-      if (!llmResult.coverUrl && coverUrl) {
-        llmResult.coverUrl = coverUrl
+    // DOM extraction first; only fall back to LLM when the key field is missing.
+    if (!name) {
+      const html = await page.content()
+      const llmResult = await tryLLMParse('kojima', catalogNumber, html, searchUrl)
+      if (llmResult) {
+        // Use our extracted coverUrl if LLM didn't find one
+        if (!llmResult.coverUrl && coverUrl) {
+          llmResult.coverUrl = coverUrl
+        }
+        return llmResult
       }
-      return llmResult
     }
 
     // Navigate to product page for price and details

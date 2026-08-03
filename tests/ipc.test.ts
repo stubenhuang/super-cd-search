@@ -134,6 +134,6 @@ describe('registerExportIpc', () => {
       base64: 'x',
       mimeType: 'image/png'
     })
-    expect(mockDownloadImage).toHaveBeenCalledWith('https://example.com/a.png')
+    expect(mockDownloadImage).toHaveBeenCalledWith('https://example.com/a.png', undefined)
   })
 })

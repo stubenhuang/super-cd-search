@@ -65,6 +65,7 @@ function createEbayPage(overrides: Partial<EbayPageState> = {}) {
       const phase = url.includes('/sch/i.html') ? 'search' : 'home'
       state.defaultBody = state.bodyByDomain[hostname]?.[phase] ?? state.defaultBody
     }),
+    waitForSelector: vi.fn().mockResolvedValue({}),
     evaluate: vi.fn(async () => state.defaultBody),
     $: vi.fn(async (selector: string) => state.dollarResults[selector] ?? null),
     $$: vi.fn(async (selector: string) => state.dollarDollarResults[selector] ?? []),
@@ -233,6 +234,7 @@ describe('queryEbay', () => {
       link: 'https://www.ebay.com/itm/777',
       status: 'found'
     })
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('parses non-USD prices from the web and converts currency', async () => {
@@ -289,6 +291,7 @@ describe('queryEbay', () => {
 
     const result = await runWithFakeTimers(() => queryEbay('ABC-123'))
     expect(result.name).toBe('LLM Item')
+    expect(mockTryLLMParse).toHaveBeenCalled()
   })
 
   it('tries alternative domains when the main domain blocks', async () => {

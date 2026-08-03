@@ -91,7 +91,7 @@ describe('exportToExcel', () => {
     await exportToExcel([
       batch('IMG-1', [result({ coverUrl: 'https://cdn.example.com/cover.png' })])
     ])
-    expect(mockDownloadImage).toHaveBeenCalledWith('https://cdn.example.com/cover.png')
+    expect(mockDownloadImage).toHaveBeenCalledWith('https://cdn.example.com/cover.png', 120)
     expect(existsSync(outPath)).toBe(true)
   })
 

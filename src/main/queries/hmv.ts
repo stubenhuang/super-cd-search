@@ -12,7 +12,10 @@ async function getHmvProductDetails(page: import('puppeteer').Page, link: string
 
   try {
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    await new Promise(r => setTimeout(r, 2000))
+    await page.waitForSelector(
+      '.priceInfoBlock, .price, .productSpec, .itemSpec, .specList, .detailInfo, .product-spec',
+      { timeout: 5000 }
+    ).catch(() => null)
 
     // Extract price
     const productPriceText = await page.evaluate(() => {
@@ -137,18 +140,9 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
 
     const searchUrl = `${HMV_WEB_URL}/en/search/keyword_${encodeURIComponent(catalogNumber)}/target_ALL/type_sr/`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await new Promise(r => setTimeout(r, 3000))
 
-    const bodyText = await page.evaluate(() => document.body.innerText)
-    if (
-      bodyText.includes('0 results') ||
-      bodyText.includes('No results') ||
-      bodyText.includes('did not match any products')
-    ) {
-      return notFound('hmv')
-    }
-
-    // li.list alone matches navigation tabs; .clearfix identifies actual products
+    // Wait for the product list; .clearfix identifies actual products.
+    await page.waitForSelector('.resultList > li.list.clearfix, li.list.clearfix', { timeout: 8000 }).catch(() => null)
     const firstItem = await page.$('.resultList > li.list.clearfix, li.list.clearfix')
     if (!firstItem) {
       return notFound('hmv')
@@ -203,14 +197,16 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
       link = `${HMV_WEB_URL}${link}`
     }
 
-    // Try LLM parsing, but preserve our extracted coverUrl as fallback
-    const html = await page.content()
-    const llmResult = await tryLLMParse('hmv', catalogNumber, html, searchUrl)
-    if (llmResult) {
-      if (!llmResult.coverUrl && coverUrl) {
-        llmResult.coverUrl = coverUrl
+    // DOM extraction first; only fall back to LLM when the key field is missing.
+    if (!name) {
+      const html = await page.content()
+      const llmResult = await tryLLMParse('hmv', catalogNumber, html, searchUrl)
+      if (llmResult) {
+        if (!llmResult.coverUrl && coverUrl) {
+          llmResult.coverUrl = coverUrl
+        }
+        return llmResult
       }
-      return llmResult
     }
 
     let priceMin: number | null = null

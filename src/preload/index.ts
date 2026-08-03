@@ -36,6 +36,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportToExcel: (results: BatchQueryResult[]): Promise<string | null> =>
     ipcRenderer.invoke('exportToExcel', results),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
-  fetchImage: (url: string): Promise<{ base64: string; mimeType: string } | null> =>
-    ipcRenderer.invoke('fetchImage', url)
+  fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
+    ipcRenderer.invoke('fetchImage', url, size)
 })

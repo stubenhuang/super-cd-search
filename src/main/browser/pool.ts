@@ -6,7 +6,11 @@ import { getSetting } from '../settings'
 
 puppeteer.use(StealthPlugin())
 
-const MAX_CONCURRENT = 2
+const MAX_CONCURRENT = 3
+
+// Resource types that are never needed for scraping: the cover URL is read
+// from the DOM attribute, so the actual bytes can be skipped.
+const BLOCKED_RESOURCE_TYPES = new Set(['image', 'media', 'font'])
 
 interface BrowserInstance {
   browser: Browser
@@ -32,8 +36,7 @@ class BrowserPool {
 
     if (available) {
       available.inUse = true
-      const page = await available.browser.newPage()
-      await this.applyFingerprint(page, available.fingerprint)
+      const page = await this.createPage(available)
       return { browser: available.browser, page, fingerprint: available.fingerprint }
     }
 
@@ -41,8 +44,7 @@ class BrowserPool {
       const instance = await this.createInstance()
       this.instances.push(instance)
       instance.inUse = true
-      const page = await instance.browser.newPage()
-      await this.applyFingerprint(page, instance.fingerprint)
+      const page = await this.createPage(instance)
       return { browser: instance.browser, page, fingerprint: instance.fingerprint }
     }
 
@@ -63,8 +65,7 @@ class BrowserPool {
       const waiter = this.waitQueue.shift()
       if (waiter) {
         instance.inUse = true
-        const newPage = await instance.browser.newPage()
-        await this.applyFingerprint(newPage, instance.fingerprint)
+        const newPage = await this.createPage(instance)
         waiter.resolve({ browser: instance.browser, page: newPage, fingerprint: instance.fingerprint })
       }
     }
@@ -116,6 +117,25 @@ class BrowserPool {
         return getParameter.call(this, parameter)
       }
     }, fingerprint.webgl)
+  }
+
+  private async createPage(instance: BrowserInstance): Promise<Page> {
+    const page = await instance.browser.newPage()
+    await this.applyFingerprint(page, instance.fingerprint)
+    await this.configurePage(page)
+    return page
+  }
+
+  private async configurePage(page: Page): Promise<void> {
+    await page.setRequestInterception(true)
+    page.on('request', (request) => {
+      const type = request.resourceType()
+      if (BLOCKED_RESOURCE_TYPES.has(type)) {
+        request.abort().catch(() => {})
+      } else {
+        request.continue().catch(() => {})
+      }
+    })
   }
 }
 

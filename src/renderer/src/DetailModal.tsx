@@ -28,6 +28,7 @@ interface DetailModalProps {
 
 export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailModalProps) {
   const [copied, setCopied] = useState(false)
+  const [coverData, setCoverData] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -72,6 +73,25 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
   const displayName = primaryResult?.name || catalogNumber
   const displayArtist = primaryResult?.artist
   const displayCover = primaryResult?.coverUrl
+
+  useEffect(() => {
+    if (!displayCover) {
+      setCoverData(null)
+      return
+    }
+
+    let cancelled = false
+    window.electronAPI.fetchImage(displayCover, 240)
+      .then(data => {
+        if (cancelled) return
+        setCoverData(data ? `data:${data.mimeType};base64,${data.base64}` : null)
+      })
+      .catch(() => {
+        if (!cancelled) setCoverData(null)
+      })
+
+    return () => { cancelled = true }
+  }, [displayCover])
 
   const copyText = useMemo(() => {
     const lines: string[] = [`目录号: ${catalogNumber}`]
@@ -124,7 +144,11 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
           <div className="detail-modal-top">
             {displayCover && (
               <div className="detail-modal-cover">
-                <img src={displayCover} alt={displayName} />
+                {coverData ? (
+                  <img src={coverData} alt={displayName} />
+                ) : (
+                  <div className="image-placeholder" />
+                )}
               </div>
             )}
             <div className="detail-modal-identity">

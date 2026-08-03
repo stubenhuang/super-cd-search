@@ -66,7 +66,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, inc
 
   emitProgress(QueryEvents.START, { catalogNumber, platform: 'all', status: 'loading' })
 
-  const platforms: Array<{ name: string; query: () => Promise<QueryResult> }> = [
+  const platforms: Array<{ name: QueryResult['platform']; query: () => Promise<QueryResult> }> = [
     { name: 'discogs', query: () => queryDiscogs(catalogNumber) },
     { name: 'ebay', query: () => queryEbay(catalogNumber) },
     ...(includeKojima ? [{ name: 'kojima' as const, query: () => queryKojima(catalogNumber) }] : []),
@@ -74,37 +74,57 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, inc
     { name: 'yahoo', query: () => queryYahoo(catalogNumber) }
   ]
 
-  const results: QueryResult[] = []
-
-  for (const { name, query } of platforms) {
-    if (signal.aborted) {
-      emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
-      throw new Error('Aborted')
-    }
-
-    emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: 'loading' })
-    try {
-      const result = await query()
-      emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
-      results.push(result)
-      emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: result.status, results: [result] })
-    } catch (err) {
+  // Run every platform concurrently; the browser pool and per-domain throttles
+  // act as natural concurrency limits.
+  const settled = await Promise.allSettled(
+    platforms.map(async ({ name, query }) => {
       if (signal.aborted) {
         emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
         throw new Error('Aborted')
       }
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      emitProgress(QueryEvents.ERROR, { catalogNumber, platform: name, status: 'error' })
-      const errorResult = { platform: name as QueryResult['platform'], name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error' as const, error: message }
-      results.push(errorResult)
-      emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: 'error', results: [errorResult] })
-    }
+
+      emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: 'loading' })
+      try {
+        const result = await query()
+        if (signal.aborted) {
+          emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
+          throw new Error('Aborted')
+        }
+        emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
+        emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: result.status, results: [result] })
+        return result
+      } catch (err) {
+        if (signal.aborted) {
+          emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
+          throw new Error('Aborted')
+        }
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        emitProgress(QueryEvents.ERROR, { catalogNumber, platform: name, status: 'error' })
+        const errorResult: QueryResult = { platform: name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
+        emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: 'error', results: [errorResult] })
+        return errorResult
+      }
+    })
+  )
+
+  if (signal.aborted) {
+    throw new Error('Aborted')
   }
 
-  if (!signal.aborted) {
-    saveResults(catalogNumber, results)
-    emitProgress(QueryEvents.COMPLETE, { catalogNumber, platform: 'all', status: 'complete' })
-  }
+  // Keep results in the canonical platform order regardless of completion order.
+  const results: QueryResult[] = platforms.map((platform, index) => {
+    const outcome = settled[index]
+    if (outcome && outcome.status === 'fulfilled') {
+      return outcome.value
+    }
+    const message = outcome && 'reason' in outcome
+      ? (outcome.reason instanceof Error ? outcome.reason.message : 'Unknown error')
+      : 'Unknown error'
+    return { platform: platform.name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
+  })
+
+  saveResults(catalogNumber, results)
+  emitProgress(QueryEvents.COMPLETE, { catalogNumber, platform: 'all', status: 'complete' })
 
   return results
 }

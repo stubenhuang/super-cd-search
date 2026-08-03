@@ -100,6 +100,25 @@ describe('executeBatchQuery', () => {
     expect(mockQueryKojima).not.toHaveBeenCalled()
   })
 
+  it('runs platforms concurrently within a catalog and keeps canonical order', async () => {
+    const called: string[] = []
+    mockQueryDiscogs.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      called.push('discogs')
+      return found('discogs')
+    })
+    mockQueryEbay.mockImplementation(async () => { called.push('ebay'); return found('ebay') })
+    mockQueryKojima.mockImplementation(async () => { called.push('kojima'); return found('kojima') })
+    mockQueryHmv.mockImplementation(async () => { called.push('hmv'); return found('hmv') })
+    mockQueryYahoo.mockImplementation(async () => { called.push('yahoo'); return found('yahoo') })
+
+    const results = await executeBatchQuery(['X-1'])
+
+    // Fast platforms must not wait for the slow one.
+    expect(called).toEqual(['ebay', 'kojima', 'hmv', 'yahoo', 'discogs'])
+    expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'ebay', 'kojima', 'hmv', 'yahoo'])
+  })
+
   it('throws when no catalog numbers are provided', async () => {
     await expect(executeBatchQuery(['  ', ''])).rejects.toThrow('No catalog numbers provided')
     await expect(executeBatchQuery([])).rejects.toThrow('No catalog numbers provided')

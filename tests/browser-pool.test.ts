@@ -35,6 +35,8 @@ function createFakePage() {
     setUserAgent: vi.fn().mockResolvedValue(undefined),
     setViewport: vi.fn().mockResolvedValue(undefined),
     evaluateOnNewDocument: vi.fn().mockResolvedValue(undefined),
+    setRequestInterception: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn(),
     close: vi.fn().mockResolvedValue(undefined)
   }
 }
@@ -94,22 +96,29 @@ describe('browserPool', () => {
     const browserA = createFakeBrowser(pageA)
     const pageB = createFakePage()
     const browserB = createFakeBrowser(pageB)
-    mockLaunch.mockResolvedValueOnce(browserA).mockResolvedValueOnce(browserB)
+    const pageC = createFakePage()
+    const browserC = createFakeBrowser(pageC)
+    mockLaunch
+      .mockResolvedValueOnce(browserA)
+      .mockResolvedValueOnce(browserB)
+      .mockResolvedValueOnce(browserC)
 
     const first = await browserPool.acquire()
     const second = await browserPool.acquire()
-    expect(mockLaunch).toHaveBeenCalledTimes(2)
+    const third = await browserPool.acquire()
+    expect(mockLaunch).toHaveBeenCalledTimes(3)
 
-    const thirdPromise = browserPool.acquire()
+    const fourthPromise = browserPool.acquire()
     await vi.waitFor(() => expect(browserA.newPage).toHaveBeenCalledTimes(1))
 
     await browserPool.release(first.browser, first.page)
-    const third = await thirdPromise
+    const fourth = await fourthPromise
 
     // The waiter is served by the released browser with a fresh page
-    expect(third.browser).toBe(browserA)
+    expect(fourth.browser).toBe(browserA)
     expect(browserA.newPage).toHaveBeenCalledTimes(2)
     expect(pageA.close).toHaveBeenCalled()
+    expect(third.browser).toBe(browserC)
   })
 
   it('release closes the page and ignores unknown browsers', async () => {
@@ -128,8 +137,13 @@ describe('browserPool', () => {
   it('closeAll closes every browser and rejects queued waiters', async () => {
     const browserA = createFakeBrowser()
     const browserB = createFakeBrowser()
-    mockLaunch.mockResolvedValueOnce(browserA).mockResolvedValueOnce(browserB)
+    const browserC = createFakeBrowser()
+    mockLaunch
+      .mockResolvedValueOnce(browserA)
+      .mockResolvedValueOnce(browserB)
+      .mockResolvedValueOnce(browserC)
 
+    await browserPool.acquire()
     await browserPool.acquire()
     await browserPool.acquire()
     const waiter = browserPool.acquire()
@@ -139,6 +153,45 @@ describe('browserPool', () => {
 
     expect(browserA.close).toHaveBeenCalled()
     expect(browserB.close).toHaveBeenCalled()
+    expect(browserC.close).toHaveBeenCalled()
     await rejection
+  })
+
+  it('blocks image, media and font requests on new pages', async () => {
+    const page = createFakePage()
+    const browser = createFakeBrowser(page)
+    mockLaunch.mockResolvedValue(browser)
+
+    await browserPool.acquire()
+
+    expect(page.setRequestInterception).toHaveBeenCalledWith(true)
+    const handler = page.on.mock.calls.find(([event]) => event === 'request')?.[1] as
+      | ((request: {
+          resourceType: () => string
+          abort: ReturnType<typeof vi.fn>
+          continue: ReturnType<typeof vi.fn>
+        }) => void)
+      | undefined
+    expect(handler).toBeDefined()
+
+    for (const type of ['image', 'media', 'font']) {
+      const request = {
+        resourceType: () => type,
+        abort: vi.fn(() => Promise.resolve()),
+        continue: vi.fn(() => Promise.resolve())
+      }
+      handler!(request)
+      expect(request.abort).toHaveBeenCalled()
+      expect(request.continue).not.toHaveBeenCalled()
+    }
+
+    const allowed = {
+      resourceType: () => 'script',
+      abort: vi.fn(() => Promise.resolve()),
+      continue: vi.fn(() => Promise.resolve())
+    }
+    handler!(allowed)
+    expect(allowed.continue).toHaveBeenCalled()
+    expect(allowed.abort).not.toHaveBeenCalled()
   })
 })

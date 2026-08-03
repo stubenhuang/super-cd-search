@@ -8,7 +8,7 @@ export function registerExportIpc(): void {
     return exportToExcel(results)
   })
 
-  ipcMain.handle('fetchImage', async (_event, url: string) => {
-    return downloadImage(url)
+  ipcMain.handle('fetchImage', async (_event, url: string, size?: number) => {
+    return downloadImage(url, size)
   })
 }

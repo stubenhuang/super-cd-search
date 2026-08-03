@@ -89,6 +89,9 @@ describe('preload API', () => {
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('openExternal', 'https://example.com')
 
     await api.fetchImage('https://example.com/a.png')
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('fetchImage', 'https://example.com/a.png')
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('fetchImage', 'https://example.com/a.png', undefined)
+
+    await api.fetchImage('https://example.com/a.png', 240)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('fetchImage', 'https://example.com/a.png', 240)
   })
 })

@@ -23,6 +23,12 @@ vi.mock('electron', () => {
       invoke: vi.fn(),
       send: vi.fn(),
       on: vi.fn()
+    },
+    nativeImage: {
+      createFromBuffer: vi.fn(() => ({
+        isEmpty: () => true,
+        resize: vi.fn(() => ({ toJPEG: vi.fn(() => Buffer.alloc(0)) }))
+      }))
     }
   }
 })

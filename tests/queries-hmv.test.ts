@@ -30,6 +30,7 @@ function createHmvPage() {
     setCookie: vi.fn().mockResolvedValue(undefined),
     setExtraHTTPHeaders: vi.fn().mockResolvedValue(undefined),
     goto: vi.fn().mockResolvedValue(undefined),
+    waitForSelector: vi.fn().mockResolvedValue({}),
     evaluate: vi.fn(),
     $: vi.fn().mockResolvedValue(firstItem),
     content: vi.fn().mockResolvedValue('<html></html>'),
@@ -61,6 +62,8 @@ beforeEach(() => {
 describe('queryHmv', () => {
   it('returns not_found when search has no results', async () => {
     const { page, browser } = createHmvPage()
+    page.waitForSelector.mockRejectedValue(new Error('timeout'))
+    page.$ = vi.fn().mockResolvedValue(null)
     page.evaluate = createDomEvaluate(['<body>0 results found</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
@@ -73,8 +76,9 @@ describe('queryHmv', () => {
 
   it('returns not_found when no product list item exists', async () => {
     const { page, browser } = createHmvPage()
-    page.evaluate = createDomEvaluate(['<body>normal page</body>'])
+    page.waitForSelector.mockRejectedValue(new Error('timeout'))
     page.$ = vi.fn().mockResolvedValue(null)
+    page.evaluate = createDomEvaluate(['<body>normal page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
     const result = await runWithFakeTimers(() => queryHmv('ABC-123'))
@@ -84,7 +88,6 @@ describe('queryHmv', () => {
   it('extracts search result and spec table details', async () => {
     const { page, browser } = createHmvPage()
     page.evaluate = createDomEvaluate([
-      '<body>normal search page</body>',
       '<div class="priceInfoBlock fontLarge"><span class="price">¥3,900</span></div>',
       '<table class="productSpec">' +
         '<tr><th>Format</th><td>CD</td></tr>' +
@@ -121,7 +124,6 @@ describe('queryHmv', () => {
       return null
     })
     page.evaluate = createDomEvaluate([
-      '<body>normal search page</body>',
       '<div class="price">¥1,000</div>',
       '<body>発売日: 2024年1月15日<span class="format">CD</span><div class="breadcrumb"><a>Home</a><a>Jazz</a><span>Sub</span></div></body>'
     ])
@@ -140,8 +142,39 @@ describe('queryHmv', () => {
     })
   })
 
-  it('prefers LLM results but falls back to the extracted cover image', async () => {
+  it('prefers DOM extraction and skips LLM when the name is found', async () => {
     const { page, browser } = createHmvPage()
+    page.evaluate = createDomEvaluate([
+      '<div class="priceInfoBlock"><span class="price">¥2,200</span></div>',
+      '<div class="productSpec"></div>'
+    ])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+    mockTryLLMParse.mockResolvedValue({
+      platform: 'hmv',
+      name: 'LLM Album',
+      artist: null,
+      priceMin: null,
+      priceMax: null,
+      coverUrl: null,
+      link: null,
+      status: 'found'
+    })
+
+    const result = await runWithFakeTimers(() => queryHmv('ABC-123'))
+
+    expect(result.name).toBe('HMV Album')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
+  })
+
+  it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+    const { page, browser, firstItem } = createHmvPage()
+    firstItem.$eval.mockImplementation(async (selector: string) => {
+      if (selector === '.itemText h3 a, .itemText .title a') return null
+      if (selector === '.itemImg img') return '//cdn.hmv.example/cover.jpg'
+      if (selector === '.itemImg a, h3 a') return '/product/1'
+      if (selector === '.itemStates .price .right') return '¥2,200'
+      return null
+    })
     page.evaluate = createDomEvaluate(['<body>normal search page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
     mockTryLLMParse.mockResolvedValue({
@@ -159,6 +192,7 @@ describe('queryHmv', () => {
 
     expect(result.name).toBe('LLM Album')
     expect(result.coverUrl).toBe('https://cdn.hmv.example/cover.jpg')
+    expect(mockTryLLMParse).toHaveBeenCalled()
   })
 
   it('returns a query error when the browser fails', async () => {

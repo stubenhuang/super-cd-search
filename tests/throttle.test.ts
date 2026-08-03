@@ -40,6 +40,38 @@ describe('throttledFetch', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://plain.test/1', undefined)
   })
 
+  it('uses a custom delay range when provided', async () => {
+    fetchMock.mockResolvedValue(new Response('ok', { status: 200 }))
+
+    const promise = throttledFetch(
+      'custom.test',
+      'https://custom.test/1',
+      undefined,
+      { minDelay: 10, maxDelay: 20 }
+    )
+    await vi.advanceTimersByTimeAsync(30)
+    const response = await promise
+
+    expect(response.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('spaces consecutive requests from the completion of the previous one', async () => {
+    fetchMock.mockResolvedValue(new Response('ok', { status: 200 }))
+
+    const first = throttledFetch('spaced.test', 'https://spaced.test/1', undefined, { minDelay: 200, maxDelay: 200 })
+    await vi.advanceTimersByTimeAsync(50)
+    await first
+
+    const second = throttledFetch('spaced.test', 'https://spaced.test/2', undefined, { minDelay: 200, maxDelay: 200 })
+    await vi.advanceTimersByTimeAsync(50)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(200)
+    await second
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('retries with backoff on 429 responses', async () => {
     fetchMock
       .mockResolvedValueOnce(new Response('rate', { status: 429 }))

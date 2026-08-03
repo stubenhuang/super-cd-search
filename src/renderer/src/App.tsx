@@ -38,9 +38,10 @@ interface PlatformResultRowProps {
 }
 
 const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice }: PlatformResultRowProps) {
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const [imageError, setImageError] = useState(false)
   const [imageData, setImageData] = useState<string | null>(null)
+  const [imageError, setImageError] = useState(false)
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const imageContainerRef = useRef<HTMLDivElement | null>(null)
 
   const formatPrice = (min: number | null, max: number | null): string => {
     if (min === null && max === null) return '-'
@@ -66,7 +67,8 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
 
   const cardClass = `platform-card ${result.status}${isLowestPrice ? ' lowest' : ''}`
 
-  // Load image through proxy on mount
+  // Load the cover thumbnail through the main-process proxy only when the
+  // card scrolls into view, so offscreen results don't block rendering.
   useEffect(() => {
     if (!result.coverUrl) {
       setImageError(true)
@@ -76,7 +78,7 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
     let cancelled = false
     const loadImage = async () => {
       try {
-        const data = await window.electronAPI.fetchImage(result.coverUrl!)
+        const data = await window.electronAPI.fetchImage(result.coverUrl!, 160)
         if (cancelled) return
         if (data) {
           setImageData(`data:${data.mimeType};base64,${data.base64}`)
@@ -87,8 +89,25 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
         if (!cancelled) setImageError(true)
       }
     }
-    loadImage()
-    return () => { cancelled = true }
+
+    const container = imageContainerRef.current
+    if (!container || typeof IntersectionObserver === 'undefined') {
+      loadImage()
+      return () => { cancelled = true }
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        observer.disconnect()
+        loadImage()
+      }
+    }, { rootMargin: '300px' })
+    observer.observe(container)
+
+    return () => {
+      cancelled = true
+      observer.disconnect()
+    }
   }, [result.coverUrl])
 
   return (
@@ -101,7 +120,7 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
       <div className="platform-card-content">
         <div className="platform-card-name">{PLATFORM_LABELS[result.platform] || result.platform}</div>
         <div className="platform-card-body">
-          <div className="platform-card-image">
+          <div className="platform-card-image" ref={imageContainerRef}>
             {result.coverUrl && !imageError ? (
               <>
                 {!imageLoaded && <div className="image-placeholder" />}
@@ -229,7 +248,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState<Map<string, QueryResult[]>>(new Map())
   const [catalogOrder, setCatalogOrder] = useState<string[]>([])
-  const [progress, setProgress] = useState<BatchQueryProgressEvent[]>([])
+  const [progressStatus, setProgressStatus] = useState<Map<string, string>>(new Map())
+  const [completedCatalogs, setCompletedCatalogs] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
   const [activeTab, setActiveTab] = useState<'results' | 'history'>('results')
   const [toast, setToast] = useState<string | null>(null)
@@ -264,7 +284,8 @@ function App() {
 
     setError(null)
     setIsLoading(true)
-    setProgress([])
+    setProgressStatus(new Map())
+    setCompletedCatalogs(new Set())
     setResults(new Map())
     setCatalogOrder(catalogNumbers)
     setIsCancelling(false)
@@ -299,7 +320,6 @@ function App() {
   useEffect(() => {
     const handleProgress = (...args: unknown[]) => {
       const data = args[0] as BatchQueryProgressEvent
-      setProgress(prev => [...prev, data])
 
       if (data.event === QueryEvents.RESULT && data.results) {
         const incomingResults = data.results
@@ -308,6 +328,20 @@ function App() {
           const existing = newMap.get(data.catalogNumber) || []
           newMap.set(data.catalogNumber, mergePlatformResults(existing, incomingResults))
           return newMap
+        })
+      }
+
+      if (data.event === QueryEvents.COMPLETE) {
+        setCompletedCatalogs(prev => {
+          const next = new Set(prev)
+          next.add(data.catalogNumber)
+          return next
+        })
+      } else if (data.event !== QueryEvents.START && data.platform !== 'all') {
+        setProgressStatus(prev => {
+          const next = new Map(prev)
+          next.set(`${data.catalogNumber}:${data.platform}`, data.status)
+          return next
         })
       }
 
@@ -328,7 +362,8 @@ function App() {
     prevIsLoadingRef.current = isLoading
   }, [isLoading, results.size])
 
-  const completedCount = progress.filter(p => p.event === QueryEvents.COMPLETE).length
+  const completedCount = completedCatalogs.size
+  const hasProgress = completedCatalogs.size > 0 || progressStatus.size > 0
   const catalogNumbers = useMemo(() => parseCatalogNumbers(input), [input, parseCatalogNumbers])
   // Use catalogOrder for progress calculation to keep progress at 100% after completion
   const totalCount = catalogOrder.length || catalogNumbers.length || 0
@@ -336,15 +371,19 @@ function App() {
 
   const progressByCatalog = useMemo(() => {
     const map = new Map<string, Map<string, string>>()
-    for (const p of progress) {
-      if (!(enabledPlatforms as readonly string[]).includes(p.platform)) continue
-      if (!map.has(p.catalogNumber)) {
-        map.set(p.catalogNumber, new Map())
+    for (const [key, status] of progressStatus) {
+      const separator = key.indexOf(':')
+      if (separator <= 0) continue
+      const catalogNumber = key.slice(0, separator)
+      const platform = key.slice(separator + 1)
+      if (!(enabledPlatforms as readonly string[]).includes(platform)) continue
+      if (!map.has(catalogNumber)) {
+        map.set(catalogNumber, new Map())
       }
-      map.get(p.catalogNumber)!.set(p.platform, p.status)
+      map.get(catalogNumber)!.set(platform, status)
     }
     return map
-  }, [progress, enabledPlatforms])
+  }, [progressStatus, enabledPlatforms])
 
   const handleLoadHistory = useCallback(async (queryId: number) => {
     const entry = await window.electronAPI.getHistoryEntry(queryId)
@@ -445,7 +484,7 @@ function App() {
                 </button>
               )}
             </div>
-            {(isLoading || progress.length > 0) && (
+            {(isLoading || hasProgress) && (
               <div className="run-progress">
                 <div className="progress-summary">
                   <span className="progress-label">{completedCount}/{totalCount} 完成</span>
@@ -523,7 +562,7 @@ function App() {
           <div className="panel-content">
             {activeTab === 'results' && (
               <>
-                {results.size === 0 && progress.length === 0 && (
+                {results.size === 0 && !hasProgress && (
                   <p className="placeholder-text">
                     Search results will appear here.
                   </p>
@@ -534,7 +573,7 @@ function App() {
                     <p>正在取消...</p>
                   </div>
                 )}
-                {!isCancelling && progress.length > 0 && results.size === 0 && (
+                {!isCancelling && hasProgress && results.size === 0 && (
                   <div className="progress-area">
                     <div className="spinner" />
                     <p>Querying...</p>

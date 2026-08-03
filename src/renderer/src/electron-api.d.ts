@@ -48,7 +48,7 @@ export interface IElectronAPI {
   clearAllHistory: () => Promise<void>
   exportToExcel: (results: BatchQueryResult[]) => Promise<string | null>
   openExternal: (url: string) => Promise<void>
-  fetchImage: (url: string) => Promise<{ base64: string; mimeType: string } | null>
+  fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
 }
 
 declare global {
