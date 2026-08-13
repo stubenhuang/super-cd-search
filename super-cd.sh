@@ -20,9 +20,6 @@ cmd_fresh() {
   info "Building app..."
   npm run build
 
-  info "Rebuilding native modules for Electron..."
-  npm run rebuild
-
   info "Starting dev server..."
   npm run dev
 }
@@ -33,9 +30,6 @@ cmd_mac() {
 
   info "Building app..."
   npm run build
-
-  info "Rebuilding native modules for Electron..."
-  npm run rebuild
 
   info "Creating macOS DMG..."
   npm run dist
@@ -50,9 +44,6 @@ cmd_win() {
 
   info "Building app..."
   npm run build
-
-  info "Rebuilding native modules for Electron..."
-  npm run rebuild
 
   info "Creating Windows ZIP..."
   npm run dist:win
@@ -69,6 +60,7 @@ Usage: $(basename "$0") <command>
 
 Commands:
   fresh    Clean + build + start dev server
+  refresh  Alias for fresh
   mac      Build and package as DMG for macOS
   win      Build and package as ZIP for Windows
 
@@ -80,7 +72,7 @@ EOF
 }
 
 case "${1:-}" in
-  fresh) cmd_fresh ;;
+  fresh|refresh) cmd_fresh ;;
   mac)   cmd_mac ;;
   win)   cmd_win ;;
   -h|--help|help) usage ;;
