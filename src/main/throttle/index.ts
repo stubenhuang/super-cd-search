@@ -26,6 +26,29 @@ interface BackoffState {
 const domainStates = new Map<string, DomainState>()
 const backoffStates = new Map<string, BackoffState>()
 
+// Shared SOCKS proxy agents (one per proxy endpoint). Reusing the agent lets
+// undici keep the underlying TCP/TLS connections alive across requests instead
+// of opening a fresh connection for every fetch.
+const proxyAgents = new Map<string, SocksProxyAgent>()
+
+function getProxyAgent(host: string, port: number): SocksProxyAgent {
+  const key = `${host}:${port}`
+  let agent = proxyAgents.get(key)
+  if (!agent) {
+    agent = new SocksProxyAgent(`socks5://${host}:${port}`, { keepAlive: true })
+    proxyAgents.set(key, agent)
+  }
+  return agent
+}
+
+/** Close all pooled proxy connections; call once on app shutdown. */
+export function destroyProxyAgents(): void {
+  for (const agent of proxyAgents.values()) {
+    agent.destroy()
+  }
+  proxyAgents.clear()
+}
+
 const MIN_DELAY = 2000
 const MAX_DELAY = 6000
 const BACKOFF_DELAYS = [2000, 4000, 8000]
@@ -89,7 +112,7 @@ export async function throttledFetch(
         const proxyPort = getSetting('proxyPort')
 
         if (proxyEnabled && proxyHost && proxyPort) {
-          const agent = new SocksProxyAgent(`socks5://${proxyHost}:${proxyPort}`)
+          const agent = getProxyAgent(proxyHost, proxyPort)
           response = await fetch(url, { ...options, agent } as NodeFetchOptions)
         } else {
           response = await fetch(url, options)

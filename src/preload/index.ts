@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Settings, BatchQueryResult, ThrottleStatus, HistoryBatch, HistoryEntry } from '../shared/types'
+import type { Settings, BatchQueryResult, ThrottleStatus, HistoryBatch, HistoryEntry, Platform } from '../shared/types'
 
 const validSendChannels = ['toMain'] as const
 const validReceiveChannels = ['fromMain', 'query:progress'] as const
@@ -23,8 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteSetting: <K extends keyof Settings>(key: K): Promise<void> =>
     ipcRenderer.invoke('deleteSetting', key),
   getThrottleStatus: (): Promise<ThrottleStatus> => ipcRenderer.invoke('getThrottleStatus'),
-  executeBatchQuery: (catalogNumbers: string[], includeKojima?: boolean): Promise<BatchQueryResult[]> =>
-    ipcRenderer.invoke('executeBatchQuery', catalogNumbers, includeKojima),
+  executeBatchQuery: (catalogNumbers: string[], platforms?: Platform[]): Promise<BatchQueryResult[]> =>
+    ipcRenderer.invoke('executeBatchQuery', catalogNumbers, platforms),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
   getHistory: (): Promise<HistoryBatch[]> => ipcRenderer.invoke('getHistory'),

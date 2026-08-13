@@ -6,6 +6,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
 import { type Page, type ElementHandle } from 'puppeteer'
 import { tryLLMParse } from '../llm/parser'
+import { getCachedQueryResult, cacheQueryResult } from './cache'
 
 const EBAY_API_URL = 'https://api.ebay.com'
 const EBAY_WEB_URL = 'https://www.ebay.com'
@@ -386,17 +387,24 @@ async function queryEbayWeb(catalogNumber: string, cookies?: string): Promise<Qu
 }
 
 export async function queryEbay(catalogNumber: string): Promise<QueryResult> {
+  const cached = getCachedQueryResult('ebay', catalogNumber)
+  if (cached) return cached
+
   const cookies = getSetting('cookies')?.ebay
 
-  try {
-    return await queryEbayApi(catalogNumber)
-  } catch (err) {
-    console.warn('eBay API failed, falling back to web scraping:', err)
-  }
+  let result: QueryResult
 
   try {
-    return await queryEbayWeb(catalogNumber, cookies)
+    result = await queryEbayApi(catalogNumber)
   } catch (err) {
-    return queryError('ebay', err instanceof Error ? err.message : 'Unknown error')
+    console.warn('eBay API failed, falling back to web scraping:', err)
+    try {
+      result = await queryEbayWeb(catalogNumber, cookies)
+    } catch (webErr) {
+      result = queryError('ebay', webErr instanceof Error ? webErr.message : 'Unknown error')
+    }
   }
+
+  cacheQueryResult(catalogNumber, result)
+  return result
 }

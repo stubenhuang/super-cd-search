@@ -11,7 +11,9 @@ export function buildParsePrompt(
     ebay: 'eBay',
     kojima: 'Kojima Rokuon',
     hmv: 'HMV Japan',
-    yahoo: 'Yahoo Shopping Japan'
+    yahoo: 'Yahoo Shopping Japan',
+    cdjapan: 'CDJapan',
+    tower: 'Tower Records Japan'
   }
 
   return `You are a CD/vinyl product information extractor. Extract product details from the following webpage content.

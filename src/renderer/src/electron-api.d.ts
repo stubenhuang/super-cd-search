@@ -40,7 +40,7 @@ export interface IElectronAPI {
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>
   deleteSetting: <K extends keyof Settings>(key: K) => Promise<void>
   getThrottleStatus: () => Promise<ThrottleStatus>
-  executeBatchQuery: (catalogNumbers: string[], includeKojima?: boolean) => Promise<BatchQueryResult[]>
+  executeBatchQuery: (catalogNumbers: string[], platforms?: Platform[]) => Promise<BatchQueryResult[]>
   cancelBatchQuery: () => Promise<void>
   getHistory: () => Promise<HistoryBatch[]>
   getHistoryEntry: (queryId: number) => Promise<HistoryEntry | null>

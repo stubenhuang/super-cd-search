@@ -4,20 +4,9 @@ import { SettingsPanel } from './Settings'
 import { HistoryView } from './History'
 import { DetailModal } from './DetailModal'
 import { normalizeCatalogNumber } from '../../shared/utils'
+import { PLATFORMS, PLATFORM_LABELS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import './App.css'
-
-const PLATFORM_LABELS: Record<Platform, string> = {
-  discogs: 'Discogs',
-  ebay: 'eBay',
-  kojima: 'Kojima Rokuon',
-  hmv: 'HMV Japan',
-  yahoo: 'Yahoo Shopping'
-}
-
-const PLATFORMS: Platform[] = ['discogs', 'ebay', 'kojima', 'hmv', 'yahoo']
-
-const DEFAULT_ENABLED_PLATFORMS: Platform[] = ['discogs', 'ebay', 'hmv', 'yahoo']
 
 function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]): QueryResult[] {
   const merged = [...existing]
@@ -255,14 +244,27 @@ function App() {
   const [toast, setToast] = useState<string | null>(null)
   const cancelledRef = useRef(false)
   const [isCancelling, setIsCancelling] = useState(false)
-  const [kojimaEnabled, setKojimaEnabled] = useState(false)
+  const [enabledPlatforms, setEnabledPlatforms] = useState<Platform[]>(['discogs', 'ebay'])
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null)
   const prevIsLoadingRef = useRef(false)
 
-  const enabledPlatforms = useMemo(() => {
-    return kojimaEnabled ? PLATFORMS : DEFAULT_ENABLED_PLATFORMS
-  }, [kojimaEnabled])
+  const togglePlatform = useCallback((platform: Platform, checked: boolean) => {
+    setEnabledPlatforms(prev => {
+      if (checked) {
+        return prev.includes(platform) ? prev : [...prev, platform]
+      }
+      return prev.filter(p => p !== platform)
+    })
+  }, [])
+
+  const selectAllPlatforms = useCallback(() => {
+    setEnabledPlatforms([...PLATFORMS])
+  }, [])
+
+  const clearPlatforms = useCallback(() => {
+    setEnabledPlatforms([])
+  }, [])
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
@@ -292,7 +294,7 @@ function App() {
     cancelledRef.current = false
 
     try {
-      const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, kojimaEnabled)
+      const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, enabledPlatforms)
       setResults(prev => {
         const merged = new Map(prev)
         for (const batch of batchResults) {
@@ -309,7 +311,7 @@ function App() {
       setIsLoading(false)
       setIsCancelling(false)
     }
-  }, [input, parseCatalogNumbers, kojimaEnabled])
+  }, [input, parseCatalogNumbers, enabledPlatforms])
 
   const handleCancel = useCallback(async () => {
     cancelledRef.current = true
@@ -376,7 +378,7 @@ function App() {
       if (separator <= 0) continue
       const catalogNumber = key.slice(0, separator)
       const platform = key.slice(separator + 1)
-      if (!(enabledPlatforms as readonly string[]).includes(platform)) continue
+      if (!enabledPlatforms.includes(platform as Platform)) continue
       if (!map.has(catalogNumber)) {
         map.set(catalogNumber, new Map())
       }
@@ -450,23 +452,50 @@ function App() {
               rows={10}
             />
             {error && <div className="error-message">{error}</div>}
-            <div className="kojima-toggle">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={kojimaEnabled}
-                  onChange={e => setKojimaEnabled(e.target.checked)}
-                  disabled={isLoading || isCancelling}
-                />
-                <span>包含 Kojima Rokuon</span>
-                <span className="checkbox-hint">（其他渠道无结果时再勾选）</span>
-              </label>
+            <div className="platform-selector">
+              <div className="platform-selector-header">
+                <span className="platform-selector-title">检索源</span>
+                <div className="platform-selector-actions">
+                  <button
+                    type="button"
+                    className="platform-selector-link"
+                    onClick={selectAllPlatforms}
+                    disabled={isLoading || isCancelling}
+                  >
+                    全选
+                  </button>
+                  <button
+                    type="button"
+                    className="platform-selector-link"
+                    onClick={clearPlatforms}
+                    disabled={isLoading || isCancelling}
+                  >
+                    清空
+                  </button>
+                </div>
+              </div>
+              <div className="platform-options">
+                {PLATFORMS.map(p => (
+                  <label key={p} className="platform-option">
+                    <input
+                      type="checkbox"
+                      checked={enabledPlatforms.includes(p)}
+                      onChange={e => togglePlatform(p, e.target.checked)}
+                      disabled={isLoading || isCancelling}
+                    />
+                    <span className="platform-option-label">{PLATFORM_LABELS[p]}</span>
+                  </label>
+                ))}
+              </div>
+              {enabledPlatforms.length === 0 && (
+                <div className="platform-selector-hint">请选择至少一个检索源</div>
+              )}
             </div>
             <div className="search-actions">
               <button
                 className="search-button"
                 onClick={handleSearch}
-                disabled={isLoading || isCancelling}
+                disabled={isLoading || isCancelling || enabledPlatforms.length === 0}
               >
                 {isCancelling ? 'Cancelling...' : isLoading ? 'Searching...' : 'Search'}
               </button>

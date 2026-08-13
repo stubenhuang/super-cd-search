@@ -17,6 +17,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [cookiesDiscogs, setCookiesDiscogs] = useState('')
   const [cookiesEbay, setCookiesEbay] = useState('')
   const [cookiesKojima, setCookiesKojima] = useState('')
+  const [cookiesHmv, setCookiesHmv] = useState('')
+  const [cookiesYahoo, setCookiesYahoo] = useState('')
+  const [cookiesCdjapan, setCookiesCdjapan] = useState('')
+  const [cookiesTower, setCookiesTower] = useState('')
   const [proxyEnabled, setProxyEnabled] = useState(false)
   const [proxyHost, setProxyHost] = useState('')
   const [proxyPort, setProxyPort] = useState(1080)
@@ -30,6 +34,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [llmPlatformKojima, setLlmPlatformKojima] = useState(true)
   const [llmPlatformHmv, setLlmPlatformHmv] = useState(true)
   const [llmPlatformYahoo, setLlmPlatformYahoo] = useState(true)
+  const [llmPlatformCdjapan, setLlmPlatformCdjapan] = useState(true)
+  const [llmPlatformTower, setLlmPlatformTower] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -47,6 +53,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setCookiesDiscogs(settings.cookies?.discogs || '')
     setCookiesEbay(settings.cookies?.ebay || '')
     setCookiesKojima(settings.cookies?.kojima || '')
+    setCookiesHmv(settings.cookies?.hmv || '')
+    setCookiesYahoo(settings.cookies?.yahoo || '')
+    setCookiesCdjapan(settings.cookies?.cdjapan || '')
+    setCookiesTower(settings.cookies?.tower || '')
     setProxyEnabled(settings.proxyEnabled || false)
     setProxyHost(settings.proxyHost || '')
     setProxyPort(settings.proxyPort || 1080)
@@ -61,6 +71,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setLlmPlatformKojima(llm?.platformEnabled?.kojima ?? true)
     setLlmPlatformHmv(llm?.platformEnabled?.hmv ?? true)
     setLlmPlatformYahoo(llm?.platformEnabled?.yahoo ?? true)
+    setLlmPlatformCdjapan(llm?.platformEnabled?.cdjapan ?? true)
+    setLlmPlatformTower(llm?.platformEnabled?.tower ?? true)
   }, [])
 
   const handleSave = async () => {
@@ -72,7 +84,11 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       await window.electronAPI.setSetting('cookies', {
         discogs: cookiesDiscogs,
         ebay: cookiesEbay,
-        kojima: cookiesKojima
+        kojima: cookiesKojima,
+        hmv: cookiesHmv,
+        yahoo: cookiesYahoo,
+        cdjapan: cookiesCdjapan,
+        tower: cookiesTower
       })
       await window.electronAPI.setSetting('proxyEnabled', proxyEnabled)
       await window.electronAPI.setSetting('proxyHost', proxyHost)
@@ -88,7 +104,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           ebay: llmPlatformEbay,
           kojima: llmPlatformKojima,
           hmv: llmPlatformHmv,
-          yahoo: llmPlatformYahoo
+          yahoo: llmPlatformYahoo,
+          cdjapan: llmPlatformCdjapan,
+          tower: llmPlatformTower
         }
       })
       setToast('Settings saved successfully')
@@ -215,6 +233,54 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 className="st-textarea"
                 value={cookiesKojima}
                 onChange={e => setCookiesKojima(e.target.value)}
+                placeholder="Paste cookies string here..."
+                rows={3}
+              />
+            </div>
+            <div className="st-field">
+              <label className="st-label">
+                <span className="st-label-icon">◈</span> HMV Japan Cookies
+              </label>
+              <textarea
+                className="st-textarea"
+                value={cookiesHmv}
+                onChange={e => setCookiesHmv(e.target.value)}
+                placeholder="Paste cookies string here..."
+                rows={3}
+              />
+            </div>
+            <div className="st-field">
+              <label className="st-label">
+                <span className="st-label-icon">◈</span> Yahoo Shopping Cookies
+              </label>
+              <textarea
+                className="st-textarea"
+                value={cookiesYahoo}
+                onChange={e => setCookiesYahoo(e.target.value)}
+                placeholder="Paste cookies string here..."
+                rows={3}
+              />
+            </div>
+            <div className="st-field">
+              <label className="st-label">
+                <span className="st-label-icon">◈</span> CDJapan Cookies
+              </label>
+              <textarea
+                className="st-textarea"
+                value={cookiesCdjapan}
+                onChange={e => setCookiesCdjapan(e.target.value)}
+                placeholder="Paste cookies string here..."
+                rows={3}
+              />
+            </div>
+            <div className="st-field">
+              <label className="st-label">
+                <span className="st-label-icon">◈</span> Tower Records Cookies
+              </label>
+              <textarea
+                className="st-textarea"
+                value={cookiesTower}
+                onChange={e => setCookiesTower(e.target.value)}
                 placeholder="Paste cookies string here..."
                 rows={3}
               />
@@ -411,6 +477,26 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   />
                   <span className="st-check-box"></span>
                   <span className="st-check-name">Yahoo</span>
+                </label>
+                <label className={`st-check-item ${llmPlatformCdjapan ? 'checked' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformCdjapan}
+                    onChange={e => setLlmPlatformCdjapan(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">CDJapan</span>
+                </label>
+                <label className={`st-check-item ${llmPlatformTower ? 'checked' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformTower}
+                    onChange={e => setLlmPlatformTower(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">Tower</span>
                 </label>
               </div>
             </div>

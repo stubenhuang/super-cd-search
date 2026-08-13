@@ -14,6 +14,7 @@ vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }
 vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
 import { queryKojima } from '../src/main/queries/kojima'
+import { clearAllCaches } from '../src/main/queries/cache'
 
 function createKojimaPage() {
   let headingCalls = 0
@@ -51,6 +52,7 @@ async function runWithFakeTimers<T>(fn: () => Promise<T>, totalMs = 30000): Prom
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearAllCaches()
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'cookies') return { kojima: 'cookie-value' }
     return undefined
@@ -187,5 +189,44 @@ describe('queryKojima', () => {
     mockBrowserPool.acquire.mockRejectedValue(new Error('no browser'))
     const result = await queryKojima('ABC-123')
     expect(result).toMatchObject({ platform: 'kojima', status: 'error', error: 'no browser' })
+  })
+
+  it('serves a repeated lookup from the query cache without using the browser', async () => {
+    const { page, browser } = createKojimaPage()
+    page.evaluate = createDomEvaluate([
+      '<div class="product__price">¥1,000</div>',
+      '<div class="product__description"></div>'
+    ])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const first = await runWithFakeTimers(() => queryKojima('CACHED-1'))
+    expect(first.status).toBe('found')
+    expect(mockBrowserPool.acquire).toHaveBeenCalledTimes(1)
+
+    mockBrowserPool.acquire.mockClear()
+    const second = await runWithFakeTimers(() => queryKojima('CACHED-1'))
+    expect(second).toEqual(first)
+    expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
+  })
+
+  it('reuses cached product details across different catalog numbers', async () => {
+    const { page, browser } = createKojimaPage()
+    page.evaluate = createDomEvaluate([
+      '<div class="product__price">¥2,000</div>',
+      '<div class="product__description"></div>'
+    ])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const first = await runWithFakeTimers(() => queryKojima('ALBUM-1'))
+    expect(first.status).toBe('found')
+    // Search page + product page.
+    expect(page.goto).toHaveBeenCalledTimes(2)
+
+    page.goto.mockClear()
+    const second = await runWithFakeTimers(() => queryKojima('ALBUM-2'))
+    expect(second.status).toBe('found')
+    // Only the search page is loaded; product details come from the cache.
+    expect(page.goto).toHaveBeenCalledTimes(1)
+    expect(second.priceMin).toBe(13.4)
   })
 })

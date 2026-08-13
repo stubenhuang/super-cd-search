@@ -4,9 +4,10 @@
 
 ## 功能特性
 
-- **多平台搜索**：从 Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping 查询 CD 信息
+- **多平台搜索**：从 Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping、CDJapan、Tower Records 查询 CD 信息
 - **批量处理**：同时搜索多个目录号
-- **并行加速**：平台并行查询、按域名智能限速、封面缩略图懒加载
+- **并行加速**：同一目录号的多平台并行查询、按域名智能限速
+- **缓存加速**：查询结果与产品详情页缓存（1 小时）、SOCKS 代理连接复用、封面缩略图懒加载
 - **价格对比**：跨平台比较价格
 - **历史记录**：查看历史搜索结果
 - **导出 Excel**：将搜索结果导出为 .xlsx 格式
@@ -20,6 +21,8 @@
 | Kojima Rokuon | 网页抓取 | 日本 CD 零售商 |
 | HMV Japan | 网页抓取 | 日本 CD 零售商 |
 | Yahoo Shopping | 网页抓取 | 日本电商平台 |
+| CDJapan | 网页抓取 | 日本 CD 直邮商店，按目录号直达商品页 |
+| Tower Records | 网页抓取 | 日本最大唱片连锁 |
 
 ## 安装
 

@@ -15,6 +15,7 @@ vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }
 vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
 import { queryDiscogs } from '../src/main/queries/discogs'
+import { clearAllCaches } from '../src/main/queries/cache'
 
 function okJson(data: unknown) {
   return { ok: true, status: 200, json: async () => data }
@@ -45,6 +46,7 @@ function createDiscogsPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearAllCaches()
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'discogsToken') return 'token-123'
     if (key === 'cookies') return { discogs: 'cookie-value' }
@@ -223,5 +225,25 @@ describe('queryDiscogs', () => {
       const result = await queryDiscogs('UCCG-90530')
       expect(result).toMatchObject({ platform: 'discogs', status: 'error', error: 'browser crashed' })
     })
+  })
+
+  it('serves a repeated lookup from the query cache without re-fetching', async () => {
+    mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
+      if (url.includes('/database/search')) {
+        return okJson({ results: [{ id: 7, title: 'Artist - Cached Album', catno: 'CACHED-1', uri: '/release/7' }] })
+      }
+      if (url.includes('/marketplace/price_suggestions')) return okJson({})
+      if (url.includes('/releases/')) return okJson({})
+      return { ok: false, status: 404 }
+    })
+
+    const first = await queryDiscogs('CACHED-1')
+    expect(first.status).toBe('found')
+    const callsAfterFirst = mockThrottledFetch.mock.calls.length
+
+    const second = await queryDiscogs('CACHED-1')
+    expect(second).toEqual(first)
+    expect(mockThrottledFetch.mock.calls.length).toBe(callsAfterFirst)
+    expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
   })
 })

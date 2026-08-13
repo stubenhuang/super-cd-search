@@ -345,11 +345,33 @@ describe('queryEbay', () => {
     })
 
     await queryEbay('ABC-123')
+    // Drop the query-result cache (not the module state) so the second lookup
+    // really re-runs the API path and only the access token is reused.
+    const { clearAllCaches } = await import('../src/main/queries/cache')
+    clearAllCaches()
     await queryEbay('ABC-123')
 
     const tokenCalls = mockThrottledFetch.mock.calls.filter(([, url]) =>
       url.includes('/identity/v1/oauth2/token')
     )
     expect(tokenCalls).toHaveLength(1)
+  })
+
+  it('serves a repeated lookup from the query cache without re-fetching', async () => {
+    const { queryEbay } = await loadEbay()
+    mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
+      if (url.includes('/identity/v1/oauth2/token')) return okJson({ access_token: 't', expires_in: 3600 })
+      if (url.includes('/item_summary/search')) return okJson({ itemSummaries: [{ title: 'Cached Item' }] })
+      return { ok: false, status: 404 }
+    })
+
+    const first = await queryEbay('CACHED-2')
+    expect(first.status).toBe('found')
+    const callsAfterFirst = mockThrottledFetch.mock.calls.length
+
+    const second = await queryEbay('CACHED-2')
+    expect(second).toEqual(first)
+    expect(mockThrottledFetch.mock.calls.length).toBe(callsAfterFirst)
+    expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
   })
 })

@@ -133,7 +133,9 @@ function findBestImageUrl(urls: string[], platform: Platform): string | null {
     ebay: [/\/images\/i/, /ebayimg/],
     kojima: [/\/item/, /kojima/],
     hmv: [/\/item/, /hmv/],
-    yahoo: [/\/product/, /yahoo/]
+    yahoo: [/\/product/, /yahoo/],
+    cdjapan: [/cdjapan/, /\/pictures\//],
+    tower: [/tower\.jp/, /cdn\.tower/]
   }
 
   // First try platform-specific matches
@@ -180,7 +182,9 @@ function findBestLinkUrl(urls: string[], platform: Platform, pageUrl: string): s
     ebay: [/\/itm\//, /item\/\d+/, /listing\/\d+/],
     kojima: [/\/item\//, /\/product\//],
     hmv: [/\/item\//, /\/product\//],
-    yahoo: [/\/product\//, /\/item\//, /store\//]
+    yahoo: [/\/product\//, /\/item\//, /store\//],
+    cdjapan: [/\/product\//],
+    tower: [/\/item\/\d+/]
   }
 
   // First try platform-specific product link patterns

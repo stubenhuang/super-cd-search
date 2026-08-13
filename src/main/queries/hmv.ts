@@ -3,10 +3,14 @@ import { browserPool } from '../browser'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { tryLLMParse } from '../llm/parser'
+import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 
 const HMV_WEB_URL = 'https://www.hmv.co.jp'
 
 async function getHmvProductDetails(page: import('puppeteer').Page, link: string): Promise<{ price: number | null; details: CDDetails }> {
+  const cached = getCachedProductData<{ price: number | null; details: CDDetails }>('hmv', link)
+  if (cached) return cached
+
   const details: CDDetails = { label: null, format: null, country: null, released: null, genre: null }
   let price: number | null = null
 
@@ -114,11 +118,13 @@ async function getHmvProductDetails(page: import('puppeteer').Page, link: string
     // HMV is Japan-based
     details.country = 'Japan'
 
+    const result = { price, details }
+    cacheProductData('hmv', link, result)
+    return result
   } catch (err) {
     console.warn('HMV: failed to get details from product page:', err)
+    return { price: null, details }
   }
-
-  return { price, details }
 }
 
 async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
@@ -252,11 +258,19 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
 }
 
 export async function queryHmv(catalogNumber: string): Promise<QueryResult> {
+  const cached = getCachedQueryResult('hmv', catalogNumber)
+  if (cached) return cached
+
   const cookies = getSetting('cookies')?.hmv
 
+  let result: QueryResult
+
   try {
-    return await queryHmvWeb(catalogNumber, cookies)
+    result = await queryHmvWeb(catalogNumber, cookies)
   } catch (err) {
-    return queryError('hmv', err instanceof Error ? err.message : 'Unknown error')
+    result = queryError('hmv', err instanceof Error ? err.message : 'Unknown error')
   }
+
+  cacheQueryResult(catalogNumber, result)
+  return result
 }

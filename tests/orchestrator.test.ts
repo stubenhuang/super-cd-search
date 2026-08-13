@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { BrowserWindow } from 'electron'
 
-const { mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQueryYahoo } = vi.hoisted(() => ({
+const { mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQueryYahoo, mockQueryCdjapan, mockQueryTower } = vi.hoisted(() => ({
   mockQueryDiscogs: vi.fn(),
   mockQueryEbay: vi.fn(),
   mockQueryKojima: vi.fn(),
   mockQueryHmv: vi.fn(),
-  mockQueryYahoo: vi.fn()
+  mockQueryYahoo: vi.fn(),
+  mockQueryCdjapan: vi.fn(),
+  mockQueryTower: vi.fn()
 }))
 
 const { mockGetDatabase } = vi.hoisted(() => ({
@@ -18,6 +20,8 @@ vi.mock('../src/main/queries/ebay', () => ({ queryEbay: mockQueryEbay }))
 vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mockQueryKojima }))
 vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
 vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
+vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
+vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
 vi.mock('../src/main/database', () => ({ getDatabase: mockGetDatabase }))
 
 import {
@@ -66,6 +70,8 @@ beforeEach(() => {
   mockQueryKojima.mockResolvedValue(found('kojima'))
   mockQueryHmv.mockResolvedValue(found('hmv'))
   mockQueryYahoo.mockResolvedValue(found('yahoo'))
+  mockQueryCdjapan.mockResolvedValue(found('cdjapan'))
+  mockQueryTower.mockResolvedValue(found('tower'))
 })
 
 afterEach(() => {
@@ -77,16 +83,18 @@ describe('executeBatchQuery', () => {
     const results = await executeBatchQuery(['uccg90530', 'UICD-6234'])
 
     expect(results.map(r => r.catalogNumber)).toEqual(['UCCG-90530', 'UICD-6234'])
-    expect(results[0].results).toHaveLength(5)
+    expect(results[0].results).toHaveLength(7)
     expect(mockQueryDiscogs).toHaveBeenCalledWith('UCCG-90530')
     expect(mockQueryEbay).toHaveBeenCalledWith('UCCG-90530')
     expect(mockQueryKojima).toHaveBeenCalledWith('UCCG-90530')
     expect(mockQueryHmv).toHaveBeenCalledWith('UCCG-90530')
     expect(mockQueryYahoo).toHaveBeenCalledWith('UCCG-90530')
+    expect(mockQueryCdjapan).toHaveBeenCalledWith('UCCG-90530')
+    expect(mockQueryTower).toHaveBeenCalledWith('UCCG-90530')
 
     // Each catalog is persisted inside a transaction
     expect(insertQueryRun).toHaveBeenCalledTimes(2)
-    expect(insertResultRun).toHaveBeenCalledTimes(10)
+    expect(insertResultRun).toHaveBeenCalledTimes(14)
 
     // Progress events are emitted per platform
     const events = sendMock.mock.calls.map(([channel, data]) => ({ channel, event: data.event }))
@@ -94,10 +102,16 @@ describe('executeBatchQuery', () => {
     expect(events.filter(e => e.event === 'query:complete')).toHaveLength(2)
   })
 
-  it('skips Kojima when includeKojima is false', async () => {
-    const results = await executeBatchQuery(['X-1'], false)
+  it('only queries the platforms passed in', async () => {
+    const results = await executeBatchQuery(['X-1'], ['discogs', 'ebay', 'hmv', 'yahoo'])
     expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'ebay', 'hmv', 'yahoo'])
     expect(mockQueryKojima).not.toHaveBeenCalled()
+    expect(mockQueryCdjapan).not.toHaveBeenCalled()
+    expect(mockQueryTower).not.toHaveBeenCalled()
+  })
+
+  it('throws when no platforms are selected', async () => {
+    await expect(executeBatchQuery(['X-1'], [])).rejects.toThrow('No platforms selected')
   })
 
   it('runs platforms concurrently within a catalog and keeps canonical order', async () => {
@@ -111,12 +125,14 @@ describe('executeBatchQuery', () => {
     mockQueryKojima.mockImplementation(async () => { called.push('kojima'); return found('kojima') })
     mockQueryHmv.mockImplementation(async () => { called.push('hmv'); return found('hmv') })
     mockQueryYahoo.mockImplementation(async () => { called.push('yahoo'); return found('yahoo') })
+    mockQueryCdjapan.mockImplementation(async () => { called.push('cdjapan'); return found('cdjapan') })
+    mockQueryTower.mockImplementation(async () => { called.push('tower'); return found('tower') })
 
     const results = await executeBatchQuery(['X-1'])
 
     // Fast platforms must not wait for the slow one.
-    expect(called).toEqual(['ebay', 'kojima', 'hmv', 'yahoo', 'discogs'])
-    expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'ebay', 'kojima', 'hmv', 'yahoo'])
+    expect(called).toEqual(['ebay', 'kojima', 'hmv', 'yahoo', 'cdjapan', 'tower', 'discogs'])
+    expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'ebay', 'kojima', 'hmv', 'yahoo', 'cdjapan', 'tower'])
   })
 
   it('throws when no catalog numbers are provided', async () => {
@@ -135,8 +151,8 @@ describe('executeBatchQuery', () => {
     const results = await executeBatchQuery(['X-1'])
     const ebayResult = results[0].results.find(r => r.platform === 'ebay')
     expect(ebayResult).toMatchObject({ status: 'error', error: 'eBay is down' })
-    expect(results[0].results).toHaveLength(5)
-    expect(insertResultRun).toHaveBeenCalledTimes(5)
+    expect(results[0].results).toHaveLength(7)
+    expect(insertResultRun).toHaveBeenCalledTimes(7)
   })
 
   it('aborts in-flight queries and emits a batch-cancelled event', async () => {

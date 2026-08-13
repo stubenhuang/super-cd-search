@@ -14,6 +14,7 @@ vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }
 vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
 import { queryYahoo } from '../src/main/queries/yahoo'
+import { clearAllCaches } from '../src/main/queries/cache'
 
 function createYahooPage() {
   const firstItem = {
@@ -49,6 +50,7 @@ async function runWithFakeTimers<T>(fn: () => Promise<T>, totalMs = 30000): Prom
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearAllCaches()
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'cookies') return { yahoo: 'cookie-value' }
     return undefined
@@ -191,5 +193,40 @@ describe('queryYahoo', () => {
     mockBrowserPool.acquire.mockRejectedValue(new Error('no browser'))
     const result = await queryYahoo('ABC-123')
     expect(result).toMatchObject({ platform: 'yahoo', status: 'error', error: 'no browser' })
+  })
+
+  it('serves a repeated lookup from the query cache without using the browser', async () => {
+    const { page, browser } = createYahooPage()
+    page.evaluate = createDomEvaluate(['<body>nothing here</body>'])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const first = await runWithFakeTimers(() => queryYahoo('CACHED-1'))
+    expect(first.status).toBe('found')
+    expect(mockBrowserPool.acquire).toHaveBeenCalledTimes(1)
+
+    mockBrowserPool.acquire.mockClear()
+    const second = await runWithFakeTimers(() => queryYahoo('CACHED-1'))
+    expect(second).toEqual(first)
+    expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
+  })
+
+  it('reuses cached product details across different catalog numbers', async () => {
+    const { page, browser } = createYahooPage()
+    page.evaluate = createDomEvaluate([
+      '<table><tr><th>フォーマット</th><td>CD</td></tr></table>'
+    ])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const first = await runWithFakeTimers(() => queryYahoo('ALBUM-1'))
+    expect(first.status).toBe('found')
+    // Search page + product page.
+    expect(page.goto).toHaveBeenCalledTimes(2)
+
+    page.goto.mockClear()
+    const second = await runWithFakeTimers(() => queryYahoo('ALBUM-2'))
+    expect(second.status).toBe('found')
+    // Only the search page is loaded; product details come from the cache.
+    expect(page.goto).toHaveBeenCalledTimes(1)
+    expect(second.details).toMatchObject({ format: 'CD' })
   })
 })

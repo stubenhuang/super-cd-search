@@ -44,7 +44,9 @@ const enabledSettings = {
     ebay: true,
     kojima: true,
     hmv: true,
-    yahoo: true
+    yahoo: true,
+    cdjapan: true,
+    tower: true
   }
 }
 
@@ -74,7 +76,7 @@ describe('tryLLMParse', () => {
   it('returns null when the platform is disabled', async () => {
     setupSettings({
       ...enabledSettings,
-      platformEnabled: { discogs: false, ebay: false, kojima: false, hmv: false, yahoo: false }
+      platformEnabled: { discogs: false, ebay: false, kojima: false, hmv: false, yahoo: false, cdjapan: false, tower: false }
     })
     expect(await tryLLMParse('discogs', 'X-1', '<html/>', 'https://x')).toBeNull()
   })

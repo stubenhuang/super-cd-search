@@ -1,12 +1,15 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import type { QueryResult, CDDetails } from './electron-api'
+import { PLATFORM_LABELS } from '../../shared/platforms'
 
 const PLATFORM_PRIORITY: Record<string, number> = {
   discogs: 0,
   hmv: 1,
   kojima: 2,
   yahoo: 3,
-  ebay: 4
+  ebay: 4,
+  cdjapan: 5,
+  tower: 6
 }
 
 const DETAIL_LABELS: Record<keyof CDDetails, string> = {
@@ -156,11 +159,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
               {displayArtist && <p className="detail-modal-artist">{displayArtist}</p>}
               {primaryResult?.platform && (
                 <span className="detail-modal-source">
-                  来源: {primaryResult.platform === 'discogs' ? 'Discogs' :
-                         primaryResult.platform === 'ebay' ? 'eBay' :
-                         primaryResult.platform === 'hmv' ? 'HMV Japan' :
-                         primaryResult.platform === 'yahoo' ? 'Yahoo Shopping' :
-                         'Kojima Rokuon'}
+                  来源: {PLATFORM_LABELS[primaryResult.platform] || primaryResult.platform}
                 </span>
               )}
             </div>

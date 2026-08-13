@@ -12,7 +12,9 @@ const baseSettings = {
     ebay: true,
     kojima: true,
     hmv: true,
-    yahoo: true
+    yahoo: true,
+    cdjapan: true,
+    tower: true
   }
 }
 

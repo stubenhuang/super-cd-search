@@ -12,7 +12,11 @@ const schema = {
     properties: {
       discogs: { type: 'string' as const, default: '' },
       ebay: { type: 'string' as const, default: '' },
-      kojima: { type: 'string' as const, default: '' }
+      kojima: { type: 'string' as const, default: '' },
+      hmv: { type: 'string' as const, default: '' },
+      yahoo: { type: 'string' as const, default: '' },
+      cdjapan: { type: 'string' as const, default: '' },
+      tower: { type: 'string' as const, default: '' }
     },
     default: {}
   },
@@ -34,7 +38,9 @@ const schema = {
           ebay: { type: 'boolean' as const, default: true },
           kojima: { type: 'boolean' as const, default: true },
           hmv: { type: 'boolean' as const, default: true },
-          yahoo: { type: 'boolean' as const, default: true }
+          yahoo: { type: 'boolean' as const, default: true },
+          cdjapan: { type: 'boolean' as const, default: true },
+          tower: { type: 'boolean' as const, default: true }
         },
         default: {}
       }

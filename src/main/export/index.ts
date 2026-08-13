@@ -124,7 +124,11 @@ export async function exportToExcel(results: BatchQueryResult[]): Promise<string
     { header: 'HMV价格', key: 'hmvPrice', width: 18 },
     { header: 'HMV链接', key: 'hmvLink', width: 25 },
     { header: 'Yahoo价格', key: 'yahooPrice', width: 18 },
-    { header: 'Yahoo链接', key: 'yahooLink', width: 25 }
+    { header: 'Yahoo链接', key: 'yahooLink', width: 25 },
+    { header: 'CDJapan价格', key: 'cdjapanPrice', width: 18 },
+    { header: 'CDJapan链接', key: 'cdjapanLink', width: 25 },
+    { header: 'Tower价格', key: 'towerPrice', width: 18 },
+    { header: 'Tower链接', key: 'towerLink', width: 25 }
   ]
 
   // Style header row
@@ -174,7 +178,9 @@ export async function exportToExcel(results: BatchQueryResult[]): Promise<string
       ebay: findPlatformResult(result.results, 'ebay'),
       kojima: findPlatformResult(result.results, 'kojima'),
       hmv: findPlatformResult(result.results, 'hmv'),
-      yahoo: findPlatformResult(result.results, 'yahoo')
+      yahoo: findPlatformResult(result.results, 'yahoo'),
+      cdjapan: findPlatformResult(result.results, 'cdjapan'),
+      tower: findPlatformResult(result.results, 'tower')
     }
 
     // Add row data
@@ -201,7 +207,15 @@ export async function exportToExcel(results: BatchQueryResult[]): Promise<string
       yahooPrice: platformResults.yahoo?.status === 'found'
         ? formatPriceRange(platformResults.yahoo.priceMin, platformResults.yahoo.priceMax)
         : '---',
-      yahooLink: ''
+      yahooLink: '',
+      cdjapanPrice: platformResults.cdjapan?.status === 'found'
+        ? formatPriceRange(platformResults.cdjapan.priceMin, platformResults.cdjapan.priceMax)
+        : '---',
+      cdjapanLink: '',
+      towerPrice: platformResults.tower?.status === 'found'
+        ? formatPriceRange(platformResults.tower.priceMin, platformResults.tower.priceMax)
+        : '---',
+      towerLink: ''
     })
 
     // Set hyperlink cells
@@ -210,7 +224,9 @@ export async function exportToExcel(results: BatchQueryResult[]): Promise<string
       { key: 'ebayLink', result: platformResults.ebay },
       { key: 'kojimaLink', result: platformResults.kojima },
       { key: 'hmvLink', result: platformResults.hmv },
-      { key: 'yahooLink', result: platformResults.yahoo }
+      { key: 'yahooLink', result: platformResults.yahoo },
+      { key: 'cdjapanLink', result: platformResults.cdjapan },
+      { key: 'towerLink', result: platformResults.tower }
     ]
 
     for (const { key, result: platformResult } of linkPlatforms) {
@@ -262,7 +278,7 @@ export async function exportToExcel(results: BatchQueryResult[]): Promise<string
   // Auto-filter for all columns
   worksheet.autoFilter = {
     from: { row: 1, column: 1 },
-    to: { row: results.length + 1, column: 13 }
+    to: { row: results.length + 1, column: 17 }
   }
 
   // Freeze header row

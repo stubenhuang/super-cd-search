@@ -3,10 +3,14 @@ import { browserPool } from '../browser'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { tryLLMParse } from '../llm/parser'
+import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 
 const KOJIMA_WEB_URL = 'https://kojimarokuon.com'
 
 async function getKojimaProductDetails(page: import('puppeteer').Page, link: string): Promise<{ price: number | null; details: CDDetails }> {
+  const cached = getCachedProductData<{ price: number | null; details: CDDetails }>('kojima', link)
+  if (cached) return cached
+
   const details: CDDetails = { label: null, format: null, country: null, released: null, genre: null }
   let price: number | null = null
 
@@ -109,11 +113,13 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
     // Kojima Rokuon is Japan-based
     details.country = 'Japan'
 
+    const result = { price, details }
+    cacheProductData('kojima', link, result)
+    return result
   } catch (err) {
     console.warn('Kojima: failed to get details from product page:', err)
+    return { price: null, details }
   }
-
-  return { price, details }
 }
 
 async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
@@ -204,11 +210,19 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
 }
 
 export async function queryKojima(catalogNumber: string): Promise<QueryResult> {
+  const cached = getCachedQueryResult('kojima', catalogNumber)
+  if (cached) return cached
+
   const cookies = getSetting('cookies')?.kojima
 
+  let result: QueryResult
+
   try {
-    return await queryKojimaWeb(catalogNumber, cookies)
+    result = await queryKojimaWeb(catalogNumber, cookies)
   } catch (err) {
-    return queryError('kojima', err instanceof Error ? err.message : 'Unknown error')
+    result = queryError('kojima', err instanceof Error ? err.message : 'Unknown error')
   }
+
+  cacheQueryResult(catalogNumber, result)
+  return result
 }

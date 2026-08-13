@@ -6,6 +6,7 @@ import type { QueryResult } from './types'
 import type { CDDetails } from '../../shared/types'
 import { notFound, queryError } from './types'
 import { tryLLMParse } from '../llm/parser'
+import { getCachedQueryResult, cacheQueryResult } from './cache'
 
 const DISCOGS_API_URL = 'https://api.discogs.com'
 const DISCOGS_WEB_URL = 'https://www.discogs.com'
@@ -224,20 +225,33 @@ async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise
 }
 
 export async function queryDiscogs(catalogNumber: string): Promise<QueryResult> {
+  const cached = getCachedQueryResult('discogs', catalogNumber)
+  if (cached) return cached
+
   const token = getSetting('discogsToken')
   const cookies = getSetting('cookies')?.discogs
 
+  let result: QueryResult
+
   if (token) {
     try {
-      return await queryDiscogsApi(catalogNumber, token)
+      result = await queryDiscogsApi(catalogNumber, token)
     } catch (err) {
       console.warn('Discogs API failed, falling back to web scraping:', err)
+      try {
+        result = await queryDiscogsWeb(catalogNumber, cookies)
+      } catch (webErr) {
+        result = queryError('discogs', webErr instanceof Error ? webErr.message : 'Unknown error')
+      }
+    }
+  } else {
+    try {
+      result = await queryDiscogsWeb(catalogNumber, cookies)
+    } catch (err) {
+      result = queryError('discogs', err instanceof Error ? err.message : 'Unknown error')
     }
   }
 
-  try {
-    return await queryDiscogsWeb(catalogNumber, cookies)
-  } catch (err) {
-    return queryError('discogs', err instanceof Error ? err.message : 'Unknown error')
-  }
+  cacheQueryResult(catalogNumber, result)
+  return result
 }

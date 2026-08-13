@@ -1,6 +1,6 @@
 export type QueryStatus = 'found' | 'not_found' | 'error'
 
-export type Platform = 'discogs' | 'ebay' | 'kojima' | 'hmv' | 'yahoo'
+export type Platform = 'discogs' | 'ebay' | 'kojima' | 'hmv' | 'yahoo' | 'cdjapan' | 'tower'
 
 export interface CDDetails {
   label: string | null
@@ -29,6 +29,8 @@ export interface Cookies {
   kojima?: string
   hmv?: string
   yahoo?: string
+  cdjapan?: string
+  tower?: string
 }
 
 export interface LLMSettings {
@@ -43,6 +45,8 @@ export interface LLMSettings {
     kojima: boolean
     hmv: boolean
     yahoo: boolean
+    cdjapan: boolean
+    tower: boolean
   }
 }
 

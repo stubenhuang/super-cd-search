@@ -5,9 +5,12 @@ import { queryEbay } from '../queries/ebay'
 import { queryKojima } from '../queries/kojima'
 import { queryHmv } from '../queries/hmv'
 import { queryYahoo } from '../queries/yahoo'
+import { queryCdjapan } from '../queries/cdjapan'
+import { queryTower } from '../queries/tower'
 import { normalizeCatalogNumber } from '../../shared/utils'
+import { PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
-import type { QueryResult, BatchQueryProgress, BatchQueryResult } from '../../shared/types'
+import type { QueryResult, BatchQueryProgress, BatchQueryResult, Platform } from '../../shared/types'
 
 const MAX_CONCURRENT_CATALOGS = 3
 const MAX_CATALOG_NUMBERS = 10
@@ -59,20 +62,25 @@ function emitProgress(event: string, data: BatchQueryProgress): void {
   }
 }
 
-async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, includeKojima = true): Promise<QueryResult[]> {
+async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, enabledPlatforms: Platform[]): Promise<QueryResult[]> {
   if (signal.aborted) {
     throw new Error('Aborted')
   }
 
   emitProgress(QueryEvents.START, { catalogNumber, platform: 'all', status: 'loading' })
 
-  const platforms: Array<{ name: QueryResult['platform']; query: () => Promise<QueryResult> }> = [
+  // Full registry in canonical order; filter down to the user's selection.
+  const registry: Array<{ name: Platform; query: () => Promise<QueryResult> }> = [
     { name: 'discogs', query: () => queryDiscogs(catalogNumber) },
     { name: 'ebay', query: () => queryEbay(catalogNumber) },
-    ...(includeKojima ? [{ name: 'kojima' as const, query: () => queryKojima(catalogNumber) }] : []),
+    { name: 'kojima', query: () => queryKojima(catalogNumber) },
     { name: 'hmv', query: () => queryHmv(catalogNumber) },
-    { name: 'yahoo', query: () => queryYahoo(catalogNumber) }
+    { name: 'yahoo', query: () => queryYahoo(catalogNumber) },
+    { name: 'cdjapan', query: () => queryCdjapan(catalogNumber) },
+    { name: 'tower', query: () => queryTower(catalogNumber) }
   ]
+
+  const platforms = registry.filter(p => enabledPlatforms.includes(p.name))
 
   // Run every platform concurrently; the browser pool and per-domain throttles
   // act as natural concurrency limits.
@@ -136,7 +144,7 @@ export function cancelBatchQuery(): void {
   }
 }
 
-export async function executeBatchQuery(catalogNumbers: string[], includeKojima = true): Promise<BatchQueryResult[]> {
+export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = PLATFORMS): Promise<BatchQueryResult[]> {
   if (abortController) {
     abortController.abort()
   }
@@ -153,6 +161,10 @@ export async function executeBatchQuery(catalogNumbers: string[], includeKojima 
     throw new Error(`Maximum ${MAX_CATALOG_NUMBERS} catalog numbers allowed`)
   }
 
+  if (platforms.length === 0) {
+    throw new Error('No platforms selected')
+  }
+
   const results: BatchQueryResult[] = new Array(trimmed.length)
   let currentIndex = 0
 
@@ -164,7 +176,7 @@ export async function executeBatchQuery(catalogNumbers: string[], includeKojima 
       const idx = currentIndex++
       const catalogNumber = trimmed[idx]!
       try {
-        const queryResults = await queryAllPlatforms(catalogNumber, signal, includeKojima)
+        const queryResults = await queryAllPlatforms(catalogNumber, signal, platforms)
         results[idx] = { catalogNumber, results: queryResults }
       } catch {
         // Continue processing next catalog even if this one failed

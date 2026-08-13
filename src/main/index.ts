@@ -6,7 +6,7 @@ import { registerOrchestratorIpc } from './ipc/orchestrator'
 import { registerHistoryIpc } from './ipc/history'
 import { registerExportIpc } from './ipc/export'
 import { browserPool } from './browser'
-import { registerThrottleIpc } from './throttle'
+import { registerThrottleIpc, destroyProxyAgents } from './throttle'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -75,6 +75,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   closeDatabase()
   browserPool.closeAll()
+  destroyProxyAgents()
   if (process.platform !== 'darwin') {
     app.quit()
   }

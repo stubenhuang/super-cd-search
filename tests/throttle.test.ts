@@ -3,7 +3,8 @@ import { ipcMain } from 'electron'
 import {
   throttledFetch,
   getThrottleStatus,
-  registerThrottleIpc
+  registerThrottleIpc,
+  destroyProxyAgents
 } from '../src/main/throttle'
 
 const { mockGetSetting } = vi.hoisted(() => ({
@@ -126,6 +127,50 @@ describe('throttledFetch', () => {
 
     const [, options] = fetchMock.mock.calls[0]
     expect(options.agent).toBeDefined()
+  })
+
+  it('reuses the same SOCKS proxy agent across requests', async () => {
+    destroyProxyAgents()
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'proxyEnabled') return true
+      if (key === 'proxyHost') return '127.0.0.1'
+      if (key === 'proxyPort') return 1080
+      return undefined
+    })
+    fetchMock.mockResolvedValue(new Response('ok', { status: 200 }))
+
+    const first = throttledFetch('reuse.test', 'https://reuse.test/1')
+    await vi.advanceTimersByTimeAsync(10000)
+    await first
+
+    const second = throttledFetch('reuse.test', 'https://reuse.test/2')
+    await vi.advanceTimersByTimeAsync(10000)
+    await second
+
+    const agent1 = fetchMock.mock.calls[0][1].agent
+    const agent2 = fetchMock.mock.calls[1][1].agent
+    expect(agent1).toBe(agent2)
+  })
+
+  it('destroys pooled proxy agents', async () => {
+    destroyProxyAgents()
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'proxyEnabled') return true
+      if (key === 'proxyHost') return '127.0.0.1'
+      if (key === 'proxyPort') return 1080
+      return undefined
+    })
+    fetchMock.mockResolvedValue(new Response('ok', { status: 200 }))
+
+    const promise = throttledFetch('destroy.test', 'https://destroy.test/1')
+    await vi.advanceTimersByTimeAsync(10000)
+    await promise
+    const agent = fetchMock.mock.calls[0][1].agent
+    const destroySpy = vi.spyOn(agent, 'destroy')
+
+    destroyProxyAgents()
+
+    expect(destroySpy).toHaveBeenCalled()
   })
 })
 

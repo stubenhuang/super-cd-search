@@ -23,7 +23,9 @@ describe('buildParsePrompt', () => {
       ebay: 'eBay',
       kojima: 'Kojima Rokuon',
       hmv: 'HMV Japan',
-      yahoo: 'Yahoo Shopping Japan'
+      yahoo: 'Yahoo Shopping Japan',
+      cdjapan: 'CDJapan',
+      tower: 'Tower Records Japan'
     }
     for (const [platform, name] of Object.entries(names)) {
       expect(buildParsePrompt(platform as never, 'X-1', content)).toContain(name)

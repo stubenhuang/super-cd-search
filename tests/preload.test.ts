@@ -64,8 +64,8 @@ describe('preload API', () => {
     await api.getThrottleStatus()
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('getThrottleStatus')
 
-    await api.executeBatchQuery(['X-1'], false)
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('executeBatchQuery', ['X-1'], false)
+    await api.executeBatchQuery(['X-1'], ['discogs', 'ebay'])
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('executeBatchQuery', ['X-1'], ['discogs', 'ebay'])
 
     await api.cancelBatchQuery()
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('cancelBatchQuery')

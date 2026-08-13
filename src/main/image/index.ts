@@ -37,6 +37,8 @@ function getReferer(url: string): string {
   if (hostname.includes('shopping.yahoo.co.jp')) return 'https://shopping.yahoo.co.jp/'
   if (hostname.includes('discogs.com')) return 'https://www.discogs.com/'
   if (hostname.includes('ebay')) return 'https://www.ebay.com/'
+  if (hostname.includes('cdjapan.co.jp')) return 'https://www.cdjapan.co.jp/'
+  if (hostname.includes('tower.jp')) return 'https://tower.jp/'
 
   return ''
 }

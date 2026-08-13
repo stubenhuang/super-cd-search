@@ -1,5 +1,5 @@
 export type QueryStatus = 'found' | 'not_found' | 'error';
-export type Platform = 'discogs' | 'ebay' | 'kojima' | 'hmv';
+export type Platform = 'discogs' | 'ebay' | 'kojima' | 'hmv' | 'yahoo' | 'cdjapan' | 'tower';
 export interface QueryResult {
     platform: Platform;
     name: string | null;

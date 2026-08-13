@@ -3,10 +3,14 @@ import { browserPool } from '../browser'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { tryLLMParse } from '../llm/parser'
+import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 
 const YAHOO_SHOPPING_URL = 'https://shopping.yahoo.co.jp'
 
 async function getYahooProductDetails(page: import('puppeteer').Page, link: string): Promise<CDDetails> {
+  const cached = getCachedProductData<CDDetails>('yahoo', link)
+  if (cached) return cached
+
   const details: CDDetails = { label: null, format: null, country: null, released: null, genre: null }
 
   try {
@@ -74,11 +78,12 @@ async function getYahooProductDetails(page: import('puppeteer').Page, link: stri
     if (productDetails.label) details.label = productDetails.label
     if (productDetails.genre) details.genre = productDetails.genre
 
+    cacheProductData('yahoo', link, details)
+    return details
   } catch (err) {
     console.warn('Yahoo: failed to get details from product page:', err)
+    return details
   }
-
-  return details
 }
 
 async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
@@ -169,11 +174,19 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
 }
 
 export async function queryYahoo(catalogNumber: string): Promise<QueryResult> {
+  const cached = getCachedQueryResult('yahoo', catalogNumber)
+  if (cached) return cached
+
   const cookies = getSetting('cookies')?.yahoo
 
+  let result: QueryResult
+
   try {
-    return await queryYahooWeb(catalogNumber, cookies)
+    result = await queryYahooWeb(catalogNumber, cookies)
   } catch (err) {
-    return queryError('yahoo', err instanceof Error ? err.message : 'Unknown error')
+    result = queryError('yahoo', err instanceof Error ? err.message : 'Unknown error')
   }
+
+  cacheQueryResult(catalogNumber, result)
+  return result
 }

@@ -14,6 +14,7 @@ vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }
 vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
 import { queryHmv } from '../src/main/queries/hmv'
+import { clearAllCaches } from '../src/main/queries/cache'
 
 function createHmvPage() {
   const firstItem = {
@@ -50,6 +51,7 @@ async function runWithFakeTimers<T>(fn: () => Promise<T>, totalMs = 30000): Prom
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearAllCaches()
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'cookies') return { hmv: 'cookie-value' }
     return undefined
@@ -199,5 +201,46 @@ describe('queryHmv', () => {
     mockBrowserPool.acquire.mockRejectedValue(new Error('no browser'))
     const result = await queryHmv('ABC-123')
     expect(result).toMatchObject({ platform: 'hmv', status: 'error', error: 'no browser' })
+  })
+
+  it('serves a repeated lookup from the query cache without using the browser', async () => {
+    const { page, browser } = createHmvPage()
+    page.evaluate = createDomEvaluate([
+      '<div class="priceInfoBlock"><span class="price">¥1,000</span></div>',
+      '<div class="productSpec"></div>'
+    ])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const first = await runWithFakeTimers(() => queryHmv('CACHED-1'))
+    expect(first.status).toBe('found')
+    expect(mockBrowserPool.acquire).toHaveBeenCalledTimes(1)
+
+    mockBrowserPool.acquire.mockClear()
+    const second = await runWithFakeTimers(() => queryHmv('CACHED-1'))
+    expect(second).toEqual(first)
+    expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
+  })
+
+  it('reuses cached product details across different catalog numbers', async () => {
+    const { page, browser } = createHmvPage()
+    page.evaluate = createDomEvaluate([
+      '<div class="priceInfoBlock"><span class="price">¥2,000</span></div>' +
+        '<table class="productSpec"><tr><th>Format</th><td>CD</td></tr></table>'
+    ])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const first = await runWithFakeTimers(() => queryHmv('ALBUM-1'))
+    expect(first.status).toBe('found')
+    // Search page + product page.
+    expect(page.goto).toHaveBeenCalledTimes(2)
+
+    page.goto.mockClear()
+    const second = await runWithFakeTimers(() => queryHmv('ALBUM-2'))
+    expect(second.status).toBe('found')
+    // Only the search page is loaded; product details come from the cache.
+    expect(page.goto).toHaveBeenCalledTimes(1)
+    // Search page still provides its own price; details come from the cache.
+    expect(second.priceMin).toBe(14.74)
+    expect(second.details).toMatchObject({ format: 'CD', country: 'Japan' })
   })
 })

@@ -110,10 +110,10 @@ describe('registerOrchestratorIpc', () => {
 
     registerOrchestratorIpc()
 
-    expect(await handler('executeBatchQuery')(null, ['X-1'], false)).toEqual([
+    expect(await handler('executeBatchQuery')(null, ['X-1'], ['discogs'])).toEqual([
       { catalogNumber: 'X-1', results: [] }
     ])
-    expect(mockExecuteBatchQuery).toHaveBeenCalledWith(['X-1'], false)
+    expect(mockExecuteBatchQuery).toHaveBeenCalledWith(['X-1'], ['discogs'])
 
     await handler('cancelBatchQuery')()
     expect(mockCancelBatchQuery).toHaveBeenCalled()
