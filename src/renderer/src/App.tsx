@@ -5,7 +5,20 @@ import { DetailModal } from './DetailModal'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { PLATFORMS, PLATFORM_LABELS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
+import { useCoverImage } from './hooks/useCoverImage'
 import './App.css'
+
+type SearchMode = 'standard' | 'deep'
+
+const SEARCH_MODE_LABELS: Record<SearchMode, string> = {
+  standard: '标准搜索（Discogs + eBay）',
+  deep: '深度搜索（全部平台）'
+}
+
+const SEARCH_MODE_PLATFORMS: Record<SearchMode, Platform[]> = {
+  standard: ['discogs', 'ebay'],
+  deep: [...PLATFORMS]
+}
 
 function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]): QueryResult[] {
   const merged = [...existing]
@@ -26,10 +39,14 @@ interface PlatformResultRowProps {
 }
 
 const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice }: PlatformResultRowProps) {
-  const [imageData, setImageData] = useState<string | null>(null)
-  const [imageError, setImageError] = useState(false)
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const imageContainerRef = useRef<HTMLDivElement | null>(null)
+  const {
+    containerRef: imageContainerRef,
+    imageData,
+    error: imageError,
+    loaded: imageLoaded,
+    onLoad,
+    onError
+  } = useCoverImage(result.coverUrl, { size: 160, lazy: true })
 
   const formatPrice = (min: number | null, max: number | null): string => {
     if (min === null && max === null) return '-'
@@ -55,49 +72,6 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
 
   const cardClass = `platform-card ${result.status}${isLowestPrice ? ' lowest' : ''}`
 
-  // Load the cover thumbnail through the main-process proxy only when the
-  // card scrolls into view, so offscreen results don't block rendering.
-  useEffect(() => {
-    if (!result.coverUrl) {
-      setImageError(true)
-      return
-    }
-
-    let cancelled = false
-    const loadImage = async () => {
-      try {
-        const data = await window.electronAPI.fetchImage(result.coverUrl!, 160)
-        if (cancelled) return
-        if (data) {
-          setImageData(`data:${data.mimeType};base64,${data.base64}`)
-        } else {
-          setImageError(true)
-        }
-      } catch {
-        if (!cancelled) setImageError(true)
-      }
-    }
-
-    const container = imageContainerRef.current
-    if (!container || typeof IntersectionObserver === 'undefined') {
-      loadImage()
-      return () => { cancelled = true }
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some(entry => entry.isIntersecting)) {
-        observer.disconnect()
-        loadImage()
-      }
-    }, { rootMargin: '300px' })
-    observer.observe(container)
-
-    return () => {
-      cancelled = true
-      observer.disconnect()
-    }
-  }, [result.coverUrl])
-
   return (
     <div className={cardClass} data-platform={result.platform}>
       {isLowestPrice ? (
@@ -116,8 +90,8 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
                   src={imageData || ''}
                   alt={result.name || 'Cover'}
                   className={`cover-thumbnail ${imageLoaded ? 'loaded' : ''}`}
-                  onLoad={() => setImageLoaded(true)}
-                  onError={() => setImageError(true)}
+                  onLoad={onLoad}
+                  onError={onError}
                   style={{ display: imageData ? 'block' : 'none' }}
                 />
               </>
@@ -241,27 +215,12 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const cancelledRef = useRef(false)
   const [isCancelling, setIsCancelling] = useState(false)
-  const [enabledPlatforms, setEnabledPlatforms] = useState<Platform[]>(['discogs', 'ebay'])
+  const [searchMode, setSearchMode] = useState<SearchMode>('standard')
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null)
   const prevIsLoadingRef = useRef(false)
 
-  const togglePlatform = useCallback((platform: Platform, checked: boolean) => {
-    setEnabledPlatforms(prev => {
-      if (checked) {
-        return prev.includes(platform) ? prev : [...prev, platform]
-      }
-      return prev.filter(p => p !== platform)
-    })
-  }, [])
-
-  const selectAllPlatforms = useCallback(() => {
-    setEnabledPlatforms([...PLATFORMS])
-  }, [])
-
-  const clearPlatforms = useCallback(() => {
-    setEnabledPlatforms([])
-  }, [])
+  const enabledPlatforms = useMemo(() => SEARCH_MODE_PLATFORMS[searchMode], [searchMode])
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
@@ -419,50 +378,39 @@ function App() {
               rows={10}
             />
             {error && <div className="error-message">{error}</div>}
-            <div className="platform-selector">
-              <div className="platform-selector-header">
-                <span className="platform-selector-title">检索源</span>
-                <div className="platform-selector-actions">
-                  <button
-                    type="button"
-                    className="platform-selector-link"
-                    onClick={selectAllPlatforms}
-                    disabled={isLoading || isCancelling}
-                  >
-                    全选
-                  </button>
-                  <button
-                    type="button"
-                    className="platform-selector-link"
-                    onClick={clearPlatforms}
-                    disabled={isLoading || isCancelling}
-                  >
-                    清空
-                  </button>
-                </div>
+            <div className="search-mode-selector">
+              <label className="search-mode-label" htmlFor="search-mode">搜索模式</label>
+              <div className="search-mode-field">
+                <select
+                  id="search-mode"
+                  className="search-mode-select"
+                  value={searchMode}
+                  onChange={e => setSearchMode(e.target.value as SearchMode)}
+                  disabled={isLoading || isCancelling}
+                >
+                  <option value="standard">{SEARCH_MODE_LABELS.standard}</option>
+                  <option value="deep">{SEARCH_MODE_LABELS.deep}</option>
+                </select>
+                <svg className="search-mode-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
               </div>
-              <div className="platform-options">
-                {PLATFORMS.map(p => (
-                  <label key={p} className="platform-option">
-                    <input
-                      type="checkbox"
-                      checked={enabledPlatforms.includes(p)}
-                      onChange={e => togglePlatform(p, e.target.checked)}
-                      disabled={isLoading || isCancelling}
-                    />
-                    <span className="platform-option-label">{PLATFORM_LABELS[p]}</span>
-                  </label>
-                ))}
-              </div>
-              {enabledPlatforms.length === 0 && (
-                <div className="platform-selector-hint">请选择至少一个检索源</div>
+              {searchMode === 'deep' && (
+                <span className="search-mode-warning" role="img" aria-label="深度搜索速度较慢">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  <span className="search-mode-warning-tooltip">深度搜索会查询全部平台（7 个数据源），速度较慢</span>
+                </span>
               )}
             </div>
             <div className="search-actions">
               <button
                 className="search-button"
                 onClick={handleSearch}
-                disabled={isLoading || isCancelling || enabledPlatforms.length === 0}
+                disabled={isLoading || isCancelling}
               >
                 {isCancelling ? 'Cancelling...' : isLoading ? 'Searching...' : 'Search'}
               </button>
