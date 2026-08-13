@@ -1,4 +1,7 @@
-import { nativeImage } from 'electron'
+import { app, nativeImage } from 'electron'
+import { createHash } from 'crypto'
+import { mkdirSync, readFileSync, writeFileSync, statSync, unlinkSync } from 'fs'
+import { join } from 'path'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { request } from 'http'
 import { request as httpsRequest } from 'https'
@@ -8,8 +11,7 @@ const DEFAULT_SIZE = 160
 const JPEG_QUALITY = 80
 const TIMEOUT_MS = 15000
 const CACHE_LIMIT = 200
-const CACHE_TTL = 60 * 60 * 1000 // 1 hour
-const MAX_CONCURRENT_DOWNLOADS = 4
+const DISK_TTL = 24 * 60 * 60 * 1000 // 1 day
 
 export interface DownloadImageResult {
   base64: string
@@ -22,9 +24,6 @@ interface CacheEntry extends DownloadImageResult {
 
 const lruCache = new Map<string, CacheEntry>()
 const inflight = new Map<string, Promise<DownloadImageResult | null>>()
-
-let activeDownloads = 0
-const downloadQueue: Array<() => void> = []
 
 /**
  * Get referer header based on image URL domain
@@ -56,6 +55,73 @@ function touchCache(key: string, entry: CacheEntry): void {
   }
 }
 
+/** Clear only the in-memory cache; on-disk files are kept. Used by tests. */
+export function clearImageCache(): void {
+  lruCache.clear()
+}
+
+function getImageCacheDir(): string {
+  return join(app.getPath('userData'), 'image-cache')
+}
+
+function urlHash(url: string): string {
+  return createHash('sha1').update(url).digest('hex')
+}
+
+function extForMimeType(mimeType: string): string {
+  if (mimeType.includes('png')) return 'png'
+  if (mimeType.includes('gif')) return 'gif'
+  if (mimeType.includes('webp')) return 'webp'
+  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'jpg'
+  return 'bin'
+}
+
+function mimeTypeFromExt(ext: string): string {
+  switch (ext) {
+    case 'png': return 'image/png'
+    case 'gif': return 'image/gif'
+    case 'webp': return 'image/webp'
+    case 'jpg': return 'image/jpeg'
+    default: return 'application/octet-stream'
+  }
+}
+
+/**
+ * Read the original bytes of a previously downloaded image from disk, if the
+ * file still exists and is within the 1-day TTL. Expired files are deleted.
+ */
+function readDiskCache(url: string): { buffer: Buffer; mimeType: string } | null {
+  const base = join(getImageCacheDir(), urlHash(url))
+
+  for (const ext of ['jpg', 'png', 'gif', 'webp', 'bin']) {
+    const file = `${base}.${ext}`
+    try {
+      const stat = statSync(file)
+      if (Date.now() - stat.mtimeMs > DISK_TTL) {
+        try { unlinkSync(file) } catch { /* ignore */ }
+        continue
+      }
+      return { buffer: readFileSync(file), mimeType: mimeTypeFromExt(ext) }
+    } catch {
+      // Try the next extension / report a miss.
+    }
+  }
+
+  return null
+}
+
+/** Persist the original downloaded bytes so later requests skip the network. */
+function writeDiskCache(url: string, buffer: Buffer, mimeType: string): void {
+  try {
+    const dir = getImageCacheDir()
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, `${urlHash(url)}.${extForMimeType(mimeType)}`)
+    writeFileSync(file, buffer)
+  } catch (err) {
+    console.warn('Failed to write image cache:', err)
+  }
+}
+
 /**
  * Downscale the downloaded buffer to a small JPEG so the base64 payload sent
  * over IPC stays tiny. Falls back to the raw buffer when decoding fails.
@@ -75,18 +141,6 @@ function processImage(buffer: Buffer, mimeType: string, size: number): DownloadI
   }
 
   return { base64: buffer.toString('base64'), mimeType }
-}
-
-async function acquireDownloadSlot(): Promise<void> {
-  if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS) {
-    await new Promise<void>(resolve => downloadQueue.push(resolve))
-  }
-  activeDownloads++
-}
-
-function releaseDownloadSlot(): void {
-  activeDownloads--
-  downloadQueue.shift()?.()
 }
 
 function fetchBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
@@ -150,16 +204,19 @@ function fetchBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string } 
 }
 
 /**
- * Download an image (with proxy and referer support), resize it to a small
- * thumbnail and return it as base64. Results are cached in an LRU cache and
- * concurrent downloads for the same URL are merged.
+ * Return a resized thumbnail for an image URL as base64. Loads are unified
+ * through this single entry point with this priority:
+ *   1. in-memory LRU cache (keyed by url + size)
+ *   2. in-flight dedupe for the same key
+ *   3. on-disk cache (original bytes, shared across sizes, 1-day TTL)
+ *   4. network fetch (unlimited concurrency), then persisted to disk
  */
 export function downloadImage(url: string, size: number = DEFAULT_SIZE): Promise<DownloadImageResult | null> {
   const key = cacheKey(url, size)
 
   const cached = lruCache.get(key)
   if (cached) {
-    if (Date.now() - cached.fetchedAt < CACHE_TTL) {
+    if (Date.now() - cached.fetchedAt < DISK_TTL) {
       touchCache(key, cached)
       return Promise.resolve({ base64: cached.base64, mimeType: cached.mimeType })
     }
@@ -170,14 +227,15 @@ export function downloadImage(url: string, size: number = DEFAULT_SIZE): Promise
   if (existing) return existing
 
   const promise = (async () => {
-    await acquireDownloadSlot()
-    try {
-      const result = await fetchBuffer(url)
-      if (!result) return null
-      return processImage(result.buffer, result.mimeType, size)
-    } finally {
-      releaseDownloadSlot()
+    const disk = readDiskCache(url)
+    if (disk) {
+      return processImage(disk.buffer, disk.mimeType, size)
     }
+
+    const fetched = await fetchBuffer(url)
+    if (!fetched) return null
+    writeDiskCache(url, fetched.buffer, fetched.mimeType)
+    return processImage(fetched.buffer, fetched.mimeType, size)
   })()
 
   inflight.set(key, promise)

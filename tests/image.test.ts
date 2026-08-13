@@ -1,7 +1,10 @@
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
 import http from 'http'
 import type { AddressInfo } from 'net'
-import { nativeImage } from 'electron'
+import { app, nativeImage } from 'electron'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
 const { mockGetSetting } = vi.hoisted(() => ({
   mockGetSetting: vi.fn()
@@ -11,11 +14,12 @@ vi.mock('../src/main/settings', () => ({
   getSetting: mockGetSetting
 }))
 
-import { downloadImage } from '../src/main/image'
+import { downloadImage, clearImageCache } from '../src/main/image'
 
 let server: http.Server
 let baseUrl: string
 let handler: (req: http.IncomingMessage, res: http.ServerResponse) => void
+let tempDir: string
 
 beforeAll(async () => {
   server = http.createServer((req, res) => handler(req, res))
@@ -30,11 +34,17 @@ afterAll(async () => {
 })
 
 beforeEach(() => {
+  tempDir = mkdtempSync(join(tmpdir(), 'scs-img-'))
+  vi.mocked(app.getPath).mockReturnValue(tempDir)
   mockGetSetting.mockReturnValue(undefined)
   handler = (_req, res) => {
     res.statusCode = 404
     res.end()
   }
+})
+
+afterEach(() => {
+  rmSync(tempDir, { recursive: true, force: true })
 })
 
 describe('downloadImage', () => {
@@ -174,32 +184,38 @@ describe('downloadImage', () => {
     expect(image.resize).toHaveBeenCalledWith({ width: 240 })
   })
 
-  it('limits concurrent downloads to four', async () => {
-    let active = 0
-    let maxActive = 0
-    const pending: Array<() => void> = []
+  it('persists downloads to disk and reuses them after clearing the memory cache', async () => {
+    let hits = 0
     handler = (_req, res) => {
-      active++
-      maxActive = Math.max(maxActive, active)
-      pending.push(() => {
-        active--
-        res.statusCode = 200
-        res.end(Buffer.from([1]))
-      })
+      hits++
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'image/png')
+      res.end(Buffer.from([1, 2, 3]))
     }
 
-    const urls = Array.from({ length: 6 }, (_, i) => `${baseUrl}/concurrent-${i}`)
-    const promises = urls.map(url => downloadImage(url))
+    const first = await downloadImage(`${baseUrl}/disk.png`)
+    expect(hits).toBe(1)
 
-    await vi.waitFor(() => expect(pending.length).toBe(4))
-    expect(maxActive).toBe(4)
+    clearImageCache() // drop in-memory only; the on-disk file must remain
 
-    // Completing one request frees a slot for the next queued download.
-    pending.shift()!()
-    await vi.waitFor(() => expect(pending.length).toBe(4))
+    const second = await downloadImage(`${baseUrl}/disk.png`)
+    expect(hits).toBe(1) // served from disk, no second network request
+    expect(first).toEqual(second)
+  })
 
-    while (pending.length > 0) pending.shift()!()
-    await Promise.all(promises)
-    expect(maxActive).toBe(4)
+  it('shares the on-disk original across different sizes', async () => {
+    let hits = 0
+    handler = (_req, res) => {
+      hits++
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'image/png')
+      res.end(Buffer.from([1, 2, 3]))
+    }
+
+    await downloadImage(`${baseUrl}/shared.png`, 160)
+    clearImageCache()
+    await downloadImage(`${baseUrl}/shared.png`, 240)
+
+    expect(hits).toBe(1) // same URL downloaded once; second size resized from disk
   })
 })

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import type { QueryResult, CDDetails } from './electron-api'
 import { PLATFORM_LABELS } from '../../shared/platforms'
+import { useCoverImage } from './hooks/useCoverImage'
 
 const PLATFORM_PRIORITY: Record<string, number> = {
   discogs: 0,
@@ -31,7 +32,6 @@ interface DetailModalProps {
 
 export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailModalProps) {
   const [copied, setCopied] = useState(false)
-  const [coverData, setCoverData] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -77,24 +77,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
   const displayArtist = primaryResult?.artist
   const displayCover = primaryResult?.coverUrl
 
-  useEffect(() => {
-    if (!displayCover) {
-      setCoverData(null)
-      return
-    }
-
-    let cancelled = false
-    window.electronAPI.fetchImage(displayCover, 240)
-      .then(data => {
-        if (cancelled) return
-        setCoverData(data ? `data:${data.mimeType};base64,${data.base64}` : null)
-      })
-      .catch(() => {
-        if (!cancelled) setCoverData(null)
-      })
-
-    return () => { cancelled = true }
-  }, [displayCover])
+  const { imageData: coverData } = useCoverImage(displayCover, { size: 240 })
 
   const copyText = useMemo(() => {
     const lines: string[] = [`目录号: ${catalogNumber}`]
