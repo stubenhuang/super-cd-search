@@ -15,8 +15,7 @@
     "test:coverage": "vitest run --coverage",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "dist:win": "electron-builder --win",
-    "rebuild": "npx electron-rebuild -f -w better-sqlite3"
+    "dist:win": "electron-builder --win"
   },
   "build": {
     "appId": "com.super-cd-search.app",
@@ -65,7 +64,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
@@ -82,9 +80,7 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
-    "better-sqlite3": "^12.9.0",
     "electron-store": "^11.0.2",
-    "exceljs": "^4.4.0",
     "jsdom": "^26.0.0",
     "puppeteer": "^24.42.0",
     "puppeteer-core": "^24.42.0",

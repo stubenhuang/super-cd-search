@@ -63,66 +63,6 @@ vi.mock('electron-store', () => {
   return { default: MockStore }
 })
 
-// better-sqlite3 in node_modules is compiled for Electron's Node ABI, which
-// plain Node (and therefore vitest) cannot load. Node 24 ships a built-in
-// SQLite engine with a very similar API, so tests run against real SQLite
-// through this thin compatibility wrapper.
-vi.mock('better-sqlite3', () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { DatabaseSync } = require('node:sqlite')
-
-  class BetterSqlite3Compat {
-    private db: InstanceType<typeof DatabaseSync>
-
-    constructor(path: string) {
-      this.db = new DatabaseSync(path)
-    }
-
-    pragma(sql: string) {
-      return this.db.exec(`PRAGMA ${sql}`)
-    }
-
-    exec(sql: string) {
-      return this.db.exec(sql)
-    }
-
-    prepare(sql: string) {
-      const stmt = this.db.prepare(sql)
-      return {
-        run: (...args: unknown[]) => {
-          const result = stmt.run(...(args as never[]))
-          return {
-            lastInsertRowid: Number(result.lastInsertRowid),
-            changes: Number(result.changes)
-          }
-        },
-        get: (...args: unknown[]) => stmt.get(...(args as never[])),
-        all: (...args: unknown[]) => stmt.all(...(args as never[]))
-      }
-    }
-
-    transaction(fn: (...args: never[]) => unknown) {
-      return (...args: never[]) => {
-        this.db.exec('BEGIN')
-        try {
-          const result = fn(...args)
-          this.db.exec('COMMIT')
-          return result
-        } catch (err) {
-          this.db.exec('ROLLBACK')
-          throw err
-        }
-      }
-    }
-
-    close() {
-      this.db.close()
-    }
-  }
-
-  return { default: BetterSqlite3Compat }
-})
-
 // getEncryptionKey() short-circuits when this env var is present, avoiding a
 // CommonJS-only require('crypto') call inside ESM test execution.
 process.env.SETTINGS_ENCRYPTION_KEY = 'a'.repeat(32)

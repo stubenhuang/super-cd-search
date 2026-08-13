@@ -1,5 +1,4 @@
 import { BrowserWindow } from 'electron'
-import { getDatabase } from '../database'
 import { queryDiscogs } from '../queries/discogs'
 import { queryEbay } from '../queries/ebay'
 import { queryKojima } from '../queries/kojima'
@@ -18,42 +17,6 @@ const MAX_CATALOG_NUMBERS = 10
 export type { BatchQueryProgress, BatchQueryResult }
 
 let abortController: AbortController | null = null
-
-function saveResults(catalogNumber: string, results: QueryResult[]): void {
-  const db = getDatabase()
-
-  const insertQuery = db.prepare('INSERT INTO queries (catalog_number) VALUES (?)')
-  const insertResult = db.prepare(`
-    INSERT INTO results (query_id, platform, name, artist, price_min, price_max, cover_url, link, status, label, format, country, released, genre)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-
-  const transaction = db.transaction(() => {
-    const info = insertQuery.run(catalogNumber)
-    const queryId = info.lastInsertRowid
-
-    for (const result of results) {
-      insertResult.run(
-        queryId,
-        result.platform,
-        result.name,
-        result.artist,
-        result.priceMin,
-        result.priceMax,
-        result.coverUrl,
-        result.link,
-        result.status,
-        result.details?.label || null,
-        result.details?.format || null,
-        result.details?.country || null,
-        result.details?.released || null,
-        result.details?.genre || null
-      )
-    }
-  })
-
-  transaction()
-}
 
 function emitProgress(event: string, data: BatchQueryProgress): void {
   const windows = BrowserWindow.getAllWindows()
@@ -131,7 +94,6 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     return { platform: platform.name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
   })
 
-  saveResults(catalogNumber, results)
   emitProgress(QueryEvents.COMPLETE, { catalogNumber, platform: 'all', status: 'complete' })
 
   return results

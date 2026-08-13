@@ -7,9 +7,7 @@ import type {
   Cookies,
   ThrottleStatus,
   BatchQueryProgress,
-  BatchQueryResult,
-  HistoryBatch,
-  HistoryEntry
+  BatchQueryResult
 } from '../../shared/types'
 
 export type {
@@ -20,9 +18,7 @@ export type {
   Settings,
   Cookies,
   ThrottleStatus,
-  BatchQueryResult,
-  HistoryBatch,
-  HistoryEntry
+  BatchQueryResult
 }
 
 // Extended progress type for received messages (includes event)
@@ -42,11 +38,6 @@ export interface IElectronAPI {
   getThrottleStatus: () => Promise<ThrottleStatus>
   executeBatchQuery: (catalogNumbers: string[], platforms?: Platform[]) => Promise<BatchQueryResult[]>
   cancelBatchQuery: () => Promise<void>
-  getHistory: () => Promise<HistoryBatch[]>
-  getHistoryEntry: (queryId: number) => Promise<HistoryEntry | null>
-  deleteHistoryEntry: (queryId: number) => Promise<void>
-  clearAllHistory: () => Promise<void>
-  exportToExcel: (results: BatchQueryResult[]) => Promise<string | null>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
 }

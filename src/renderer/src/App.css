@@ -194,38 +194,6 @@ body {
   margin: 0;
 }
 
-/* === Tabs === */
-.tabs {
-  display: flex;
-  gap: 2px;
-  background: var(--bg-tertiary);
-  padding: 3px;
-  border-radius: 8px;
-}
-
-.tab {
-  padding: 7px 16px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all var(--transition-fast);
-}
-
-.tab:hover:not(.active) {
-  background: rgba(254, 254, 254, 0.5);
-}
-
-.tab.active {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-}
-
 /* === Panel Content === */
 .panel-content {
   flex: 1;
@@ -941,63 +909,6 @@ body {
 
 .platform-card-details .link:hover::after {
   transform: translateX(2px);
-}
-
-/* === Export Button === */
-.export-button {
-  padding: 8px 16px;
-  height: 36px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-medium);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.export-button:hover {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: white;
-}
-
-/* === Toast === */
-.app-toast {
-  position: fixed;
-  bottom: 32px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 14px 28px;
-  background: var(--text-primary);
-  color: var(--bg-card);
-  border-radius: 12px;
-  font-family: var(--font-body);
-  font-size: 14px;
-  font-weight: 500;
-  box-shadow: var(--shadow-lg);
-  animation: toast-enter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  z-index: 1001;
-}
-
-@keyframes toast-enter {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(20px) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
-}
-
-/* === Panel Actions === */
-.panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 /* === Animation Delays for Staggered Entrance === */

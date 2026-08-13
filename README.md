@@ -9,8 +9,6 @@
 - **并行加速**：同一目录号的多平台并行查询、按域名智能限速
 - **缓存加速**：查询结果与产品详情页缓存（1 小时）、SOCKS 代理连接复用、封面缩略图懒加载
 - **价格对比**：跨平台比较价格
-- **历史记录**：查看历史搜索结果
-- **导出 Excel**：将搜索结果导出为 .xlsx 格式
 
 ## 支持平台
 
@@ -36,9 +34,6 @@
 ```bash
 # 安装依赖
 npm install
-
-# 重新构建原生模块 (better-sqlite3)
-npm run rebuild
 
 # 启动开发服务器
 npm run dev
@@ -79,9 +74,7 @@ npm run dist
 - **Electron** - 桌面应用框架
 - **React** - UI 组件
 - **TypeScript** - 类型安全
-- **better-sqlite3** - 本地数据库 (SQLite)
 - **Puppeteer** - 网页抓取
-- **ExcelJS** - Excel 导出
 
 ## 许可证
 

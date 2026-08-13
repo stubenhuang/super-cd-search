@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Settings, BatchQueryResult, ThrottleStatus, HistoryBatch, HistoryEntry, Platform } from '../shared/types'
+import type { Settings, BatchQueryResult, ThrottleStatus, Platform } from '../shared/types'
 
 const validSendChannels = ['toMain'] as const
 const validReceiveChannels = ['fromMain', 'query:progress'] as const
@@ -27,14 +27,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('executeBatchQuery', catalogNumbers, platforms),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
-  getHistory: (): Promise<HistoryBatch[]> => ipcRenderer.invoke('getHistory'),
-  getHistoryEntry: (queryId: number): Promise<HistoryEntry | null> =>
-    ipcRenderer.invoke('getHistoryEntry', queryId),
-  deleteHistoryEntry: (queryId: number): Promise<void> =>
-    ipcRenderer.invoke('deleteHistoryEntry', queryId),
-  clearAllHistory: (): Promise<void> => ipcRenderer.invoke('clearAllHistory'),
-  exportToExcel: (results: BatchQueryResult[]): Promise<string | null> =>
-    ipcRenderer.invoke('exportToExcel', results),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size)

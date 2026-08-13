@@ -57,7 +57,7 @@ describe('preload API', () => {
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('deleteSetting', 'discogsToken')
   })
 
-  it('forwards query, history and export calls', async () => {
+  it('forwards query, image and external calls', async () => {
     api = await loadPreload()
     vi.mocked(ipcRenderer.invoke).mockResolvedValue([])
 
@@ -69,21 +69,6 @@ describe('preload API', () => {
 
     await api.cancelBatchQuery()
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('cancelBatchQuery')
-
-    await api.getHistory()
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('getHistory')
-
-    await api.getHistoryEntry(3)
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('getHistoryEntry', 3)
-
-    await api.deleteHistoryEntry(3)
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('deleteHistoryEntry', 3)
-
-    await api.clearAllHistory()
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('clearAllHistory')
-
-    await api.exportToExcel([])
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('exportToExcel', [])
 
     await api.openExternal('https://example.com')
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('openExternal', 'https://example.com')

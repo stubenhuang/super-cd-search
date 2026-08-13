@@ -41,16 +41,3 @@ export interface ThrottleStatus {
         nextBackoffDelay: number | null;
     }>;
 }
-export interface HistoryBatch {
-    id: number;
-    catalogNumber: string;
-    createdAt: string;
-}
-export interface HistoryEntry {
-    query: {
-        id: number;
-        catalogNumber: string;
-        createdAt: string;
-    };
-    results: QueryResult[];
-}

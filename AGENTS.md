@@ -14,13 +14,12 @@ npm run build        # 生产构建（输出到 ./out）
 npm run preview       # 预览生产构建
 npm run typecheck    # TypeScript 类型检查
 npm run lint         # 代码检查（当前为空操作）
-npm run rebuild      # 重新构建 better-sqlite3 原生模块
 npm run dist         # 构建并打包为 macOS 应用（DMG/ZIP）
 ```
 
 ## 架构概览
 
-这是一个 macOS Electron 桌面应用，用于通过目录号批量查询多个平台（Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping）的 CD 信息。
+这是一个 macOS Electron 桌面应用，用于通过目录号批量查询多个平台（Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping、CDJapan、Tower Records）的 CD 信息。
 
 ### 进程结构
 
@@ -52,17 +51,9 @@ src/
 - 优先使用 API（如已配置凭证），否则回退到网页抓取
 - 所有价格通过 `src/main/currency/` 转换为 USD
 
-**数据库** (`src/main/database/`)
-- SQLite via better-sqlite3，WAL 模式
-- 表：`queries`（catalog_number, created_at）和 `results`（query_id, platform, name, artist, price_min, price_max, cover_url, link, status）
-- 存储位置：`~/Library/Application Support/super-cd-search/super-cd-search.db`
-
 **设置** (`src/main/settings/`)
 - 使用 electron-store 加密存储敏感数据（API 令牌、cookies）
 - 关键设置：`discogsToken`、`ebayClientId`、`ebayClientSecret`、`cookies`
-
-**导出** (`src/main/export/`)
-- 基于 ExcelJS 导出 .xlsx，带原生保存对话框
 
 ### IPC 通信
 
@@ -80,4 +71,3 @@ src/
 - **浏览器获取**：始终用 `try/finally` 将浏览器释放回池中
 - **限流**：所有 HTTP 请求使用 `throttledFetch(domain, url)`
 - **货币**：任何非 USD 价格调用 `convertToUSDWithFallback()`
-- **数据库事务**：多个插入操作用 `db.transaction(() => { ... })` 包装

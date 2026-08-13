@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryResult, BatchQueryProgressEvent, QueryResult, Platform } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform } from './electron-api'
 import { SettingsPanel } from './Settings'
-import { HistoryView } from './History'
 import { DetailModal } from './DetailModal'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { PLATFORMS, PLATFORM_LABELS } from '../../shared/platforms'
@@ -240,8 +239,6 @@ function App() {
   const [progressStatus, setProgressStatus] = useState<Map<string, string>>(new Map())
   const [completedCatalogs, setCompletedCatalogs] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
-  const [activeTab, setActiveTab] = useState<'results' | 'history'>('results')
-  const [toast, setToast] = useState<string | null>(null)
   const cancelledRef = useRef(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [enabledPlatforms, setEnabledPlatforms] = useState<Platform[]>(['discogs', 'ebay'])
@@ -386,36 +383,6 @@ function App() {
     }
     return map
   }, [progressStatus, enabledPlatforms])
-
-  const handleLoadHistory = useCallback(async (queryId: number) => {
-    const entry = await window.electronAPI.getHistoryEntry(queryId)
-    if (entry) {
-      setCatalogOrder([entry.query.catalogNumber])
-      setResults(new Map([[entry.query.catalogNumber, entry.results]]))
-      setActiveTab('results')
-    }
-  }, [])
-
-  const handleExport = useCallback(async () => {
-    if (results.size === 0) return
-    const orderedResults: BatchQueryResult[] = catalogOrder
-      .map(catalogNumber => ({
-        catalogNumber,
-        results: results.get(catalogNumber) || []
-      }))
-      .filter(r => r.results.length > 0)
-    if (orderedResults.length === 0) return
-    try {
-      const filePath = await window.electronAPI.exportToExcel(orderedResults)
-      if (filePath) {
-        setToast(`Exported to ${filePath}`)
-        setTimeout(() => setToast(null), 4000)
-      }
-    } catch (err) {
-      setToast('Export failed')
-      setTimeout(() => setToast(null), 4000)
-    }
-  }, [results, catalogOrder])
 
   const handleTitleClick = useCallback((catalogNumber: string) => {
     setSelectedCatalog(catalogNumber)
@@ -566,68 +533,41 @@ function App() {
         </aside>
         <section className="right-panel">
           <div className="panel-header">
-            <div className="tabs">
-              <button
-                className={`tab ${activeTab === 'results' ? 'active' : ''}`}
-                onClick={() => setActiveTab('results')}
-              >
-                Results
-              </button>
-              <button
-                className={`tab ${activeTab === 'history' ? 'active' : ''}`}
-                onClick={() => setActiveTab('history')}
-              >
-                History
-              </button>
-            </div>
-            <div className="panel-actions">
-              {activeTab === 'results' && results.size > 0 && (
-                <button className="export-button" onClick={handleExport}>
-                  Export to Excel
-                </button>
-              )}
-            </div>
+            <h2>Results</h2>
           </div>
           <div className="panel-content">
-            {activeTab === 'results' && (
-              <>
-                {results.size === 0 && !hasProgress && (
-                  <p className="placeholder-text">
-                    Search results will appear here.
-                  </p>
-                )}
-                {isCancelling && (
-                  <div className="progress-area cancelling">
-                    <div className="spinner" />
-                    <p>正在取消...</p>
-                  </div>
-                )}
-                {!isCancelling && hasProgress && results.size === 0 && (
-                  <div className="progress-area">
-                    <div className="spinner" />
-                    <p>Querying...</p>
-                  </div>
-                )}
-                {results.size > 0 && (
-                  <div className="results-area">
-                    {catalogOrder.map((catalogNumber) => {
-                      const resultData = results.get(catalogNumber)
-                      if (!resultData) return null
-                      return (
-                        <ResultCard
-                          key={catalogNumber}
-                          catalogNumber={catalogNumber}
-                          results={resultData}
-                          onTitleClick={handleTitleClick}
-                        />
-                      )
-                    })}
-                  </div>
-                )}
-              </>
+            {results.size === 0 && !hasProgress && (
+              <p className="placeholder-text">
+                Search results will appear here.
+              </p>
             )}
-            {activeTab === 'history' && (
-              <HistoryView onLoadEntry={handleLoadHistory} />
+            {isCancelling && (
+              <div className="progress-area cancelling">
+                <div className="spinner" />
+                <p>正在取消...</p>
+              </div>
+            )}
+            {!isCancelling && hasProgress && results.size === 0 && (
+              <div className="progress-area">
+                <div className="spinner" />
+                <p>Querying...</p>
+              </div>
+            )}
+            {results.size > 0 && (
+              <div className="results-area">
+                {catalogOrder.map((catalogNumber) => {
+                  const resultData = results.get(catalogNumber)
+                  if (!resultData) return null
+                  return (
+                    <ResultCard
+                      key={catalogNumber}
+                      catalogNumber={catalogNumber}
+                      results={resultData}
+                      onTitleClick={handleTitleClick}
+                    />
+                  )
+                })}
+              </div>
             )}
           </div>
         </section>
@@ -641,7 +581,6 @@ function App() {
           results={results.get(selectedCatalog) || []}
         />
       )}
-      {toast && <div className="app-toast">{toast}</div>}
     </div>
   )
 }

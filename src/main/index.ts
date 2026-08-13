@@ -1,10 +1,8 @@
 import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
-import { initDatabase, closeDatabase } from './database'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerOrchestratorIpc } from './ipc/orchestrator'
-import { registerHistoryIpc } from './ipc/history'
-import { registerExportIpc } from './ipc/export'
+import { registerImageIpc } from './ipc/image'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
 
@@ -50,11 +48,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  initDatabase()
   registerSettingsIpc()
   registerOrchestratorIpc()
-  registerHistoryIpc()
-  registerExportIpc()
+  registerImageIpc()
   registerThrottleIpc()
 
   // Register shell.openExternal handler
@@ -73,7 +69,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  closeDatabase()
   browserPool.closeAll()
   destroyProxyAgents()
   if (process.platform !== 'darwin') {

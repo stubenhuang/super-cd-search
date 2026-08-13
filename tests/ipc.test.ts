@@ -8,20 +8,12 @@ const { mockGetSettings, mockGetSetting, mockSetSetting, mockDeleteSetting } = v
   mockDeleteSetting: vi.fn()
 }))
 
-const { mockGetHistory, mockGetHistoryEntry, mockDeleteHistoryEntry, mockClearAllHistory } = vi.hoisted(() => ({
-  mockGetHistory: vi.fn(),
-  mockGetHistoryEntry: vi.fn(),
-  mockDeleteHistoryEntry: vi.fn(),
-  mockClearAllHistory: vi.fn()
-}))
-
 const { mockExecuteBatchQuery, mockCancelBatchQuery } = vi.hoisted(() => ({
   mockExecuteBatchQuery: vi.fn(),
   mockCancelBatchQuery: vi.fn()
 }))
 
-const { mockExportToExcel, mockDownloadImage } = vi.hoisted(() => ({
-  mockExportToExcel: vi.fn(),
+const { mockDownloadImage } = vi.hoisted(() => ({
   mockDownloadImage: vi.fn()
 }))
 
@@ -32,20 +24,9 @@ vi.mock('../src/main/settings', () => ({
   deleteSetting: mockDeleteSetting
 }))
 
-vi.mock('../src/main/database/queries', () => ({
-  getHistory: mockGetHistory,
-  getHistoryEntry: mockGetHistoryEntry,
-  deleteHistoryEntry: mockDeleteHistoryEntry,
-  clearAllHistory: mockClearAllHistory
-}))
-
 vi.mock('../src/main/orchestrator', () => ({
   executeBatchQuery: mockExecuteBatchQuery,
   cancelBatchQuery: mockCancelBatchQuery
-}))
-
-vi.mock('../src/main/export', () => ({
-  exportToExcel: mockExportToExcel
 }))
 
 vi.mock('../src/main/image', () => ({
@@ -53,9 +34,8 @@ vi.mock('../src/main/image', () => ({
 }))
 
 import { registerSettingsIpc } from '../src/main/ipc/settings'
-import { registerHistoryIpc } from '../src/main/ipc/history'
 import { registerOrchestratorIpc } from '../src/main/ipc/orchestrator'
-import { registerExportIpc } from '../src/main/ipc/export'
+import { registerImageIpc } from '../src/main/ipc/image'
 
 function handler(channel: string) {
   const call = vi.mocked(ipcMain.handle).mock.calls.find(([ch]) => ch === channel)
@@ -85,24 +65,6 @@ describe('registerSettingsIpc', () => {
   })
 })
 
-describe('registerHistoryIpc', () => {
-  it('registers history handlers', async () => {
-    mockGetHistory.mockReturnValue([{ id: 1 }])
-    mockGetHistoryEntry.mockReturnValue({ query: { id: 1 } })
-
-    registerHistoryIpc()
-
-    expect(await handler('getHistory')()).toEqual([{ id: 1 }])
-    expect(await handler('getHistoryEntry')(null, 2)).toEqual({ query: { id: 1 } })
-
-    await handler('deleteHistoryEntry')(null, 2)
-    expect(mockDeleteHistoryEntry).toHaveBeenCalledWith(2)
-
-    await handler('clearAllHistory')()
-    expect(mockClearAllHistory).toHaveBeenCalled()
-  })
-})
-
 describe('registerOrchestratorIpc', () => {
   it('registers orchestrator handlers', async () => {
     mockExecuteBatchQuery.mockResolvedValue([{ catalogNumber: 'X-1', results: [] }])
@@ -120,15 +82,11 @@ describe('registerOrchestratorIpc', () => {
   })
 })
 
-describe('registerExportIpc', () => {
-  it('registers export handlers', async () => {
-    mockExportToExcel.mockResolvedValue('/tmp/out.xlsx')
+describe('registerImageIpc', () => {
+  it('registers the fetchImage handler', async () => {
     mockDownloadImage.mockResolvedValue({ base64: 'x', mimeType: 'image/png' })
 
-    registerExportIpc()
-
-    expect(await handler('exportToExcel')(null, [])).toBe('/tmp/out.xlsx')
-    expect(mockExportToExcel).toHaveBeenCalledWith([])
+    registerImageIpc()
 
     expect(await handler('fetchImage')(null, 'https://example.com/a.png')).toEqual({
       base64: 'x',

@@ -11,10 +11,6 @@ const { mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQuer
   mockQueryTower: vi.fn()
 }))
 
-const { mockGetDatabase } = vi.hoisted(() => ({
-  mockGetDatabase: vi.fn()
-}))
-
 vi.mock('../src/main/queries/discogs', () => ({ queryDiscogs: mockQueryDiscogs }))
 vi.mock('../src/main/queries/ebay', () => ({ queryEbay: mockQueryEbay }))
 vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mockQueryKojima }))
@@ -22,7 +18,6 @@ vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
 vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
 vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
 vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
-vi.mock('../src/main/database', () => ({ getDatabase: mockGetDatabase }))
 
 import {
   executeBatchQuery,
@@ -42,28 +37,11 @@ const found = (platform: string) => ({
 })
 
 let sendMock: ReturnType<typeof vi.fn>
-let insertQueryRun: ReturnType<typeof vi.fn>
-let insertResultRun: ReturnType<typeof vi.fn>
-let fakeDb: {
-  prepare: ReturnType<typeof vi.fn>
-  transaction: ReturnType<typeof vi.fn>
-}
 
 beforeEach(() => {
   vi.clearAllMocks()
   sendMock = vi.fn()
   vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([{ webContents: { send: sendMock } }] as never)
-
-  insertQueryRun = vi.fn(() => ({ lastInsertRowid: 1 }))
-  insertResultRun = vi.fn()
-  fakeDb = {
-    prepare: vi.fn((sql: string) => {
-      if (sql.startsWith('INSERT INTO queries')) return { run: insertQueryRun }
-      return { run: insertResultRun }
-    }),
-    transaction: vi.fn((fn: () => void) => () => fn())
-  }
-  mockGetDatabase.mockReturnValue(fakeDb)
 
   mockQueryDiscogs.mockResolvedValue(found('discogs'))
   mockQueryEbay.mockResolvedValue(found('ebay'))
@@ -91,10 +69,6 @@ describe('executeBatchQuery', () => {
     expect(mockQueryYahoo).toHaveBeenCalledWith('UCCG-90530')
     expect(mockQueryCdjapan).toHaveBeenCalledWith('UCCG-90530')
     expect(mockQueryTower).toHaveBeenCalledWith('UCCG-90530')
-
-    // Each catalog is persisted inside a transaction
-    expect(insertQueryRun).toHaveBeenCalledTimes(2)
-    expect(insertResultRun).toHaveBeenCalledTimes(14)
 
     // Progress events are emitted per platform
     const events = sendMock.mock.calls.map(([channel, data]) => ({ channel, event: data.event }))
@@ -152,7 +126,6 @@ describe('executeBatchQuery', () => {
     const ebayResult = results[0].results.find(r => r.platform === 'ebay')
     expect(ebayResult).toMatchObject({ status: 'error', error: 'eBay is down' })
     expect(results[0].results).toHaveLength(7)
-    expect(insertResultRun).toHaveBeenCalledTimes(7)
   })
 
   it('aborts in-flight queries and emits a batch-cancelled event', async () => {
