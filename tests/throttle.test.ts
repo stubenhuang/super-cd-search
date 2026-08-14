@@ -38,7 +38,7 @@ describe('throttledFetch', () => {
     const response = await promise
 
     expect(response.status).toBe(200)
-    expect(fetchMock).toHaveBeenCalledWith('https://plain.test/1', undefined)
+    expect(fetchMock).toHaveBeenCalledWith('https://plain.test/1', expect.objectContaining({ signal: expect.anything() }))
   })
 
   it('uses a custom delay range when provided', async () => {
@@ -109,6 +109,25 @@ describe('throttledFetch', () => {
     const assertion = expect(promise).rejects.toThrow('network failure')
     await vi.advanceTimersByTimeAsync(10000)
 
+    await assertion
+  })
+
+  it('aborts the request after the configured timeout', async () => {
+    fetchMock.mockImplementation((_url: string, opts: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        opts.signal?.addEventListener('abort', () => reject(new Error('Aborted')))
+      })
+    })
+
+    const promise = throttledFetch('timeout.test', 'https://timeout.test/1', undefined, {
+      minDelay: 10,
+      maxDelay: 10,
+      timeoutMs: 100
+    })
+    const assertion = expect(promise).rejects.toThrow('Aborted')
+
+    await vi.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(100)
     await assertion
   })
 

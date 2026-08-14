@@ -1,5 +1,8 @@
 import { ipcMain } from 'electron'
 import { getSettings, getSetting, setSetting, deleteSetting, type Settings } from '../settings'
+import { clearSearchCache } from '../queries/cache'
+import { clearReleaseCache } from '../queries/discogs'
+import { clearItemDetailsCache } from '../queries/ebay'
 
 export function registerSettingsIpc(): void {
   ipcMain.handle('getSettings', () => {
@@ -16,5 +19,11 @@ export function registerSettingsIpc(): void {
 
   ipcMain.handle('deleteSetting', (_event, key: string) => {
     deleteSetting(key as keyof Settings)
+  })
+
+  ipcMain.handle('clearSearchCache', () => {
+    clearSearchCache()
+    clearReleaseCache()
+    clearItemDetailsCache()
   })
 }

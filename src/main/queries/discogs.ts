@@ -23,7 +23,12 @@ interface ReleaseCacheEntry {
 }
 
 const releaseCache = new Map<number, ReleaseCacheEntry>()
-const RELEASE_CACHE_TTL = 60 * 60 * 1000 // 1 hour
+const RELEASE_CACHE_TTL = 24 * 60 * 60 * 1000 // 1 day
+
+/** Clear the in-memory release-detail cache (used by "clear search cache"). */
+export function clearReleaseCache(): void {
+  releaseCache.clear()
+}
 
 function getCachedRelease(releaseId: number): ReleaseCacheEntry | null {
   const entry = releaseCache.get(releaseId)

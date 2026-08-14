@@ -49,6 +49,7 @@ export interface IElectronAPI {
   getSetting: <K extends keyof Settings>(key: K) => Promise<Settings[K] | undefined>
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>
   deleteSetting: <K extends keyof Settings>(key: K) => Promise<void>
+  clearSearchCache: () => Promise<void>
   getThrottleStatus: () => Promise<ThrottleStatus>
   getUsdToDisplayRate: (target: DisplayCurrency) => Promise<number>
   executeBatchQuery: (catalogNumbers: string[], platforms?: Platform[]) => Promise<BatchQueryResult[]>

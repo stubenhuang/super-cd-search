@@ -25,7 +25,12 @@ let accessToken: string | null = null
 let tokenExpiry: number = 0
 
 const itemDetailsCache = new Map<string, { details: CDDetails; fetchedAt: number }>()
-const ITEM_CACHE_TTL = 60 * 60 * 1000 // 1 hour
+const ITEM_CACHE_TTL = 24 * 60 * 60 * 1000 // 1 day
+
+/** Clear the in-memory item-detail cache (used by "clear search cache"). */
+export function clearItemDetailsCache(): void {
+  itemDetailsCache.clear()
+}
 
 async function getEbayAccessToken(): Promise<string | null> {
   if (accessToken && Date.now() < tokenExpiry) {

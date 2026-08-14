@@ -229,6 +229,9 @@ function App() {
   const cancelledRef = useRef(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [searchMode, setSearchMode] = useState<SearchMode>('standard')
+  const [isDeepSearching, setIsDeepSearching] = useState(false)
+  const [deepSearchTargets, setDeepSearchTargets] = useState<string[]>([])
+  const [deepSearchPlatforms, setDeepSearchPlatforms] = useState<Platform[]>([])
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null)
   const prevIsLoadingRef = useRef(false)
@@ -360,12 +363,17 @@ function App() {
     prevIsLoadingRef.current = isLoading
   }, [isLoading, results.size])
 
-  const completedCount = completedCatalogs.size
   const hasProgress = completedCatalogs.size > 0 || progressStatus.size > 0
   const catalogNumbers = useMemo(() => parseCatalogNumbers(input), [input, parseCatalogNumbers])
-  // Use catalogOrder for progress calculation to keep progress at 100% after completion
-  const totalCount = catalogOrder.length || catalogNumbers.length || 0
-  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+
+  // During a deep-search pass, the progress panel switches to show the deep
+  // targets and their deep platform set instead of the main search context.
+  const isDeepProgress = isDeepSearching && deepSearchTargets.length > 0
+  const progressPlatforms = isDeepProgress ? deepSearchPlatforms : activePlatforms
+  const progressCatalogs = isDeepProgress ? deepSearchTargets : catalogNumbers
+  const totalCount = isDeepProgress
+    ? deepSearchTargets.length
+    : (catalogOrder.length || catalogNumbers.length || 0)
 
   const progressByCatalog = useMemo(() => {
     const map = new Map<string, Map<string, string>>()
@@ -374,14 +382,82 @@ function App() {
       if (separator <= 0) continue
       const catalogNumber = key.slice(0, separator)
       const platform = key.slice(separator + 1)
-      if (!activePlatforms.includes(platform as Platform)) continue
+      if (!progressPlatforms.includes(platform as Platform)) continue
       if (!map.has(catalogNumber)) {
         map.set(catalogNumber, new Map())
       }
       map.get(catalogNumber)!.set(platform, status)
     }
     return map
-  }, [progressStatus, activePlatforms])
+  }, [progressStatus, progressPlatforms])
+
+  const completedCount = useMemo(() => {
+    if (isDeepProgress) {
+      return deepSearchTargets.filter((cn) => {
+        const platforms = progressByCatalog.get(cn)
+        return platforms !== undefined &&
+          platforms.size === progressPlatforms.length &&
+          progressPlatforms.every((p) => {
+            const s = platforms.get(p)
+            return s === 'complete' || s === 'not_found' || s === 'error' || s === 'challenge'
+          })
+      }).length
+    }
+    return completedCatalogs.size
+  }, [isDeepProgress, deepSearchTargets, progressByCatalog, progressPlatforms, completedCatalogs])
+
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+
+  // Entries that produced no "found" result across their queried platforms.
+  const emptyCatalogs = useMemo(() => {
+    if (searchMode !== 'standard') return []
+    return catalogOrder.filter((cn) => {
+      const rs = results.get(cn)
+      return !rs || rs.length === 0 || !rs.some((r) => r.status === 'found')
+    })
+  }, [searchMode, catalogOrder, results])
+
+  const showDeepSearchButton =
+    searchMode === 'standard' && !isLoading && !isCancelling && emptyCatalogs.length > 0
+
+  const handleDeepSearch = useCallback(async () => {
+    const targets = emptyCatalogs
+    if (targets.length === 0 || isDeepSearching) return
+
+    let settings: Settings | undefined
+    try {
+      settings = await window.electronAPI.getSettings()
+    } catch {
+      settings = undefined
+    }
+    const deepPlatforms = settings?.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS
+    if (deepPlatforms.length === 0) {
+      setError(t('error.noPlatforms'))
+      return
+    }
+
+    setError(null)
+    setDeepSearchTargets(targets)
+    setDeepSearchPlatforms(deepPlatforms)
+    setIsDeepSearching(true)
+    try {
+      const batchResults = await window.electronAPI.executeBatchQuery(targets, deepPlatforms)
+      setResults((prev) => {
+        const merged = new Map(prev)
+        for (const batch of batchResults) {
+          const existing = merged.get(batch.catalogNumber) || []
+          merged.set(batch.catalogNumber, mergePlatformResults(existing, batch.results))
+        }
+        return merged
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('error.queryFailed'))
+    } finally {
+      setIsDeepSearching(false)
+      setDeepSearchTargets([])
+      setDeepSearchPlatforms([])
+    }
+  }, [emptyCatalogs, isDeepSearching, t])
 
   const handleTitleClick = useCallback((catalogNumber: string) => {
     setSelectedCatalog(catalogNumber)
@@ -502,7 +578,7 @@ function App() {
               placeholder={t('input.placeholder')}
               value={input}
               onChange={e => setInput(e.target.value)}
-              disabled={isLoading || isCancelling}
+              disabled={isLoading || isCancelling || isDeepSearching}
               rows={10}
             />
             {error && <div className="error-message">{error}</div>}
@@ -514,7 +590,7 @@ function App() {
                   className="search-mode-select"
                   value={searchMode}
                   onChange={e => setSearchMode(e.target.value as SearchMode)}
-                  disabled={isLoading || isCancelling}
+                  disabled={isLoading || isCancelling || isDeepSearching}
                 >
                   <option value="standard">{t('searchMode.standard')}</option>
                   <option value="deep">{t('searchMode.deep')}</option>
@@ -538,11 +614,11 @@ function App() {
               <button
                 className="search-button"
                 onClick={handleSearch}
-                disabled={isLoading || isCancelling}
+                disabled={isLoading || isCancelling || isDeepSearching}
               >
                 {isCancelling ? t('search.cancelling') : isLoading ? t('search.searching') : t('search.button')}
               </button>
-              {isLoading && (
+              {(isLoading || isDeepSearching) && (
                 <button
                   className="cancel-button-icon"
                   onClick={handleCancel}
@@ -569,10 +645,10 @@ function App() {
                   />
                 </div>
                 <div className="progress-catalogs">
-                  {catalogNumbers.map(cn => {
+                  {progressCatalogs.map(cn => {
                     const platforms = progressByCatalog.get(cn)
-                    const isComplete = platforms?.size === activePlatforms.length &&
-                      activePlatforms.every(p => {
+                    const isComplete = platforms?.size === progressPlatforms.length &&
+                      progressPlatforms.every(p => {
                         const s = platforms?.get(p)
                         return s === 'complete' || s === 'not_found' || s === 'error' || s === 'challenge'
                       })
@@ -580,7 +656,7 @@ function App() {
                       <div key={cn} className={`progress-catalog-item ${isComplete ? 'complete' : ''}`}>
                         <span className="progress-catalog-name">{cn}</span>
                         <div className="progress-platforms">
-                          {activePlatforms.map(p => {
+                          {progressPlatforms.map(p => {
                             const status = platforms?.get(p)
                             return (
                               <span
@@ -617,6 +693,16 @@ function App() {
         <section className="right-panel">
           <div className="panel-header">
             <h2>{t('panel.results')}</h2>
+            {showDeepSearchButton && (
+              <button
+                className="deep-search-button"
+                onClick={handleDeepSearch}
+                disabled={isDeepSearching}
+                title={t('deepSearch.title')}
+              >
+                {isDeepSearching ? t('deepSearch.digging') : t('deepSearch.button')}
+              </button>
+            )}
           </div>
           <div className="panel-content">
             {results.size === 0 && !hasProgress && (

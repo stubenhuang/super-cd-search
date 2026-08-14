@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import { mkdtempSync, writeFileSync, rmSync } from 'fs'
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -9,6 +9,7 @@ import {
   getCachedProductData,
   cacheProductData,
   clearAllCaches,
+  clearSearchCache,
   initCachePersistence,
   flushCacheToDisk
 } from '../src/main/queries/cache'
@@ -188,13 +189,25 @@ describe('disk persistence', () => {
     const file = join(dir, 'search-cache.json')
     writeFileSync(file, JSON.stringify({
       queryResults: {
-        'discogs:X-1': { value: found('discogs', 'Stale'), fetchedAt: Date.now() - 2 * 60 * 60 * 1000 }
+        'discogs:X-1': { value: found('discogs', 'Stale'), fetchedAt: Date.now() - 2 * 24 * 60 * 60 * 1000 }
       },
       productDetails: {}
     }))
 
     initCachePersistence(dir)
     expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
+  })
+
+  it('clearSearchCache clears memory and deletes the disk file', () => {
+    initCachePersistence(dir)
+    cacheQueryResult('X-1', found('discogs', 'To Clear'))
+    flushCacheToDisk()
+    const file = join(dir, 'search-cache.json')
+    expect(existsSync(file)).toBe(true)
+
+    clearSearchCache()
+    expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
+    expect(existsSync(file)).toBe(false)
   })
 
   it('tolerates a corrupt cache file', () => {

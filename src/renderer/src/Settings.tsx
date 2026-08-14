@@ -93,6 +93,16 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     void refreshCloudflareStatus()
   }
 
+  const handleClearCache = async () => {
+    try {
+      await window.electronAPI.clearSearchCache()
+      setToast({ kind: 'success', text: t('cache.cleared') })
+    } catch {
+      setToast({ kind: 'error', text: t('cache.clearFailed') })
+    }
+    setTimeout(() => setToast(null), 3000)
+  }
+
   const loadSettings = useCallback(async () => {
     const settings = await window.electronAPI.getSettings() as Settings
     setDiscogsToken(settings.discogsToken || '')
@@ -466,6 +476,17 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     <span className="st-check-name">{PLATFORM_LABELS[p]}</span>
                   </label>
                 ))}
+              </div>
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◈</span> {t('cache.label')}
+              </div>
+              <div className="st-section-desc">{t('cache.desc')}</div>
+              <div className="st-cf-actions">
+                <button type="button" className="st-btn-cancel" onClick={() => void handleClearCache()}>
+                  {t('cache.clear')}
+                </button>
               </div>
             </div>
           </div>

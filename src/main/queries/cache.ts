@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import type { QueryResult, Platform } from '../../shared/types'
 
@@ -90,7 +90,7 @@ export function createTtlCache<K, V>(ttlMs: number, maxSize = 500): TtlCache<K, 
   }
 }
 
-const CACHE_TTL = 60 * 60 * 1000 // 1 hour
+const CACHE_TTL = 24 * 60 * 60 * 1000 // 1 day
 const QUERY_CACHE_MAX = 1000
 const DETAIL_CACHE_MAX = 1000
 
@@ -133,6 +133,30 @@ export function cacheProductData(platform: Platform, productUrl: string, value: 
 export function clearAllCaches(): void {
   queryResultCache.clear()
   productDetailCache.clear()
+}
+
+/**
+ * Clear the query-result and product-detail caches and delete the on-disk
+ * cache file. Used by the "clear search cache" action in settings.
+ */
+export function clearSearchCache(): void {
+  queryResultCache.clear()
+  productDetailCache.clear()
+
+  // Drop any pending debounced write so it can't resurrect stale entries.
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+
+  const file = cacheFilePath()
+  if (file) {
+    try {
+      unlinkSync(file)
+    } catch {
+      // Missing file is fine.
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

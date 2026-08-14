@@ -348,6 +348,42 @@ body.is-resizing {
   margin: 0;
 }
 
+/* Deep-search action in the results panel header */
+.deep-search-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
+  color: var(--on-accent);
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.deep-search-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md), 0 4px 12px var(--accent-glow);
+}
+
+.deep-search-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.deep-search-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* === Panel Content === */
 .panel-content {
   flex: 1;

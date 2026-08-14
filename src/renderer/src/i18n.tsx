@@ -21,6 +21,9 @@ const zh = {
   'searchMode.deep': '深度搜索（全部平台）',
   'searchMode.deepWarning': '深度搜索会查询全部平台（7 个数据源），速度较慢',
   'searchMode.deepWarningShort': '深度搜索速度较慢',
+  'deepSearch.button': '深挖🪏',
+  'deepSearch.digging': '深挖中...',
+  'deepSearch.title': '对未找到结果的条目执行深度搜索',
   'search.button': '搜索',
   'search.searching': '搜索中...',
   'search.cancelling': '取消中...',
@@ -110,6 +113,13 @@ const zh = {
   'sources.standard': '标准搜索',
   'sources.deep': '深度搜索',
 
+  // Search cache
+  'cache.label': '搜索缓存',
+  'cache.desc': '清除本地缓存的查询结果与详情页数据',
+  'cache.clear': '清空搜索缓存',
+  'cache.cleared': '已清空搜索缓存',
+  'cache.clearFailed': '清空缓存失败',
+
   // LLM
   'llm.desc': '配置 OpenAI 兼容 API，用于智能内容解析与元数据提取。',
   'llm.enable': '启用 LLM 解析',
@@ -170,6 +180,9 @@ const en: Record<keyof typeof zh, string> = {
   'searchMode.deep': 'Deep (All Platforms)',
   'searchMode.deepWarning': 'Deep search queries all platforms (7 data sources) and is slower',
   'searchMode.deepWarningShort': 'Deep search is slower',
+  'deepSearch.button': 'Deep Dig 🪏',
+  'deepSearch.digging': 'Digging...',
+  'deepSearch.title': 'Deep-search the entries with no results',
   'search.button': 'Search',
   'search.searching': 'Searching...',
   'search.cancelling': 'Cancelling...',
@@ -249,6 +262,13 @@ const en: Record<keyof typeof zh, string> = {
   'sources.fastModeDesc': 'Skip product-detail page visits for a faster, lower-traffic search (details may be omitted)',
   'sources.standard': 'Standard Search',
   'sources.deep': 'Deep Search',
+
+  // Search cache
+  'cache.label': 'Search Cache',
+  'cache.desc': 'Clear locally cached query results and product details',
+  'cache.clear': 'Clear Search Cache',
+  'cache.cleared': 'Search cache cleared',
+  'cache.clearFailed': 'Failed to clear cache',
 
   'llm.desc': 'Configure an OpenAI-compatible API for intelligent content parsing and metadata extraction.',
   'llm.enable': 'Enable LLM Parsing',

@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('setSetting', key, value),
   deleteSetting: <K extends keyof Settings>(key: K): Promise<void> =>
     ipcRenderer.invoke('deleteSetting', key),
+  clearSearchCache: (): Promise<void> => ipcRenderer.invoke('clearSearchCache'),
   getThrottleStatus: (): Promise<ThrottleStatus> => ipcRenderer.invoke('getThrottleStatus'),
   getUsdToDisplayRate: (target: DisplayCurrency): Promise<number> =>
     ipcRenderer.invoke('getUsdToDisplayRate', target),

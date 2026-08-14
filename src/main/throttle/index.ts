@@ -53,10 +53,13 @@ const MIN_DELAY = 2000
 const MAX_DELAY = 6000
 const BACKOFF_DELAYS = [2000, 4000, 8000]
 const MAX_RETRIES = 3
+const DEFAULT_FETCH_TIMEOUT_MS = 30_000
 
 export interface ThrottleOptions {
   minDelay?: number
   maxDelay?: number
+  /** Abort the request if it does not settle within this many milliseconds. */
+  timeoutMs?: number
 }
 
 function getDomainState(domain: string): DomainState {
@@ -104,6 +107,10 @@ export async function throttledFetch(
     const state = getDomainState(domain)
 
     const executeRequest = async () => {
+      const timeoutMs = throttle?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
       try {
         let response: Response
 
@@ -111,12 +118,12 @@ export async function throttledFetch(
         const proxyHost = getSetting('proxyHost')
         const proxyPort = getSetting('proxyPort')
 
+        const requestOptions: NodeFetchOptions = { ...options, signal: controller.signal }
         if (proxyEnabled && proxyHost && proxyPort) {
-          const agent = getProxyAgent(proxyHost, proxyPort)
-          response = await fetch(url, { ...options, agent } as NodeFetchOptions)
-        } else {
-          response = await fetch(url, options)
+          requestOptions.agent = getProxyAgent(proxyHost, proxyPort)
         }
+        response = await fetch(url, requestOptions)
+        clearTimeout(timeout)
 
         if (response.status === 429) {
           const backoff = backoffStates.get(domain) || { attempt: 0, nextDelay: BACKOFF_DELAYS[0] }
@@ -157,6 +164,7 @@ export async function throttledFetch(
         resolve(response)
         processQueue(domain)
       } catch (err) {
+        clearTimeout(timeout)
         state.active = false
         state.lastRequestTime = Date.now()
         reject(err)

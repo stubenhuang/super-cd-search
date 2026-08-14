@@ -12,7 +12,7 @@ const KOJIMA_WEB_URL = 'https://kojimarokuon.com'
 
 // Light throttle for the Shopify JSON endpoint: one lightweight GET per unique
 // product (cached thereafter), far cheaper than rendering the product page.
-const JSON_THROTTLE = { minDelay: 300, maxDelay: 800 }
+const JSON_THROTTLE = { minDelay: 300, maxDelay: 800, timeoutMs: 15000 }
 
 interface KojimaProductData {
   price: number | null
