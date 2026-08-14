@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Settings } from './electron-api'
+import type { Settings, Platform } from './electron-api'
+import { PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 import './Settings.css'
 
 interface SettingsPanelProps {
@@ -7,7 +8,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'cookies' | 'proxy' | 'llm'
+type SectionKey = 'api' | 'cookies' | 'proxy' | 'sources' | 'llm'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SectionKey>('api')
@@ -36,6 +37,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [llmPlatformYahoo, setLlmPlatformYahoo] = useState(true)
   const [llmPlatformCdjapan, setLlmPlatformCdjapan] = useState(true)
   const [llmPlatformTower, setLlmPlatformTower] = useState(true)
+  const [standardPlatforms, setStandardPlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
+  const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -73,6 +76,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setLlmPlatformYahoo(llm?.platformEnabled?.yahoo ?? true)
     setLlmPlatformCdjapan(llm?.platformEnabled?.cdjapan ?? true)
     setLlmPlatformTower(llm?.platformEnabled?.tower ?? true)
+    setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
+    setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
   }, [])
 
   const handleSave = async () => {
@@ -93,6 +98,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       await window.electronAPI.setSetting('proxyEnabled', proxyEnabled)
       await window.electronAPI.setSetting('proxyHost', proxyHost)
       await window.electronAPI.setSetting('proxyPort', proxyPort)
+      await window.electronAPI.setSetting('standardPlatforms', standardPlatforms)
+      await window.electronAPI.setSetting('deepPlatforms', deepPlatforms)
       await window.electronAPI.setSetting('llm', {
         enabled: llmEnabled,
         apiBaseUrl: llmApiBaseUrl,
@@ -119,12 +126,21 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     }
   }
 
+  const togglePlatform = (list: Platform[], platform: Platform): Platform[] => {
+    if (list.includes(platform)) {
+      return list.filter(p => p !== platform)
+    }
+    // Keep the canonical platform order when adding a platform back.
+    return PLATFORMS.filter(p => list.includes(p) || p === platform)
+  }
+
   if (!isOpen) return null
 
   const navItems: { key: SectionKey; icon: string; label: string }[] = [
     { key: 'api', icon: '◆', label: 'API Tokens' },
     { key: 'cookies', icon: '◈', label: 'Cookies' },
     { key: 'proxy', icon: '◉', label: 'Proxy' },
+    { key: 'sources', icon: '◎', label: 'Search Sources' },
     { key: 'llm', icon: '◇', label: 'LLM Config' }
   ]
 
@@ -336,6 +352,51 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     disabled={!proxyEnabled}
                   />
                 </div>
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'sources':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              Choose which platforms each search mode queries. Standard mode defaults to Discogs + eBay; deep mode defaults to every platform.
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◆</span> 标准搜索（Standard）
+              </div>
+              <div className="st-platform-grid">
+                {PLATFORMS.map(p => (
+                  <label key={p} className={`st-check-item ${standardPlatforms.includes(p) ? 'checked' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={standardPlatforms.includes(p)}
+                      onChange={() => setStandardPlatforms(togglePlatform(standardPlatforms, p))}
+                    />
+                    <span className="st-check-box"></span>
+                    <span className="st-check-name">{PLATFORM_LABELS[p]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◆</span> 深度搜索（Deep）
+              </div>
+              <div className="st-platform-grid">
+                {PLATFORMS.map(p => (
+                  <label key={p} className={`st-check-item ${deepPlatforms.includes(p) ? 'checked' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={deepPlatforms.includes(p)}
+                      onChange={() => setDeepPlatforms(togglePlatform(deepPlatforms, p))}
+                    />
+                    <span className="st-check-box"></span>
+                    <span className="st-check-name">{PLATFORM_LABELS[p]}</span>
+                  </label>
+                ))}
               </div>
             </div>
           </div>

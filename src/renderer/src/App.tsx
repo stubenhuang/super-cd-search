@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { DetailModal } from './DetailModal'
 import { normalizeCatalogNumber } from '../../shared/utils'
-import { PLATFORMS, PLATFORM_LABELS } from '../../shared/platforms'
+import { PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { useCoverImage } from './hooks/useCoverImage'
 import './App.css'
@@ -13,11 +13,6 @@ type SearchMode = 'standard' | 'deep'
 const SEARCH_MODE_LABELS: Record<SearchMode, string> = {
   standard: '标准搜索（Discogs + eBay）',
   deep: '深度搜索（全部平台）'
-}
-
-const SEARCH_MODE_PLATFORMS: Record<SearchMode, Platform[]> = {
-  standard: ['discogs', 'ebay'],
-  deep: [...PLATFORMS]
 }
 
 function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]): QueryResult[] {
@@ -220,7 +215,9 @@ function App() {
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null)
   const prevIsLoadingRef = useRef(false)
 
-  const enabledPlatforms = useMemo(() => SEARCH_MODE_PLATFORMS[searchMode], [searchMode])
+  // Platforms queried by the currently running search. Resolved from the
+  // latest settings each time a search starts (see handleSearch).
+  const [activePlatforms, setActivePlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
 
   const parseCatalogNumbers = useCallback((input: string): string[] => {
     const lines = input.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)
@@ -240,6 +237,23 @@ function App() {
       return
     }
 
+    // Resolve the platform list for this search mode from the latest settings,
+    // so changes made in the settings panel apply on the next search.
+    let settings: Settings | undefined
+    try {
+      settings = await window.electronAPI.getSettings()
+    } catch {
+      settings = undefined
+    }
+    const standardPlatforms = settings?.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS
+    const deepPlatforms = settings?.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS
+    const platforms = searchMode === 'standard' ? standardPlatforms : deepPlatforms
+
+    if (platforms.length === 0) {
+      setError('当前搜索模式没有选择任何数据源，请在设置中配置')
+      return
+    }
+
     setError(null)
     setIsLoading(true)
     setProgressStatus(new Map())
@@ -248,9 +262,10 @@ function App() {
     setCatalogOrder(catalogNumbers)
     setIsCancelling(false)
     cancelledRef.current = false
+    setActivePlatforms(platforms)
 
     try {
-      const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, enabledPlatforms)
+      const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, platforms)
       setResults(prev => {
         const merged = new Map(prev)
         for (const batch of batchResults) {
@@ -267,7 +282,7 @@ function App() {
       setIsLoading(false)
       setIsCancelling(false)
     }
-  }, [input, parseCatalogNumbers, enabledPlatforms])
+  }, [input, parseCatalogNumbers, searchMode])
 
   const handleCancel = useCallback(async () => {
     cancelledRef.current = true
@@ -334,14 +349,14 @@ function App() {
       if (separator <= 0) continue
       const catalogNumber = key.slice(0, separator)
       const platform = key.slice(separator + 1)
-      if (!enabledPlatforms.includes(platform as Platform)) continue
+      if (!activePlatforms.includes(platform as Platform)) continue
       if (!map.has(catalogNumber)) {
         map.set(catalogNumber, new Map())
       }
       map.get(catalogNumber)!.set(platform, status)
     }
     return map
-  }, [progressStatus, enabledPlatforms])
+  }, [progressStatus, activePlatforms])
 
   const handleTitleClick = useCallback((catalogNumber: string) => {
     setSelectedCatalog(catalogNumber)
@@ -443,8 +458,8 @@ function App() {
                 <div className="progress-catalogs">
                   {catalogNumbers.map(cn => {
                     const platforms = progressByCatalog.get(cn)
-                    const isComplete = platforms?.size === enabledPlatforms.length &&
-                      enabledPlatforms.every(p => {
+                    const isComplete = platforms?.size === activePlatforms.length &&
+                      activePlatforms.every(p => {
                         const s = platforms?.get(p)
                         return s === 'complete' || s === 'not_found' || s === 'error'
                       })
@@ -452,7 +467,7 @@ function App() {
                       <div key={cn} className={`progress-catalog-item ${isComplete ? 'complete' : ''}`}>
                         <span className="progress-catalog-name">{cn}</span>
                         <div className="progress-platforms">
-                          {enabledPlatforms.map(p => {
+                          {activePlatforms.map(p => {
                             const status = platforms?.get(p)
                             return (
                               <span

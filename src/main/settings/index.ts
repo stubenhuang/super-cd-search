@@ -1,5 +1,6 @@
 import electronStore from 'electron-store'
-import type { Settings, Cookies, LLMSettings } from '../../shared/types'
+import type { Settings, Cookies, LLMSettings, Platform } from '../../shared/types'
+import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 
 export type { Settings, Cookies, LLMSettings }
 
@@ -23,6 +24,8 @@ const schema = {
   proxyEnabled: { type: 'boolean' as const, default: false },
   proxyHost: { type: 'string' as const, default: '' },
   proxyPort: { type: 'number' as const, default: 1080 },
+  standardPlatforms: { type: 'array' as const, default: DEFAULT_STANDARD_PLATFORMS },
+  deepPlatforms: { type: 'array' as const, default: DEFAULT_DEEP_PLATFORMS },
   llm: {
     type: 'object' as const,
     properties: {
@@ -73,7 +76,9 @@ export function getSettings(): Settings {
     proxyEnabled: store.get('proxyEnabled') as boolean || undefined,
     proxyHost: store.get('proxyHost') as string || undefined,
     proxyPort: store.get('proxyPort') as number || undefined,
-    llm: store.get('llm') as LLMSettings | undefined
+    llm: store.get('llm') as LLMSettings | undefined,
+    standardPlatforms: store.get('standardPlatforms') as Platform[] || DEFAULT_STANDARD_PLATFORMS,
+    deepPlatforms: store.get('deepPlatforms') as Platform[] || DEFAULT_DEEP_PLATFORMS
   }
 }
 

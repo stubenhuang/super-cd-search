@@ -23,3 +23,9 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   cdjapan: 'CDJapan',
   tower: 'Tower Records Japan'
 }
+
+/** Default platform set for the standard search mode. */
+export const DEFAULT_STANDARD_PLATFORMS: Platform[] = ['discogs', 'ebay']
+
+/** Default platform set for the deep search mode (all platforms). */
+export const DEFAULT_DEEP_PLATFORMS: Platform[] = [...PLATFORMS]

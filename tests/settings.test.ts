@@ -5,6 +5,7 @@ import {
   setSetting,
   deleteSetting
 } from '../src/main/settings'
+import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../src/shared/platforms'
 
 beforeEach(() => {
   deleteSetting('discogsToken')
@@ -14,11 +15,13 @@ beforeEach(() => {
   deleteSetting('proxyEnabled')
   deleteSetting('proxyHost')
   deleteSetting('proxyPort')
+  deleteSetting('standardPlatforms')
+  deleteSetting('deepPlatforms')
   deleteSetting('llm')
 })
 
 describe('settings', () => {
-  it('returns undefined for unset settings', () => {
+  it('returns undefined for unset settings and defaults for search platforms', () => {
     expect(getSettings()).toEqual({
       discogsToken: undefined,
       ebayClientId: undefined,
@@ -27,9 +30,21 @@ describe('settings', () => {
       proxyEnabled: undefined,
       proxyHost: undefined,
       proxyPort: undefined,
-      llm: undefined
+      llm: undefined,
+      standardPlatforms: DEFAULT_STANDARD_PLATFORMS,
+      deepPlatforms: DEFAULT_DEEP_PLATFORMS
     })
     expect(getSetting('discogsToken')).toBeUndefined()
+  })
+
+  it('round-trips search platform lists', () => {
+    setSetting('standardPlatforms', ['discogs', 'tower'])
+    setSetting('deepPlatforms', ['discogs', 'ebay', 'hmv'])
+
+    expect(getSetting('standardPlatforms')).toEqual(['discogs', 'tower'])
+    expect(getSetting('deepPlatforms')).toEqual(['discogs', 'ebay', 'hmv'])
+    expect(getSettings().standardPlatforms).toEqual(['discogs', 'tower'])
+    expect(getSettings().deepPlatforms).toEqual(['discogs', 'ebay', 'hmv'])
   })
 
   it('round-trips scalar settings', () => {

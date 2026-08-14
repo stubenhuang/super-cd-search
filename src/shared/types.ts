@@ -59,6 +59,10 @@ export interface Settings {
   proxyHost?: string
   proxyPort?: number
   llm?: LLMSettings
+  /** Platforms queried by the standard search mode. */
+  standardPlatforms?: Platform[]
+  /** Platforms queried by the deep search mode. */
+  deepPlatforms?: Platform[]
 }
 
 export interface BatchQueryProgress {

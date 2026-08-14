@@ -12,6 +12,16 @@ const MAX_CONCURRENT = 3
 // from the DOM attribute, so the actual bytes can be skipped.
 const BLOCKED_RESOURCE_TYPES = new Set(['image', 'media', 'font'])
 
+// A 1x1 transparent GIF served in place of real images. Aborting the request
+// instead would make <img> elements fire their `onerror` handler — Tower
+// Records uses onerror to swap the cover `src` for a placeholder, corrupting
+// the URL we later read from the DOM. Responding with a valid image keeps the
+// original `src` attribute intact.
+const EMPTY_IMAGE_BODY = Buffer.from(
+  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+  'base64'
+)
+
 interface BrowserInstance {
   browser: Browser
   fingerprint: Fingerprint
@@ -130,7 +140,13 @@ class BrowserPool {
     await page.setRequestInterception(true)
     page.on('request', (request) => {
       const type = request.resourceType()
-      if (BLOCKED_RESOURCE_TYPES.has(type)) {
+      if (type === 'image') {
+        request.respond({
+          status: 200,
+          contentType: 'image/gif',
+          body: EMPTY_IMAGE_BODY
+        }).catch(() => {})
+      } else if (BLOCKED_RESOURCE_TYPES.has(type)) {
         request.abort().catch(() => {})
       } else {
         request.continue().catch(() => {})

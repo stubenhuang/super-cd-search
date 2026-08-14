@@ -157,7 +157,7 @@ describe('browserPool', () => {
     await rejection
   })
 
-  it('blocks image, media and font requests on new pages', async () => {
+  it('serves images a 1x1 GIF and blocks media/font requests on new pages', async () => {
     const page = createFakePage()
     const browser = createFakeBrowser(page)
     mockLaunch.mockResolvedValue(browser)
@@ -170,28 +170,46 @@ describe('browserPool', () => {
           resourceType: () => string
           abort: ReturnType<typeof vi.fn>
           continue: ReturnType<typeof vi.fn>
+          respond: ReturnType<typeof vi.fn>
         }) => void)
       | undefined
     expect(handler).toBeDefined()
 
-    for (const type of ['image', 'media', 'font']) {
+    // Images are answered with a valid 1x1 GIF (not aborted) so that the
+    // <img> element's onerror never fires and rewrites the src attribute.
+    const image = {
+      resourceType: () => 'image',
+      abort: vi.fn(() => Promise.resolve()),
+      continue: vi.fn(() => Promise.resolve()),
+      respond: vi.fn(() => Promise.resolve())
+    }
+    handler!(image)
+    expect(image.respond).toHaveBeenCalledWith(expect.objectContaining({ status: 200, contentType: 'image/gif' }))
+    expect(image.abort).not.toHaveBeenCalled()
+    expect(image.continue).not.toHaveBeenCalled()
+
+    for (const type of ['media', 'font']) {
       const request = {
         resourceType: () => type,
         abort: vi.fn(() => Promise.resolve()),
-        continue: vi.fn(() => Promise.resolve())
+        continue: vi.fn(() => Promise.resolve()),
+        respond: vi.fn(() => Promise.resolve())
       }
       handler!(request)
       expect(request.abort).toHaveBeenCalled()
       expect(request.continue).not.toHaveBeenCalled()
+      expect(request.respond).not.toHaveBeenCalled()
     }
 
     const allowed = {
       resourceType: () => 'script',
       abort: vi.fn(() => Promise.resolve()),
-      continue: vi.fn(() => Promise.resolve())
+      continue: vi.fn(() => Promise.resolve()),
+      respond: vi.fn(() => Promise.resolve())
     }
     handler!(allowed)
     expect(allowed.continue).toHaveBeenCalled()
     expect(allowed.abort).not.toHaveBeenCalled()
+    expect(allowed.respond).not.toHaveBeenCalled()
   })
 })

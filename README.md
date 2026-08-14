@@ -61,8 +61,9 @@ npm run dist
 
 ## 配置
 
-可在设置面板中配置 API 凭证：
+可在设置面板中配置 API 凭证与搜索源：
 
+- **搜索源（Search Sources）**：分别管理「标准搜索」与「深度搜索」两种模式所查询的平台（默认标准 = Discogs + eBay，深度 = 全部平台）
 - **Discogs API Token**：Discogs 个人访问令牌
 - **eBay Client ID**：eBay 开发者门户 OAuth 客户端 ID
 - **eBay Client Secret**：eBay 开发者门户 OAuth 客户端密钥
