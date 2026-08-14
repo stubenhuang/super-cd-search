@@ -1,10 +1,11 @@
 import { spawn, type ChildProcess } from 'child_process'
-import { existsSync, mkdirSync, readFileSync } from 'fs'
+import { mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import puppeteer from 'puppeteer-core'
 import type { Browser, Page } from 'puppeteer-core'
 import { isCloudflareChallenge } from './detect'
+import { findChromeExecutable } from '../browser/chrome-path'
 import type { CloudflarePlatform, CloudflareChallengeResult, CloudflareSessionStatus } from '../../shared/types'
 
 /**
@@ -15,18 +16,6 @@ import type { CloudflarePlatform, CloudflareChallengeResult, CloudflareSessionSt
  * Chrome launched WITHOUT automation flags has no such markers, so the user can
  * complete the challenge once and the app scrapes through that same browser.
  */
-
-const CHROME_CANDIDATES = [
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  '/usr/bin/google-chrome',
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser'
-]
 
 const CHALLENGE_URLS: Record<CloudflarePlatform, string> = {
   surugaya: 'https://www.suruga-ya.jp/',
@@ -58,15 +47,6 @@ export function initCloudflareChrome(userDataDir: string): void {
   profileDir = join(userDataDir, 'cloudflare-chrome')
 }
 
-function getChromePath(): string | null {
-  const fromEnv = process.env.CHROME_PATH
-  if (fromEnv && existsSync(fromEnv)) return fromEnv
-  for (const candidate of CHROME_CANDIDATES) {
-    if (existsSync(candidate)) return candidate
-  }
-  return null
-}
-
 function waitForDevToolsPort(dir: string): Promise<number> {
   const file = join(dir, 'DevToolsActivePort')
   const deadline = Date.now() + 20000
@@ -90,7 +70,7 @@ function waitForDevToolsPort(dir: string): Promise<number> {
 }
 
 async function launchChrome(): Promise<Session> {
-  const chromePath = getChromePath()
+  const chromePath = findChromeExecutable()
   if (!chromePath) {
     throw new Error('未找到 Google Chrome，请先安装（或将 CHROME_PATH 指向 Chrome 可执行文件）')
   }
@@ -238,14 +218,36 @@ export async function acquireCloudflarePage(): Promise<AcquiredCloudflarePage | 
   return { page: session.page, release }
 }
 
+/** Terminate the Chrome process (and its child processes on Windows). */
+function killChrome(proc: ChildProcess): Promise<void> {
+  if (!proc.pid) return Promise.resolve()
+
+  if (process.platform === 'win32') {
+    // SIGKILL on Windows only kills the main process, leaving renderer/network
+    // child processes behind. taskkill /T /F kills the whole process tree.
+    return new Promise((resolve) => {
+      try {
+        const killer = spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
+        killer.once('exit', () => resolve())
+        killer.once('error', () => resolve())
+      } catch {
+        resolve()
+      }
+    })
+  }
+
+  try {
+    proc.kill('SIGKILL')
+  } catch {
+    // Already exited.
+  }
+  return Promise.resolve()
+}
+
 export async function closeCloudflareChrome(): Promise<void> {
   if (session) {
     await session.browser.disconnect().catch(() => {})
-    try {
-      session.proc.kill('SIGKILL')
-    } catch {
-      // Already exited.
-    }
+    await killChrome(session.proc)
     session = null
   }
 }

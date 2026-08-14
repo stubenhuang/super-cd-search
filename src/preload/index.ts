@@ -14,6 +14,7 @@ const validSendChannels = ['toMain'] as const
 const validReceiveChannels = ['fromMain', 'query:progress'] as const
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  platform: process.platform,
   send: (channel: string, data: unknown) => {
     if (validSendChannels.includes(channel as typeof validSendChannels[number])) {
       ipcRenderer.send(channel, data)

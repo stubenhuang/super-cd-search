@@ -1,5 +1,6 @@
-import { type Browser, type Page, executablePath } from 'puppeteer'
+import { type Browser, type Page } from 'puppeteer'
 import { puppeteer } from './puppeteer'
+import { findChromeExecutable } from './chrome-path'
 import { generateFingerprint, type Fingerprint } from './fingerprint'
 import { getSetting } from '../settings'
 
@@ -110,9 +111,13 @@ class BrowserPool {
       args.push(`--proxy-server=socks5://${proxyHost}:${proxyPort}`)
     }
 
+    // Prefer a system Chrome/Edge install so headless scraping works even when
+    // the bundled puppeteer Chromium is not shipped with the packaged app.
+    // Fall back to puppeteer's default Chromium when no system browser exists.
+    const chromePath = findChromeExecutable()
     const browser = await puppeteer.launch({
       headless: true,
-      executablePath: executablePath(),
+      ...(chromePath ? { executablePath: chromePath } : {}),
       args
     })
 

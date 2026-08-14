@@ -41,6 +41,8 @@ export interface BatchQueryProgressEvent extends BatchQueryProgress {
 export type { BatchQueryProgress }
 
 export interface IElectronAPI {
+  /** The host platform (e.g. 'darwin', 'win32', 'linux'). */
+  platform: string
   send: (channel: string, data: unknown) => void
   receive: (channel: string, func: (...args: unknown[]) => void) => void
   getSettings: () => Promise<Settings>

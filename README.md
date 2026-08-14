@@ -44,6 +44,8 @@ npm install
 npm run dev
 ```
 
+> Windows 下可直接用 `.\super-cd.ps1 fresh`（等价于清理 + 构建 + 启动开发服务器）。
+
 ### 测试
 
 ```bash
@@ -62,7 +64,12 @@ npm run build
 
 # 打包为 macOS 应用 (DMG/ZIP)
 npm run dist
+
+# 打包为 Windows 应用 (ZIP / portable)
+npm run dist:win
 ```
+
+> Windows 下也可用 `.\super-cd.ps1 win` 打包；macOS / Linux 下用 `./super-cd.sh win` 交叉打包 Windows 应用。
 
 ## 配置
 

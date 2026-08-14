@@ -16,6 +16,10 @@ import './index.css'
 // Apply the saved theme before first render to avoid a light-theme flash.
 initTheme()
 
+// Expose the host platform so CSS can adapt (e.g. reserve space for the
+// native window controls on Windows' frameless title bar).
+document.documentElement.dataset.platform = window.electronAPI.platform
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <I18nProvider>

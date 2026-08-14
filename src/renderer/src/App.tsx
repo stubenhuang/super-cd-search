@@ -620,9 +620,14 @@ function App() {
           </div>
           <div className="panel-content">
             {results.size === 0 && !hasProgress && (
-              <p className="placeholder-text">
-                {t('results.placeholder')}
-              </p>
+              <div className="placeholder-text">
+                <svg className="empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="24" cy="24" r="20" />
+                  <circle cx="24" cy="24" r="12" strokeOpacity="0.5" />
+                  <circle cx="24" cy="24" r="3" fill="currentColor" stroke="none" />
+                </svg>
+                <span>{t('results.placeholder')}</span>
+              </div>
             )}
             {isCancelling && (
               <div className="progress-area cancelling">

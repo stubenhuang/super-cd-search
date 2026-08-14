@@ -24,11 +24,18 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true
     },
-    // macOS-only window styling
-    ...(process.platform === 'darwin' && {
-      titleBarStyle: 'hiddenInset',
-      trafficLightPosition: { x: 15, y: 10 }
-    })
+    // Frameless title bar styling per platform.
+    // - macOS: hiddenInset keeps the native traffic lights.
+    // - Windows: hidden removes the system title bar but keeps native window
+    //   controls overlaid at the top-right; the renderer reserves space for them.
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 15, y: 10 }
+        }
+      : process.platform === 'win32'
+        ? { titleBarStyle: 'hidden' as const }
+        : {})
   })
 
   // Prevent Electron from navigating inside the window

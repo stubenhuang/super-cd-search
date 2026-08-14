@@ -20,8 +20,8 @@ vi.mock('puppeteer-extra-plugin-stealth', () => ({
   default: () => ({ name: 'stealth-mock' })
 }))
 
-vi.mock('puppeteer', () => ({
-  executablePath: () => '/fake/chrome'
+vi.mock('../src/main/browser/chrome-path', () => ({
+  findChromeExecutable: () => '/fake/chrome'
 }))
 
 vi.mock('../src/main/settings', () => ({

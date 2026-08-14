@@ -166,8 +166,8 @@ const en: Record<keyof typeof zh, string> = {
   'input.placeholder':
     'Enter catalog numbers (one per line or comma-separated)\n\nExample:\nTOCP-53001\nBVCP-21002\nSRCL-3101',
   'input.searchMode': 'Search Mode',
-  'searchMode.standard': 'Standard Search (Discogs + eBay)',
-  'searchMode.deep': 'Deep Search (All Platforms)',
+  'searchMode.standard': 'Standard (Discogs + eBay)',
+  'searchMode.deep': 'Deep (All Platforms)',
   'searchMode.deepWarning': 'Deep search queries all platforms (7 data sources) and is slower',
   'searchMode.deepWarningShort': 'Deep search is slower',
   'search.button': 'Search',
