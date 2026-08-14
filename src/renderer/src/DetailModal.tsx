@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import type { QueryResult, CDDetails } from './electron-api'
 import { PLATFORM_LABELS } from '../../shared/platforms'
 import { useCoverImage } from './hooks/useCoverImage'
+import { useI18n } from './i18n'
 
 const PLATFORM_PRIORITY: Record<string, number> = {
   discogs: 0,
@@ -15,15 +16,15 @@ const PLATFORM_PRIORITY: Record<string, number> = {
   zenmarket: 8
 }
 
-const DETAIL_LABELS: Record<keyof CDDetails, string> = {
-  label: '厂牌',
-  format: '格式',
-  country: '国家',
-  released: '发行',
-  genre: '类型'
-}
-
 const DETAIL_KEYS: (keyof CDDetails)[] = ['label', 'format', 'country', 'released', 'genre']
+
+const DETAIL_LABEL_KEYS: Record<keyof CDDetails, 'detail.label' | 'detail.format' | 'detail.country' | 'detail.released' | 'detail.genre'> = {
+  label: 'detail.label',
+  format: 'detail.format',
+  country: 'detail.country',
+  released: 'detail.released',
+  genre: 'detail.genre'
+}
 
 interface DetailModalProps {
   isOpen: boolean
@@ -33,6 +34,7 @@ interface DetailModalProps {
 }
 
 export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailModalProps) {
+  const { t } = useI18n()
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -82,16 +84,16 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
   const { imageData: coverData } = useCoverImage(displayCover, { size: 240 })
 
   const copyText = useMemo(() => {
-    const lines: string[] = [`目录号: ${catalogNumber}`]
-    if (displayName && displayName !== catalogNumber) lines.push(`专辑: ${displayName}`)
-    if (displayArtist) lines.push(`艺术家: ${displayArtist}`)
+    const lines: string[] = [`${t('detail.catalogNumber')}: ${catalogNumber}`]
+    if (displayName && displayName !== catalogNumber) lines.push(`${t('detail.album')}: ${displayName}`)
+    if (displayArtist) lines.push(`${t('detail.artist')}: ${displayArtist}`)
     for (const key of DETAIL_KEYS) {
       if (mergedDetails[key]) {
-        lines.push(`${DETAIL_LABELS[key]}: ${mergedDetails[key]}`)
+        lines.push(`${t(DETAIL_LABEL_KEYS[key])}: ${mergedDetails[key]}`)
       }
     }
     return lines.join('\n')
-  }, [catalogNumber, displayName, displayArtist, mergedDetails])
+  }, [catalogNumber, displayName, displayArtist, mergedDetails, t])
 
   const handleCopy = useCallback(async () => {
     try {
@@ -120,7 +122,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
       <div className="detail-modal" onClick={e => e.stopPropagation()}>
         <div className="detail-modal-header">
           <div className="detail-modal-catalog">{catalogNumber}</div>
-          <button className="detail-modal-close" onClick={onClose} title="关闭">
+          <button className="detail-modal-close" onClick={onClose} title={t('detail.close')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -144,7 +146,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
               {displayArtist && <p className="detail-modal-artist">{displayArtist}</p>}
               {primaryResult?.platform && (
                 <span className="detail-modal-source">
-                  来源: {PLATFORM_LABELS[primaryResult.platform] || primaryResult.platform}
+                  {t('detail.source', { platform: PLATFORM_LABELS[primaryResult.platform] || primaryResult.platform })}
                 </span>
               )}
             </div>
@@ -159,7 +161,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
               const value = mergedDetails[key]
               return (
                 <div key={key} className="detail-modal-field">
-                  <span className="detail-modal-field-label">{DETAIL_LABELS[key]}</span>
+                  <span className="detail-modal-field-label">{t(DETAIL_LABEL_KEYS[key])}</span>
                   <span className="detail-modal-field-value">{value || '—'}</span>
                 </div>
               )
@@ -174,7 +176,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                已复制
+                {t('detail.copied')}
               </>
             ) : (
               <>
@@ -182,12 +184,12 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results }: DetailM
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
-                复制信息
+                {t('detail.copy')}
               </>
             )}
           </button>
           <button className="detail-modal-close-btn" onClick={onClose}>
-            关闭
+            {t('detail.close')}
           </button>
         </div>
       </div>

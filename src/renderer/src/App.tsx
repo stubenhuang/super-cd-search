@@ -6,14 +6,10 @@ import { normalizeCatalogNumber } from '../../shared/utils'
 import { PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { useCoverImage } from './hooks/useCoverImage'
+import { useI18n } from './i18n'
 import './App.css'
 
 type SearchMode = 'standard' | 'deep'
-
-const SEARCH_MODE_LABELS: Record<SearchMode, string> = {
-  standard: '标准搜索（Discogs + eBay）',
-  deep: '深度搜索（全部平台）'
-}
 
 function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]): QueryResult[] {
   const merged = [...existing]
@@ -36,6 +32,7 @@ interface PlatformResultRowProps {
 }
 
 const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice, displayCurrency, usdToCnyRate }: PlatformResultRowProps) {
+  const { t } = useI18n()
   const {
     containerRef: imageContainerRef,
     imageData,
@@ -65,9 +62,9 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
 
   const getPriceLabel = (min: number | null, max: number | null): string => {
     if (min === null && max === null) return ''
-    if (min === null || max === null) return '固定价格'
-    if (min === max) return '固定价格'
-    return '价格范围'
+    if (min === null || max === null) return t('result.fixedPrice')
+    if (min === max) return t('result.fixedPrice')
+    return t('result.priceRange')
   }
 
   const handleViewClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
@@ -80,7 +77,7 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
   return (
     <div className={cardClass} data-platform={result.platform}>
       {isLowestPrice ? (
-        <div className="lowest-bar">★ 最低价</div>
+        <div className="lowest-bar">{t('result.lowest')}</div>
       ) : (
         <div className="brand-bar" />
       )}
@@ -101,7 +98,7 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
                 />
               </>
             ) : (
-              <div className="image-placeholder">无图</div>
+              <div className="image-placeholder">{t('result.noImage')}</div>
             )}
           </div>
           <div className="platform-card-details">
@@ -111,22 +108,22 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
                 <div className="price-label">{getPriceLabel(result.priceMin, result.priceMax)}</div>
                 {result.link && (
                   <a className="link" href={result.link} onClick={(e) => handleViewClick(e, result.link!)}>
-                    查看详情 →
+                    {t('result.viewDetails')}
                   </a>
                 )}
               </>
             ) : result.status === 'challenge' ? (
               <>
-                <div className="status-text">待验证</div>
-                <div className="error-hint" title={result.error || 'Cloudflare 验证未完成'}>⚠ {result.error || '请在设置中完成 Cloudflare 验证'}</div>
+                <div className="status-text">{t('result.statusChallenge')}</div>
+                <div className="error-hint" title={result.error || t('result.statusChallengeTitle')}>⚠ {result.error || t('result.statusChallengeHint')}</div>
               </>
             ) : result.status === 'error' ? (
               <>
-                <div className="status-text">请求错误</div>
-                <div className="error-hint" title={result.error || 'Unknown error'}>⚠ {result.error || 'Error'}</div>
+                <div className="status-text">{t('result.statusError')}</div>
+                <div className="error-hint" title={result.error || t('result.statusErrorDefault')}>⚠ {result.error || t('result.statusErrorDefault')}</div>
               </>
             ) : (
-              <div className="status-text">未找到</div>
+              <div className="status-text">{t('result.statusNotFound')}</div>
             )}
           </div>
         </div>
@@ -144,6 +141,7 @@ interface ResultCardProps {
 }
 
 const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate }: ResultCardProps) {
+  const { t } = useI18n()
   const foundResult = results.find(r => r.status === 'found' && r.name)
   const displayName = foundResult?.name || catalogNumber
   const displayArtist = foundResult?.artist
@@ -162,7 +160,7 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
         <span
           className="result-title"
           onClick={() => onTitleClick(catalogNumber)}
-          title="点击查看详细信息"
+          title={t('result.titleClick')}
         >
           {displayName}
         </span>
@@ -219,6 +217,7 @@ function playCompletionSound(): void {
 }
 
 function App() {
+  const { t } = useI18n()
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -236,6 +235,11 @@ function App() {
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('USD')
   const [usdToCnyRate, setUsdToCnyRate] = useState<number | null>(null)
 
+  // Left panel resizable width (persisted locally).
+  const [leftPanelWidth, setLeftPanelWidth] = useState(340)
+  const leftPanelWidthRef = useRef(340)
+  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
+
   // Platforms queried by the currently running search. Resolved from the
   // latest settings each time a search starts (see handleSearch).
   const [activePlatforms, setActivePlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
@@ -249,12 +253,12 @@ function App() {
     const catalogNumbers = parseCatalogNumbers(input)
 
     if (catalogNumbers.length === 0) {
-      setError('Please enter at least one catalog number')
+      setError(t('error.noCatalog'))
       return
     }
 
     if (catalogNumbers.length > 10) {
-      setError('Maximum 10 catalog numbers allowed')
+      setError(t('error.maxCatalog'))
       return
     }
 
@@ -271,7 +275,7 @@ function App() {
     const platforms = searchMode === 'standard' ? standardPlatforms : deepPlatforms
 
     if (platforms.length === 0) {
-      setError('当前搜索模式没有选择任何数据源，请在设置中配置')
+      setError(t('error.noPlatforms'))
       return
     }
 
@@ -297,13 +301,13 @@ function App() {
       })
     } catch (err) {
       if (!cancelledRef.current) {
-        setError(err instanceof Error ? err.message : 'Query failed')
+        setError(err instanceof Error ? err.message : t('error.queryFailed'))
       }
     } finally {
       setIsLoading(false)
       setIsCancelling(false)
     }
-  }, [input, parseCatalogNumbers, searchMode])
+  }, [input, parseCatalogNumbers, searchMode, t])
 
   const handleCancel = useCallback(async () => {
     cancelledRef.current = true
@@ -404,6 +408,54 @@ function App() {
     }
   }, [])
 
+  // Restore the saved left-panel width on mount.
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem('super-cd-search:left-width'))
+      if (Number.isFinite(saved) && saved >= 280 && saved <= 460) {
+        setLeftPanelWidth(saved)
+        leftPanelWidthRef.current = saved
+      }
+    } catch {
+      // localStorage may be unavailable; keep the default width.
+    }
+  }, [])
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizeStateRef.current = { startX: e.clientX, startWidth: leftPanelWidthRef.current }
+    document.body.classList.add('is-resizing')
+  }, [])
+
+  const resetPanelWidth = useCallback(() => {
+    setLeftPanelWidth(340)
+    leftPanelWidthRef.current = 340
+    try { localStorage.setItem('super-cd-search:left-width', '340') } catch {}
+  }, [])
+
+  // Drag-to-resize the left panel.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const state = resizeStateRef.current
+      if (!state) return
+      const next = Math.min(460, Math.max(280, state.startWidth + (e.clientX - state.startX)))
+      leftPanelWidthRef.current = next
+      setLeftPanelWidth(next)
+    }
+    const onUp = () => {
+      if (!resizeStateRef.current) return
+      resizeStateRef.current = null
+      document.body.classList.remove('is-resizing')
+      try { localStorage.setItem('super-cd-search:left-width', String(leftPanelWidthRef.current)) } catch {}
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -414,7 +466,7 @@ function App() {
               type="button"
               className={displayCurrency === 'USD' ? 'active' : ''}
               onClick={() => handleCurrencyChange('USD')}
-              title="美元"
+              title={t('currency.usdTitle')}
             >
               USD
             </button>
@@ -422,7 +474,7 @@ function App() {
               type="button"
               className={displayCurrency === 'CNY' ? 'active' : ''}
               onClick={() => handleCurrencyChange('CNY')}
-              title="人民币"
+              title={t('currency.cnyTitle')}
             >
               CNY
             </button>
@@ -430,7 +482,7 @@ function App() {
           <button
             className="settings-button"
             onClick={() => setShowSettings(true)}
-            title="Settings"
+            title={t('settings.buttonTitle')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="3"/>
@@ -440,14 +492,14 @@ function App() {
         </div>
       </header>
       <main className="app-main">
-        <aside className="left-panel">
+        <aside className="left-panel" style={{ width: leftPanelWidth }}>
           <div className="panel-header">
-            <h2>Input</h2>
+            <h2>{t('panel.input')}</h2>
           </div>
           <div className="panel-content">
             <textarea
               className="catalog-input"
-              placeholder="Enter catalog numbers (one per line or comma-separated)&#10;&#10;Example:&#10;TOCP-53001&#10;BVCP-21002&#10;SRCL-3101"
+              placeholder={t('input.placeholder')}
               value={input}
               onChange={e => setInput(e.target.value)}
               disabled={isLoading || isCancelling}
@@ -455,7 +507,7 @@ function App() {
             />
             {error && <div className="error-message">{error}</div>}
             <div className="search-mode-selector">
-              <label className="search-mode-label" htmlFor="search-mode">搜索模式</label>
+              <label className="search-mode-label" htmlFor="search-mode">{t('input.searchMode')}</label>
               <div className="search-mode-field">
                 <select
                   id="search-mode"
@@ -464,21 +516,21 @@ function App() {
                   onChange={e => setSearchMode(e.target.value as SearchMode)}
                   disabled={isLoading || isCancelling}
                 >
-                  <option value="standard">{SEARCH_MODE_LABELS.standard}</option>
-                  <option value="deep">{SEARCH_MODE_LABELS.deep}</option>
+                  <option value="standard">{t('searchMode.standard')}</option>
+                  <option value="deep">{t('searchMode.deep')}</option>
                 </select>
                 <svg className="search-mode-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
               </div>
               {searchMode === 'deep' && (
-                <span className="search-mode-warning" role="img" aria-label="深度搜索速度较慢">
+                <span className="search-mode-warning" role="img" aria-label={t('searchMode.deepWarningShort')}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                     <line x1="12" y1="9" x2="12" y2="13" />
                     <line x1="12" y1="17" x2="12.01" y2="17" />
                   </svg>
-                  <span className="search-mode-warning-tooltip">深度搜索会查询全部平台（7 个数据源），速度较慢</span>
+                  <span className="search-mode-warning-tooltip">{t('searchMode.deepWarning')}</span>
                 </span>
               )}
             </div>
@@ -488,14 +540,14 @@ function App() {
                 onClick={handleSearch}
                 disabled={isLoading || isCancelling}
               >
-                {isCancelling ? 'Cancelling...' : isLoading ? 'Searching...' : 'Search'}
+                {isCancelling ? t('search.cancelling') : isLoading ? t('search.searching') : t('search.button')}
               </button>
               {isLoading && (
                 <button
                   className="cancel-button-icon"
                   onClick={handleCancel}
                   disabled={isCancelling}
-                  title="Cancel"
+                  title={t('search.cancelTitle')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="18" y1="6" x2="6" y2="18"/>
@@ -507,7 +559,7 @@ function App() {
             {(isLoading || hasProgress) && (
               <div className="run-progress">
                 <div className="progress-summary">
-                  <span className="progress-label">{completedCount}/{totalCount} 完成</span>
+                  <span className="progress-label">{t('progress.done', { done: completedCount, total: totalCount })}</span>
                   <span className="progress-percent">{progressPercent}%</span>
                 </div>
                 <div className="progress-bar-track">
@@ -556,26 +608,32 @@ function App() {
             )}
           </div>
         </aside>
+        <div
+          className="panel-resizer"
+          onMouseDown={handleResizeStart}
+          onDoubleClick={resetPanelWidth}
+          title={t('panel.resizerTitle')}
+        />
         <section className="right-panel">
           <div className="panel-header">
-            <h2>Results</h2>
+            <h2>{t('panel.results')}</h2>
           </div>
           <div className="panel-content">
             {results.size === 0 && !hasProgress && (
               <p className="placeholder-text">
-                Search results will appear here.
+                {t('results.placeholder')}
               </p>
             )}
             {isCancelling && (
               <div className="progress-area cancelling">
                 <div className="spinner" />
-                <p>正在取消...</p>
+                <p>{t('progress.cancelling')}</p>
               </div>
             )}
             {!isCancelling && hasProgress && results.size === 0 && (
               <div className="progress-area">
                 <div className="spinner" />
-                <p>Querying...</p>
+                <p>{t('progress.querying')}</p>
               </div>
             )}
             {results.size > 0 && (

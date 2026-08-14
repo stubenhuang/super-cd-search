@@ -20,6 +20,7 @@ beforeEach(() => {
   deleteSetting('fastMode')
   deleteSetting('displayCurrency')
   deleteSetting('theme')
+  deleteSetting('language')
   deleteSetting('llm')
 })
 
@@ -38,7 +39,8 @@ describe('settings', () => {
       deepPlatforms: DEFAULT_DEEP_PLATFORMS,
       fastMode: undefined,
       displayCurrency: 'USD',
-      theme: 'light'
+      theme: 'light',
+      language: 'zh'
     })
     expect(getSetting('discogsToken')).toBeUndefined()
   })
@@ -103,6 +105,15 @@ describe('settings', () => {
 
     setSetting('theme', 'system')
     expect(getSettings().theme).toBe('system')
+  })
+
+  it('round-trips the language setting and defaults to Chinese', () => {
+    expect(getSetting('language')).toBeUndefined()
+    expect(getSettings().language).toBe('zh')
+
+    setSetting('language', 'en')
+    expect(getSetting('language')).toBe('en')
+    expect(getSettings().language).toBe('en')
   })
 
   it('deletes settings', () => {

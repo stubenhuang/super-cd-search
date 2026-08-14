@@ -2,7 +2,7 @@
    SUPER CD SEARCH - 复古唱片店 × 日本现代主义
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap');
+/* Fonts are self-hosted via @fontsource (imported in main.tsx). */
 
 /* === CSS Variables === */
 :root {
@@ -15,18 +15,24 @@
   /* Text colors */
   --text-primary: #2C2520;
   --text-secondary: #6B5D4D;
-  --text-muted: #9A8B78;
+  --text-muted: #7C6E5C;
 
   /* Accent - warm copper */
   --accent-primary: #B8860B;
   --accent-hover: #9A7209;
   --accent-light: #DAA520;
+  --on-accent: #2C2520;
 
   /* Platform colors - refined */
   --discogs: #1a1a1a;
   --ebay: #C4322B;
   --kojima: #E8A028;
   --hmv: #0066B3;
+  --yahoo: #7B1FA2;
+  --cdjapan: #00897B;
+  --tower: #5C6BC0;
+  --surugaya: #43A047;
+  --zenmarket: #D81B60;
 
   /* Status colors */
   --success: #5D7A4A;
@@ -74,11 +80,17 @@
   --accent-primary: #D4A72C;
   --accent-hover: #E6BC4A;
   --accent-light: #F0CE68;
+  --on-accent: #1E1A16;
 
   --discogs: #E6E6E6;
   --ebay: #E05B4E;
   --kojima: #F0B43A;
   --hmv: #4DA3DF;
+  --yahoo: #C08AF0;
+  --cdjapan: #4DB6AC;
+  --tower: #9FA8DA;
+  --surugaya: #81C784;
+  --zenmarket: #F06292;
 
   --success: #8FBF6B;
   --warning: #D4A72C;
@@ -197,7 +209,7 @@ body {
 
 .currency-toggle button.active {
   background: var(--accent-primary);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .currency-toggle button:not(.active):hover {
@@ -215,13 +227,36 @@ body {
 /* === Left Panel (Input) === */
 .left-panel {
   width: 340px;
-  min-width: 300px;
-  max-width: 420px;
+  min-width: 280px;
+  max-width: 460px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-light);
   position: relative;
+}
+
+/* Drag handle between the input panel and the results panel. */
+.panel-resizer {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border-light);
+  position: relative;
+  z-index: 5;
+  -webkit-app-region: no-drag;
+  transition: background var(--transition-fast);
+}
+
+.panel-resizer:hover,
+body.is-resizing .panel-resizer {
+  background: var(--accent-primary);
+}
+
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .left-panel::after {
@@ -505,7 +540,7 @@ body {
   padding: 12px 20px;
   height: 44px;
   background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: 10px;
   font-family: var(--font-body);
@@ -901,6 +936,26 @@ body {
   background: var(--hmv);
 }
 
+.platform-card[data-platform="yahoo"] .brand-bar {
+  background: var(--yahoo);
+}
+
+.platform-card[data-platform="cdjapan"] .brand-bar {
+  background: var(--cdjapan);
+}
+
+.platform-card[data-platform="tower"] .brand-bar {
+  background: var(--tower);
+}
+
+.platform-card[data-platform="surugaya"] .brand-bar {
+  background: var(--surugaya);
+}
+
+.platform-card[data-platform="zenmarket"] .brand-bar {
+  background: var(--zenmarket);
+}
+
 .platform-card.not_found .brand-bar,
 .platform-card.error .brand-bar {
   background: var(--text-muted);
@@ -1055,13 +1110,9 @@ body {
 .result-card:nth-child(6) { animation-delay: 0.5s; }
 
 /* === Responsive Adjustments === */
-@media (max-width: 900px) {
+@media (max-width: 1080px) {
   .results-area {
     grid-template-columns: 1fr;
-  }
-
-  .platform-results {
-    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -1283,7 +1334,7 @@ body {
 .detail-modal-copy-btn {
   background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
   border: none;
-  color: white;
+  color: var(--on-accent);
   box-shadow: var(--shadow-sm);
 }
 

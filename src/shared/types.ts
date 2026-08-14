@@ -4,6 +4,8 @@ export type DisplayCurrency = 'USD' | 'CNY'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
+export type Language = 'zh' | 'en'
+
 export type Platform =
   | 'discogs'
   | 'ebay'
@@ -104,6 +106,8 @@ export interface Settings {
   displayCurrency?: DisplayCurrency
   /** UI theme mode: light, dark, or follow the operating system. */
   theme?: ThemeMode
+  /** UI language: Chinese or English. */
+  language?: Language
 }
 
 export interface BatchQueryProgress {

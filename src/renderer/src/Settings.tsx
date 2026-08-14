@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus, ThemeMode } from './electron-api'
+import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus, ThemeMode, Language } from './electron-api'
 import { PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 import { saveTheme } from './theme'
+import { useI18n } from './i18n'
 import './Settings.css'
 
 interface SettingsPanelProps {
@@ -12,6 +13,7 @@ interface SettingsPanelProps {
 type SectionKey = 'api' | 'cookies' | 'proxy' | 'sources' | 'llm' | 'cloudflare' | 'appearance'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
+  const { t, language, setLanguage } = useI18n()
   const [activeSection, setActiveSection] = useState<SectionKey>('api')
   const [discogsToken, setDiscogsToken] = useState('')
   const [ebayClientId, setEbayClientId] = useState('')
@@ -48,7 +50,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [fastMode, setFastMode] = useState(false)
   const [theme, setTheme] = useState<ThemeMode>('light')
   const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -70,15 +72,15 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     try {
       const result = await window.electronAPI.startCloudflareChallenge(platform)
       if (result.status === 'done') {
-        setToast('Cloudflare 验证成功，可正常搜索了')
+        setToast({ kind: 'success', text: t('cloudflare.toastSuccess') })
       } else if (result.status === 'cancelled') {
-        setToast('已取消验证')
+        setToast({ kind: 'success', text: t('cloudflare.toastCancelled') })
       } else {
-        setToast(`验证失败: ${result.error || '未知错误'}`)
+        setToast({ kind: 'error', text: t('cloudflare.toastFailed', { error: result.error || t('cloudflare.unknownError') }) })
       }
       setTimeout(() => setToast(null), 4000)
     } catch {
-      setToast('验证失败')
+      setToast({ kind: 'error', text: t('cloudflare.toastFailedUnknown') })
       setTimeout(() => setToast(null), 4000)
     } finally {
       setCfBusy(prev => ({ ...prev, [platform]: false }))
@@ -167,10 +169,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           zenmarket: llmPlatformZenmarket
         }
       })
-      setToast('Settings saved successfully')
+      setToast({ kind: 'success', text: t('settings.saved') })
       setTimeout(() => setToast(null), 3000)
-    } catch (err) {
-      setToast('Failed to save settings')
+    } catch {
+      setToast({ kind: 'error', text: t('settings.saveFailed') })
       setTimeout(() => setToast(null), 3000)
     } finally {
       setSaving(false)
@@ -188,13 +190,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   if (!isOpen) return null
 
   const navItems: { key: SectionKey; icon: string; label: string }[] = [
-    { key: 'appearance', icon: '◐', label: '外观' },
-    { key: 'api', icon: '◆', label: 'API Tokens' },
-    { key: 'cookies', icon: '◈', label: 'Cookies' },
-    { key: 'proxy', icon: '◉', label: 'Proxy' },
-    { key: 'sources', icon: '◎', label: 'Search Sources' },
-    { key: 'llm', icon: '◇', label: 'LLM Config' },
-    { key: 'cloudflare', icon: '◈', label: 'Cloudflare 验证' }
+    { key: 'appearance', icon: '◐', label: t('nav.appearance') },
+    { key: 'api', icon: '◆', label: t('nav.api') },
+    { key: 'cookies', icon: '◈', label: t('nav.cookies') },
+    { key: 'proxy', icon: '◉', label: t('nav.proxy') },
+    { key: 'sources', icon: '◎', label: t('nav.sources') },
+    { key: 'llm', icon: '◇', label: t('nav.llm') },
+    { key: 'cloudflare', icon: '◈', label: t('nav.cloudflare') }
   ]
 
   const renderContent = () => {
@@ -203,7 +205,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
-              Configure API credentials for each platform. Tokens are stored securely and encrypted.
+              {t('api.desc')}
             </div>
             <div className="st-field-group">
               <div className="st-field-group-title">
@@ -212,7 +214,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               <div className="st-field">
                 <label className="st-label">
                   <span className="st-label-icon">◆</span>
-                  Personal Access Token
+                  {t('api.discogs.pat')}
                 </label>
                 <div className="st-input-wrap">
                   <input
@@ -220,7 +222,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     className="st-input"
                     value={discogsToken}
                     onChange={e => setDiscogsToken(e.target.value)}
-                    placeholder="Your Discogs API token"
+                    placeholder={t('api.discogs.patPlaceholder')}
                   />
                 </div>
               </div>
@@ -232,14 +234,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               <div className="st-field">
                 <label className="st-label">
                   <span className="st-label-icon">◈</span>
-                  Client ID
+                  {t('api.ebay.clientId')}
                 </label>
                 <input
                   type="text"
                   className="st-input"
                   value={ebayClientId}
                   onChange={e => setEbayClientId(e.target.value)}
-                  placeholder="Your eBay Client ID"
+                  placeholder={t('api.ebay.clientIdPlaceholder')}
                 />
               </div>
               <div className="st-deco-divider">
@@ -250,14 +252,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               <div className="st-field">
                 <label className="st-label">
                   <span className="st-label-icon">◈</span>
-                  Client Secret
+                  {t('api.ebay.clientSecret')}
                 </label>
                 <input
                   type="password"
                   className="st-input"
                   value={ebayClientSecret}
                   onChange={e => setEbayClientSecret(e.target.value)}
-                  placeholder="Your eBay Client Secret"
+                  placeholder={t('api.ebay.clientSecretPlaceholder')}
                 />
               </div>
             </div>
@@ -268,89 +270,89 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
-              Paste browser cookies for authenticated scraping. This allows access to region-restricted content.
+              {t('cookies.desc')}
             </div>
             <div className="st-field">
               <label className="st-label">
-                <span className="st-label-icon">◈</span> Discogs Cookies
+                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'Discogs' })}
               </label>
               <textarea
                 className="st-textarea"
                 value={cookiesDiscogs}
                 onChange={e => setCookiesDiscogs(e.target.value)}
-                placeholder="Paste cookies string here..."
+                placeholder={t('cookies.placeholder')}
                 rows={3}
               />
             </div>
             <div className="st-field">
               <label className="st-label">
-                <span className="st-label-icon">◈</span> eBay Cookies
+                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'eBay' })}
               </label>
               <textarea
                 className="st-textarea"
                 value={cookiesEbay}
                 onChange={e => setCookiesEbay(e.target.value)}
-                placeholder="Paste cookies string here..."
+                placeholder={t('cookies.placeholder')}
                 rows={3}
               />
             </div>
             <div className="st-field">
               <label className="st-label">
-                <span className="st-label-icon">◈</span> Kojima Rokuon Cookies
+                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'Kojima Rokuon' })}
               </label>
               <textarea
                 className="st-textarea"
                 value={cookiesKojima}
                 onChange={e => setCookiesKojima(e.target.value)}
-                placeholder="Paste cookies string here..."
+                placeholder={t('cookies.placeholder')}
                 rows={3}
               />
             </div>
             <div className="st-field">
               <label className="st-label">
-                <span className="st-label-icon">◈</span> HMV Japan Cookies
+                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'HMV Japan' })}
               </label>
               <textarea
                 className="st-textarea"
                 value={cookiesHmv}
                 onChange={e => setCookiesHmv(e.target.value)}
-                placeholder="Paste cookies string here..."
+                placeholder={t('cookies.placeholder')}
                 rows={3}
               />
             </div>
             <div className="st-field">
               <label className="st-label">
-                <span className="st-label-icon">◈</span> Yahoo Shopping Cookies
+                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'Yahoo Shopping' })}
               </label>
               <textarea
                 className="st-textarea"
                 value={cookiesYahoo}
                 onChange={e => setCookiesYahoo(e.target.value)}
-                placeholder="Paste cookies string here..."
+                placeholder={t('cookies.placeholder')}
                 rows={3}
               />
             </div>
             <div className="st-field">
               <label className="st-label">
-                <span className="st-label-icon">◈</span> CDJapan Cookies
+                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'CDJapan' })}
               </label>
               <textarea
                 className="st-textarea"
                 value={cookiesCdjapan}
                 onChange={e => setCookiesCdjapan(e.target.value)}
-                placeholder="Paste cookies string here..."
+                placeholder={t('cookies.placeholder')}
                 rows={3}
               />
             </div>
             <div className="st-field">
               <label className="st-label">
-                <span className="st-label-icon">◈</span> Tower Records Cookies
+                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'Tower Records' })}
               </label>
               <textarea
                 className="st-textarea"
                 value={cookiesTower}
                 onChange={e => setCookiesTower(e.target.value)}
-                placeholder="Paste cookies string here..."
+                placeholder={t('cookies.placeholder')}
                 rows={3}
               />
             </div>
@@ -361,12 +363,12 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
-              Route all network traffic through a SOCKS5 proxy for privacy or region access.
+              {t('proxy.desc')}
             </div>
             <div className="st-toggle-row">
               <div className="st-toggle-info">
-                <span className="st-toggle-title">Enable SOCKS5 Proxy</span>
-                <span className="st-toggle-desc">All requests will be routed through the proxy</span>
+                <span className="st-toggle-title">{t('proxy.enable')}</span>
+                <span className="st-toggle-desc">{t('proxy.enableDesc')}</span>
               </div>
               <label className="st-switch">
                 <input
@@ -381,7 +383,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               <div className="st-inline-fields">
                 <div className="st-field">
                   <label className="st-label">
-                    <span className="st-label-icon">◈</span> Host
+                    <span className="st-label-icon">◈</span> {t('proxy.host')}
                   </label>
                   <input
                     type="text"
@@ -394,7 +396,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 </div>
                 <div className="st-field">
                   <label className="st-label">
-                    <span className="st-label-icon">◈</span> Port
+                    <span className="st-label-icon">◈</span> {t('proxy.port')}
                   </label>
                   <input
                     type="number"
@@ -414,12 +416,12 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
-              Choose which platforms each search mode queries. Standard mode defaults to Discogs + eBay; deep mode defaults to every platform.
+              {t('sources.desc')}
             </div>
             <div className="st-toggle-row">
               <div className="st-toggle-info">
-                <span className="st-toggle-title">Fast Mode（跳过详情页）</span>
-                <span className="st-toggle-desc">Skip product-detail page visits for a faster, lower-traffic search (details may be omitted)</span>
+                <span className="st-toggle-title">{t('sources.fastMode')}</span>
+                <span className="st-toggle-desc">{t('sources.fastModeDesc')}</span>
               </div>
               <label className="st-switch">
                 <input
@@ -432,7 +434,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             </div>
             <div className="st-field-group">
               <div className="st-field-group-title">
-                <span className="st-icon">◆</span> 标准搜索（Standard）
+                <span className="st-icon">◆</span> {t('sources.standard')}
               </div>
               <div className="st-platform-grid">
                 {PLATFORMS.map(p => (
@@ -450,7 +452,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             </div>
             <div className="st-field-group">
               <div className="st-field-group-title">
-                <span className="st-icon">◆</span> 深度搜索（Deep）
+                <span className="st-icon">◆</span> {t('sources.deep')}
               </div>
               <div className="st-platform-grid">
                 {PLATFORMS.map(p => (
@@ -473,12 +475,12 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
-              Configure an OpenAI-compatible API for intelligent content parsing and metadata extraction.
+              {t('llm.desc')}
             </div>
             <div className="st-toggle-row">
               <div className="st-toggle-info">
-                <span className="st-toggle-title">Enable LLM Parsing</span>
-                <span className="st-toggle-desc">Use AI to extract structured data from web pages</span>
+                <span className="st-toggle-title">{t('llm.enable')}</span>
+                <span className="st-toggle-desc">{t('llm.enableDesc')}</span>
               </div>
               <label className="st-switch">
                 <input
@@ -492,7 +494,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             <div className={llmEnabled ? '' : 'st-section-disabled'}>
               <div className="st-field">
                 <label className="st-label">
-                  <span className="st-label-icon">◈</span> API Base URL
+                  <span className="st-label-icon">◈</span> {t('llm.apiBaseUrl')}
                 </label>
                 <input
                   type="text"
@@ -505,7 +507,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
               <div className="st-field">
                 <label className="st-label">
-                  <span className="st-label-icon">◈</span> API Key
+                  <span className="st-label-icon">◈</span> {t('llm.apiKey')}
                 </label>
                 <input
                   type="password"
@@ -518,7 +520,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
               <div className="st-field">
                 <label className="st-label">
-                  <span className="st-label-icon">◈</span> Model
+                  <span className="st-label-icon">◈</span> {t('llm.model')}
                 </label>
                 <input
                   type="text"
@@ -531,7 +533,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
               <div className="st-field">
                 <label className="st-label">
-                  <span className="st-label-icon">◈</span> Temperature
+                  <span className="st-label-icon">◈</span> {t('llm.temperature')}
                 </label>
                 <div className="st-range-wrap">
                   <input
@@ -553,7 +555,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 <div className="st-deco-line"></div>
               </div>
               <label className="st-label" style={{ marginBottom: '12px' }}>
-                <span className="st-label-icon">◈</span> Platform Selection
+                <span className="st-label-icon">◈</span> {t('llm.platformSelection')}
               </label>
               <div className="st-platform-grid">
                 <label className={`st-check-item ${llmPlatformDiscogs ? 'checked' : ''}`}>
@@ -655,27 +657,27 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
-              Suruga-ya 与 ZenMarket 使用 Cloudflare 反爬。点击「验证」会启动一个真实 Chrome 窗口，请在里面手动完成验证；验证通过后，搜索会直接在这个 Chrome 里进行。
+              {t('cloudflare.desc')}
             </div>
             <div className="st-field-group">
               <div className="st-field-group-title">
-                <span className="st-icon">◈</span> 平台状态
+                <span className="st-icon">◈</span> {t('cloudflare.status')}
               </div>
               {([
                 { platform: 'surugaya' as CloudflarePlatform, label: 'Suruga-ya', status: cfSurugaya, busy: cfBusy.surugaya },
                 { platform: 'zenmarket' as CloudflarePlatform, label: 'ZenMarket', status: cfZenmarket, busy: cfBusy.zenmarket }
               ]).map(row => {
                 const statusText = row.busy
-                  ? '验证中…（请在打开的 Chrome 窗口完成验证）'
+                  ? t('cloudflare.stateVerifying')
                   : row.status.state === 'verified'
-                    ? `已验证${row.status.expiresAt ? `（有效期至 ${new Date(row.status.expiresAt).toLocaleString()}）` : ''}`
+                    ? (row.status.expiresAt ? t('cloudflare.stateVerified', { expires: new Date(row.status.expiresAt).toLocaleString() }) : t('cloudflare.stateVerifiedShort'))
                     : row.status.state === 'expired'
-                      ? '验证已过期（需重新验证）'
+                      ? t('cloudflare.stateExpired')
                       : row.status.state === 'unverified'
-                        ? 'Chrome 已启动，尚未验证'
+                        ? t('cloudflare.stateUnverified')
                         : row.status.state === 'starting'
-                          ? 'Chrome 启动中…'
-                          : 'Chrome 未启动'
+                          ? t('cloudflare.stateStarting')
+                          : t('cloudflare.stateNotStarted')
                 return (
                   <div key={row.platform} className="st-field">
                     <label className="st-label">
@@ -689,7 +691,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                         onClick={() => void handleCloudflareChallenge(row.platform)}
                         disabled={row.busy}
                       >
-                        {row.busy ? '验证中…' : '启动 Chrome 并验证'}
+                        {row.busy ? t('cloudflare.verifying') : t('cloudflare.verify')}
                       </button>
                     </div>
                   </div>
@@ -697,11 +699,11 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               })}
               <div className="st-cf-actions" style={{ marginTop: '14px' }}>
                 <button type="button" className="st-btn-cancel" onClick={() => void handleCloseCloudflare()}>
-                  关闭 Chrome 会话
+                  {t('cloudflare.closeSession')}
                 </button>
               </div>
               <div className="st-section-desc" style={{ marginTop: '12px' }}>
-                提示：验证与搜索会在同一个真实 Chrome 窗口里进行。关闭该 Chrome 后需重新启动并验证；Cloudflare 验证有效期通常为 30 分钟～数小时。
+                {t('cloudflare.hint')}
               </div>
             </div>
           </div>
@@ -711,34 +713,65 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
-              选择应用外观。「跟随系统」会随操作系统的深色 / 浅色模式自动切换。
+              {t('appearance.desc')}
             </div>
-            <div className="st-theme-options" role="radiogroup" aria-label="主题">
-              {([
-                { value: 'light', label: '白色', hint: '暖色纸张浅色主题' },
-                { value: 'dark', label: '黑色', hint: '暖调深色主题' },
-                { value: 'system', label: '跟随系统', hint: '跟随 macOS 外观' }
-              ] as { value: ThemeMode; label: string; hint: string }[]).map(option => (
-                <label
-                  key={option.value}
-                  className={`st-theme-option ${theme === option.value ? 'checked' : ''}`}
-                >
-                  <input
-                    type="radio"
-                    name="theme"
-                    value={option.value}
-                    checked={theme === option.value}
-                    onChange={e => {
-                      const next = e.target.value as ThemeMode
-                      setTheme(next)
-                      void saveTheme(next)
-                    }}
-                  />
-                  <span className="st-theme-radio"></span>
-                  <span className="st-theme-label">{option.label}</span>
-                  <span className="st-theme-hint">{option.hint}</span>
-                </label>
-              ))}
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◐</span> {t('appearance.theme')}
+              </div>
+              <div className="st-theme-options" role="radiogroup" aria-label={t('appearance.theme')}>
+                {([
+                  { value: 'light', label: t('theme.light'), hint: t('theme.lightHint') },
+                  { value: 'dark', label: t('theme.dark'), hint: t('theme.darkHint') },
+                  { value: 'system', label: t('theme.system'), hint: t('theme.systemHint') }
+                ] as { value: ThemeMode; label: string; hint: string }[]).map(option => (
+                  <label
+                    key={option.value}
+                    className={`st-theme-option ${theme === option.value ? 'checked' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="theme"
+                      value={option.value}
+                      checked={theme === option.value}
+                      onChange={e => {
+                        const next = e.target.value as ThemeMode
+                        setTheme(next)
+                        void saveTheme(next)
+                      }}
+                    />
+                    <span className="st-theme-radio"></span>
+                    <span className="st-theme-label">{option.label}</span>
+                    <span className="st-theme-hint">{option.hint}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◐</span> {t('appearance.language')}
+              </div>
+              <div className="st-theme-options" role="radiogroup" aria-label={t('appearance.language')}>
+                {([
+                  { value: 'zh', label: '中文' },
+                  { value: 'en', label: 'English' }
+                ] as { value: Language; label: string }[]).map(option => (
+                  <label
+                    key={option.value}
+                    className={`st-theme-option ${language === option.value ? 'checked' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="language"
+                      value={option.value}
+                      checked={language === option.value}
+                      onChange={e => setLanguage(e.target.value as Language)}
+                    />
+                    <span className="st-theme-radio"></span>
+                    <span className="st-theme-label">{option.label}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         )
@@ -751,7 +784,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         {/* Sidebar */}
         <nav className="settings-sidebar">
           <div className="settings-sidebar-header">
-            <h2>Settings</h2>
+            <h2>{t('settings.title')}</h2>
             <div className="st-divider">
               <div className="st-divider-line"></div>
               <div className="st-divider-diamond"></div>
@@ -771,7 +804,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           </div>
           <div className="settings-sidebar-footer">
             <button className="st-close-button" onClick={onClose}>
-              <span>✕</span> Close
+              <span>✕</span> {t('settings.close')}
             </button>
           </div>
         </nav>
@@ -780,23 +813,23 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         <div className="settings-main">
           <div className="settings-content-header">
             <h3>{navItems.find(i => i.key === activeSection)?.label}</h3>
-            <span className="st-section-badge">Configuration</span>
+            <span className="st-section-badge">{t('settings.badge')}</span>
           </div>
           <div className="settings-scroll">
             {renderContent()}
           </div>
           <footer className="settings-footer">
-            <span className="st-footer-hint">Changes apply on next search</span>
+            <span className="st-footer-hint">{t('settings.footerHint')}</span>
             <div className="st-footer-actions">
-              <button className="st-btn-cancel" onClick={onClose}>Cancel</button>
+              <button className="st-btn-cancel" onClick={onClose}>{t('settings.cancel')}</button>
               <button className="st-btn-save" onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? t('settings.saving') : t('settings.save')}
               </button>
             </div>
           </footer>
         </div>
 
-        {toast && <div className={`st-toast ${toast.includes('Failed') ? 'error' : ''}`}>{toast}</div>}
+        {toast && <div className={`st-toast ${toast.kind === 'error' ? 'error' : ''}`}>{toast.text}</div>}
       </div>
     </div>
   )

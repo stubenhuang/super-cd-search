@@ -14,7 +14,7 @@
   /* Text colors */
   --st-text-primary: #2C2520;
   --st-text-secondary: #6B5D4D;
-  --st-text-muted: #9A8B78;
+  --st-text-muted: #7C6E5C;
 
   /* Accent - warm copper */
   --st-accent: #B8860B;
@@ -22,6 +22,7 @@
   --st-accent-light: #DAA520;
   --st-accent-glow: rgba(184, 134, 11, 0.12);
   --st-accent-soft: rgba(184, 134, 11, 0.06);
+  --st-on-accent: #2C2520;
 
   /* Status */
   --st-success: #5D7A4A;
@@ -69,6 +70,7 @@
   --st-accent-light: #F0CE68;
   --st-accent-glow: rgba(212, 167, 44, 0.16);
   --st-accent-soft: rgba(212, 167, 44, 0.08);
+  --st-on-accent: #1E1A16;
 
   --st-success: #8FBF6B;
   --st-error: #D96A6E;
@@ -903,7 +905,7 @@
   border: none;
   border-radius: var(--st-radius-md);
   background: linear-gradient(135deg, var(--st-accent) 0%, var(--st-accent-hover) 100%);
-  color: white;
+  color: var(--st-on-accent);
   font-family: var(--st-font-body);
   font-size: 12px;
   font-weight: 600;

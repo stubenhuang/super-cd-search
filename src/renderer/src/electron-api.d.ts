@@ -10,6 +10,7 @@ import type {
   BatchQueryResult,
   DisplayCurrency,
   ThemeMode,
+  Language,
   CloudflarePlatform,
   CloudflareChallengeResult,
   CloudflareSessionStatus
@@ -26,6 +27,7 @@ export type {
   BatchQueryResult,
   DisplayCurrency,
   ThemeMode,
+  Language,
   CloudflarePlatform,
   CloudflareChallengeResult,
   CloudflareSessionStatus
