@@ -34,6 +34,26 @@ export function queryError(platform: Platform, message: string): QueryResult {
   }
 }
 
+/**
+ * A distinct "needs verification" result for Cloudflare-protected platforms:
+ * the scrape hit a challenge page or no verified session is available. Unlike a
+ * plain error it is not a transient network failure, so the UI can point the
+ * user at the verification flow.
+ */
+export function cloudflareChallenge(platform: Platform): QueryResult {
+  return {
+    platform,
+    name: null,
+    artist: null,
+    priceMin: null,
+    priceMax: null,
+    coverUrl: null,
+    link: null,
+    status: 'challenge',
+    error: 'Cloudflare 验证未完成或已失效，请在设置中完成验证'
+  }
+}
+
 /** Parse Japanese price text (e.g., "¥3,300" or "1,980円") and convert to USD */
 export async function parseJPYPrice(text: string): Promise<number | null> {
   const match = text.match(/¥?([\d,]+)円?/)

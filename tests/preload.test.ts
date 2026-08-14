@@ -64,6 +64,9 @@ describe('preload API', () => {
     await api.getThrottleStatus()
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('getThrottleStatus')
 
+    await api.getUsdToDisplayRate('CNY')
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('getUsdToDisplayRate', 'CNY')
+
     await api.executeBatchQuery(['X-1'], ['discogs', 'ebay'])
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('executeBatchQuery', ['X-1'], ['discogs', 'ebay'])
 

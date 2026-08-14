@@ -1,10 +1,7 @@
-import puppeteer from 'puppeteer-extra'
-import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { type Browser, type Page, executablePath } from 'puppeteer'
+import { puppeteer } from './puppeteer'
 import { generateFingerprint, type Fingerprint } from './fingerprint'
 import { getSetting } from '../settings'
-
-puppeteer.use(StealthPlugin())
 
 const MAX_CONCURRENT = 3
 

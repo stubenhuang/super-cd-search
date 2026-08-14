@@ -102,4 +102,25 @@ describe('currency', () => {
     ])
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it('getUsdToDisplayRate returns 1 for USD without fetching', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { getUsdToDisplayRate } = await loadCurrency()
+    expect(await getUsdToDisplayRate('USD')).toBe(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('getUsdToDisplayRate converts USD to CNY using fetched rates', async () => {
+    mockRatesFetch() // rates.CNY = 7.2 -> cnyToUsd = 1/7.2 -> usdToCny = 7.2
+    const { getUsdToDisplayRate } = await loadCurrency()
+    expect(await getUsdToDisplayRate('CNY')).toBeCloseTo(7.2, 5)
+  })
+
+  it('getUsdToDisplayRate falls back to static rates when the API fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+    const { getUsdToDisplayRate } = await loadCurrency()
+    // FALLBACK_RATES.CNY = 0.14 -> usdToCny = 1/0.14
+    expect(await getUsdToDisplayRate('CNY')).toBeCloseTo(1 / 0.14, 5)
+  })
 })

@@ -3,6 +3,9 @@ import { join } from 'path'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerOrchestratorIpc } from './ipc/orchestrator'
 import { registerImageIpc } from './ipc/image'
+import { registerCurrencyIpc } from './ipc/currency'
+import { registerCloudflareIpc } from './ipc/cloudflare'
+import { initCloudflareChrome, closeCloudflareChrome } from './cloudflare'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
 import { initCachePersistence, flushCacheToDisk } from './queries/cache'
@@ -51,11 +54,14 @@ function createWindow() {
 
 app.whenReady().then(() => {
   initCachePersistence(app.getPath('userData'))
+  initCloudflareChrome(app.getPath('userData'))
   prewarmExchangeRates()
   registerSettingsIpc()
   registerOrchestratorIpc()
   registerImageIpc()
   registerThrottleIpc()
+  registerCurrencyIpc()
+  registerCloudflareIpc()
 
   // Register shell.openExternal handler
   ipcMain.handle('openExternal', async (_event, url: string) => {
@@ -75,6 +81,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   browserPool.closeAll()
   destroyProxyAgents()
+  void closeCloudflareChrome()
   if (process.platform !== 'darwin') {
     app.quit()
   }

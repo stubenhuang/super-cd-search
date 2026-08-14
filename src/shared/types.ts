@@ -1,6 +1,17 @@
-export type QueryStatus = 'found' | 'not_found' | 'error'
+export type QueryStatus = 'found' | 'not_found' | 'error' | 'challenge'
 
-export type Platform = 'discogs' | 'ebay' | 'kojima' | 'hmv' | 'yahoo' | 'cdjapan' | 'tower'
+export type DisplayCurrency = 'USD' | 'CNY'
+
+export type Platform =
+  | 'discogs'
+  | 'ebay'
+  | 'kojima'
+  | 'hmv'
+  | 'yahoo'
+  | 'cdjapan'
+  | 'tower'
+  | 'surugaya'
+  | 'zenmarket'
 
 export interface CDDetails {
   label: string | null
@@ -33,6 +44,26 @@ export interface Cookies {
   tower?: string
 }
 
+/** Platforms that require a manual Cloudflare verification step. */
+export type CloudflarePlatform = 'surugaya' | 'zenmarket'
+
+/** Result of a manual Cloudflare challenge run (IPC-facing). */
+export interface CloudflareChallengeResult {
+  status: 'done' | 'error' | 'cancelled'
+  error?: string
+}
+
+/**
+ * Live status of the real-Chrome Cloudflare session for one platform. The
+ * cookies live in the Chrome profile (not in app settings), so this is derived
+ * from the running browser rather than persisted state.
+ */
+export interface CloudflareSessionStatus {
+  state: 'not_started' | 'starting' | 'unverified' | 'verified' | 'expired'
+  /** Absolute ms timestamp when the current clearance expires (when verified). */
+  expiresAt?: number
+}
+
 export interface LLMSettings {
   enabled: boolean
   apiBaseUrl: string
@@ -47,6 +78,8 @@ export interface LLMSettings {
     yahoo: boolean
     cdjapan: boolean
     tower: boolean
+    surugaya: boolean
+    zenmarket: boolean
   }
 }
 
@@ -65,12 +98,14 @@ export interface Settings {
   deepPlatforms?: Platform[]
   /** Skip product-detail page navigations for a faster, lower-traffic search. */
   fastMode?: boolean
+  /** Currency used to display prices in the UI. */
+  displayCurrency?: DisplayCurrency
 }
 
 export interface BatchQueryProgress {
   catalogNumber: string
   platform: string
-  status: 'loading' | 'complete' | 'error' | 'not_found' | 'found'
+  status: 'loading' | 'complete' | 'error' | 'not_found' | 'found' | 'challenge'
   results?: QueryResult[]
 }
 

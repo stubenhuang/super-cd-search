@@ -7,7 +7,11 @@ import type {
   Cookies,
   ThrottleStatus,
   BatchQueryProgress,
-  BatchQueryResult
+  BatchQueryResult,
+  DisplayCurrency,
+  CloudflarePlatform,
+  CloudflareChallengeResult,
+  CloudflareSessionStatus
 } from '../../shared/types'
 
 export type {
@@ -18,7 +22,11 @@ export type {
   Settings,
   Cookies,
   ThrottleStatus,
-  BatchQueryResult
+  BatchQueryResult,
+  DisplayCurrency,
+  CloudflarePlatform,
+  CloudflareChallengeResult,
+  CloudflareSessionStatus
 }
 
 // Extended progress type for received messages (includes event)
@@ -36,10 +44,15 @@ export interface IElectronAPI {
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>
   deleteSetting: <K extends keyof Settings>(key: K) => Promise<void>
   getThrottleStatus: () => Promise<ThrottleStatus>
+  getUsdToDisplayRate: (target: DisplayCurrency) => Promise<number>
   executeBatchQuery: (catalogNumbers: string[], platforms?: Platform[]) => Promise<BatchQueryResult[]>
   cancelBatchQuery: () => Promise<void>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
+  startCloudflareChallenge: (platform: CloudflarePlatform) => Promise<CloudflareChallengeResult>
+  cancelCloudflareChallenge: () => Promise<void>
+  getCloudflareStatus: (platform: CloudflarePlatform) => Promise<CloudflareSessionStatus>
+  closeCloudflareSession: () => Promise<void>
 }
 
 declare global {

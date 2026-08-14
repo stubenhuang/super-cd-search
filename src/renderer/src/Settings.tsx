@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Settings, Platform } from './electron-api'
+import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus } from './electron-api'
 import { PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 import './Settings.css'
 
@@ -8,7 +8,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'cookies' | 'proxy' | 'sources' | 'llm'
+type SectionKey = 'api' | 'cookies' | 'proxy' | 'sources' | 'llm' | 'cloudflare'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SectionKey>('api')
@@ -37,6 +37,11 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [llmPlatformYahoo, setLlmPlatformYahoo] = useState(true)
   const [llmPlatformCdjapan, setLlmPlatformCdjapan] = useState(true)
   const [llmPlatformTower, setLlmPlatformTower] = useState(true)
+  const [llmPlatformSurugaya, setLlmPlatformSurugaya] = useState(true)
+  const [llmPlatformZenmarket, setLlmPlatformZenmarket] = useState(true)
+  const [cfSurugaya, setCfSurugaya] = useState<CloudflareSessionStatus>({ state: 'not_started' })
+  const [cfZenmarket, setCfZenmarket] = useState<CloudflareSessionStatus>({ state: 'not_started' })
+  const [cfBusy, setCfBusy] = useState<{ surugaya: boolean; zenmarket: boolean }>({ surugaya: false, zenmarket: false })
   const [standardPlatforms, setStandardPlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
   const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
   const [fastMode, setFastMode] = useState(false)
@@ -48,6 +53,41 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       loadSettings()
     }
   }, [isOpen])
+
+  const refreshCloudflareStatus = useCallback(async () => {
+    const [s, z] = await Promise.all([
+      window.electronAPI.getCloudflareStatus('surugaya'),
+      window.electronAPI.getCloudflareStatus('zenmarket')
+    ])
+    setCfSurugaya(s)
+    setCfZenmarket(z)
+  }, [])
+
+  const handleCloudflareChallenge = async (platform: CloudflarePlatform) => {
+    setCfBusy(prev => ({ ...prev, [platform]: true }))
+    try {
+      const result = await window.electronAPI.startCloudflareChallenge(platform)
+      if (result.status === 'done') {
+        setToast('Cloudflare 验证成功，可正常搜索了')
+      } else if (result.status === 'cancelled') {
+        setToast('已取消验证')
+      } else {
+        setToast(`验证失败: ${result.error || '未知错误'}`)
+      }
+      setTimeout(() => setToast(null), 4000)
+    } catch {
+      setToast('验证失败')
+      setTimeout(() => setToast(null), 4000)
+    } finally {
+      setCfBusy(prev => ({ ...prev, [platform]: false }))
+      void refreshCloudflareStatus()
+    }
+  }
+
+  const handleCloseCloudflare = async () => {
+    await window.electronAPI.closeCloudflareSession()
+    void refreshCloudflareStatus()
+  }
 
   const loadSettings = useCallback(async () => {
     const settings = await window.electronAPI.getSettings() as Settings
@@ -77,6 +117,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setLlmPlatformYahoo(llm?.platformEnabled?.yahoo ?? true)
     setLlmPlatformCdjapan(llm?.platformEnabled?.cdjapan ?? true)
     setLlmPlatformTower(llm?.platformEnabled?.tower ?? true)
+    setLlmPlatformSurugaya(llm?.platformEnabled?.surugaya ?? true)
+    setLlmPlatformZenmarket(llm?.platformEnabled?.zenmarket ?? true)
+    void refreshCloudflareStatus()
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
@@ -116,7 +159,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           hmv: llmPlatformHmv,
           yahoo: llmPlatformYahoo,
           cdjapan: llmPlatformCdjapan,
-          tower: llmPlatformTower
+          tower: llmPlatformTower,
+          surugaya: llmPlatformSurugaya,
+          zenmarket: llmPlatformZenmarket
         }
       })
       setToast('Settings saved successfully')
@@ -144,7 +189,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     { key: 'cookies', icon: '◈', label: 'Cookies' },
     { key: 'proxy', icon: '◉', label: 'Proxy' },
     { key: 'sources', icon: '◎', label: 'Search Sources' },
-    { key: 'llm', icon: '◇', label: 'LLM Config' }
+    { key: 'llm', icon: '◇', label: 'LLM Config' },
+    { key: 'cloudflare', icon: '◈', label: 'Cloudflare 验证' }
   ]
 
   const renderContent = () => {
@@ -576,6 +622,82 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   <span className="st-check-box"></span>
                   <span className="st-check-name">Tower</span>
                 </label>
+                <label className={`st-check-item ${llmPlatformSurugaya ? 'checked' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformSurugaya}
+                    onChange={e => setLlmPlatformSurugaya(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">Suruga-ya</span>
+                </label>
+                <label className={`st-check-item ${llmPlatformZenmarket ? 'checked' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={llmPlatformZenmarket}
+                    onChange={e => setLlmPlatformZenmarket(e.target.checked)}
+                    disabled={!llmEnabled}
+                  />
+                  <span className="st-check-box"></span>
+                  <span className="st-check-name">ZenMarket</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'cloudflare':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              Suruga-ya 与 ZenMarket 使用 Cloudflare 反爬。点击「验证」会启动一个真实 Chrome 窗口，请在里面手动完成验证；验证通过后，搜索会直接在这个 Chrome 里进行。
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◈</span> 平台状态
+              </div>
+              {([
+                { platform: 'surugaya' as CloudflarePlatform, label: 'Suruga-ya', status: cfSurugaya, busy: cfBusy.surugaya },
+                { platform: 'zenmarket' as CloudflarePlatform, label: 'ZenMarket', status: cfZenmarket, busy: cfBusy.zenmarket }
+              ]).map(row => {
+                const statusText = row.busy
+                  ? '验证中…（请在打开的 Chrome 窗口完成验证）'
+                  : row.status.state === 'verified'
+                    ? `已验证${row.status.expiresAt ? `（有效期至 ${new Date(row.status.expiresAt).toLocaleString()}）` : ''}`
+                    : row.status.state === 'expired'
+                      ? '验证已过期（需重新验证）'
+                      : row.status.state === 'unverified'
+                        ? 'Chrome 已启动，尚未验证'
+                        : row.status.state === 'starting'
+                          ? 'Chrome 启动中…'
+                          : 'Chrome 未启动'
+                return (
+                  <div key={row.platform} className="st-field">
+                    <label className="st-label">
+                      <span className="st-label-icon">◈</span> {row.label}
+                    </label>
+                    <div className="st-cf-status">{statusText}</div>
+                    <div className="st-cf-actions">
+                      <button
+                        type="button"
+                        className="st-btn-save"
+                        onClick={() => void handleCloudflareChallenge(row.platform)}
+                        disabled={row.busy}
+                      >
+                        {row.busy ? '验证中…' : '启动 Chrome 并验证'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              <div className="st-cf-actions" style={{ marginTop: '14px' }}>
+                <button type="button" className="st-btn-cancel" onClick={() => void handleCloseCloudflare()}>
+                  关闭 Chrome 会话
+                </button>
+              </div>
+              <div className="st-section-desc" style={{ marginTop: '12px' }}>
+                提示：验证与搜索会在同一个真实 Chrome 窗口里进行。关闭该 Chrome 后需重新启动并验证；Cloudflare 验证有效期通常为 30 分钟～数小时。
               </div>
             </div>
           </div>

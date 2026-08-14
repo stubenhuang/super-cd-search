@@ -806,6 +806,30 @@
   transform: none;
 }
 
+/* === Cloudflare verification === */
+.st-cf-status {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-md);
+  background: var(--st-bg-input, transparent);
+  color: var(--st-text-secondary);
+  font-family: var(--st-font-body);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.st-cf-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.st-cf-actions .st-btn-save,
+.st-cf-actions .st-btn-cancel {
+  padding: 7px 16px;
+}
+
 /* === Toast === */
 .st-toast {
   position: absolute;

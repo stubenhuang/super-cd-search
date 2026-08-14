@@ -1,5 +1,5 @@
 import electronStore from 'electron-store'
-import type { Settings, Cookies, LLMSettings, Platform } from '../../shared/types'
+import type { Settings, Cookies, LLMSettings, Platform, DisplayCurrency } from '../../shared/types'
 import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 
 export type { Settings, Cookies, LLMSettings }
@@ -27,6 +27,7 @@ const schema = {
   standardPlatforms: { type: 'array' as const, default: DEFAULT_STANDARD_PLATFORMS },
   deepPlatforms: { type: 'array' as const, default: DEFAULT_DEEP_PLATFORMS },
   fastMode: { type: 'boolean' as const, default: false },
+  displayCurrency: { type: 'string' as const, default: 'USD' },
   llm: {
     type: 'object' as const,
     properties: {
@@ -44,7 +45,9 @@ const schema = {
           hmv: { type: 'boolean' as const, default: true },
           yahoo: { type: 'boolean' as const, default: true },
           cdjapan: { type: 'boolean' as const, default: true },
-          tower: { type: 'boolean' as const, default: true }
+          tower: { type: 'boolean' as const, default: true },
+          surugaya: { type: 'boolean' as const, default: true },
+          zenmarket: { type: 'boolean' as const, default: true }
         },
         default: {}
       }
@@ -80,7 +83,8 @@ export function getSettings(): Settings {
     llm: store.get('llm') as LLMSettings | undefined,
     standardPlatforms: store.get('standardPlatforms') as Platform[] || DEFAULT_STANDARD_PLATFORMS,
     deepPlatforms: store.get('deepPlatforms') as Platform[] || DEFAULT_DEEP_PLATFORMS,
-    fastMode: store.get('fastMode') as boolean || undefined
+    fastMode: store.get('fastMode') as boolean || undefined,
+    displayCurrency: (store.get('displayCurrency') as DisplayCurrency) || 'USD'
   }
 }
 

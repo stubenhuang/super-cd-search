@@ -13,7 +13,9 @@ export function buildParsePrompt(
     hmv: 'HMV Japan',
     yahoo: 'Yahoo Shopping Japan',
     cdjapan: 'CDJapan',
-    tower: 'Tower Records Japan'
+    tower: 'Tower Records Japan',
+    surugaya: 'Suruga-ya',
+    zenmarket: 'ZenMarket'
   }
 
   return `You are a CD/vinyl product information extractor. Extract product details from the following webpage content.

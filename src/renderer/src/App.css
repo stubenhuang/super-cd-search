@@ -119,6 +119,48 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.currency-toggle {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.currency-toggle button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  -webkit-app-region: no-drag;
+  transition: all var(--transition-fast);
+}
+
+.currency-toggle button + button {
+  border-left: 1px solid var(--border-medium);
+}
+
+.currency-toggle button.active {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.currency-toggle button:not(.active):hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
 /* === Main Layout === */
 .app-main {
   display: flex;

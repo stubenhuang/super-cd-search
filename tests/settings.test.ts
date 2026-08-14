@@ -18,6 +18,7 @@ beforeEach(() => {
   deleteSetting('standardPlatforms')
   deleteSetting('deepPlatforms')
   deleteSetting('fastMode')
+  deleteSetting('displayCurrency')
   deleteSetting('llm')
 })
 
@@ -34,7 +35,8 @@ describe('settings', () => {
       llm: undefined,
       standardPlatforms: DEFAULT_STANDARD_PLATFORMS,
       deepPlatforms: DEFAULT_DEEP_PLATFORMS,
-      fastMode: undefined
+      fastMode: undefined,
+      displayCurrency: 'USD'
     })
     expect(getSetting('discogsToken')).toBeUndefined()
   })

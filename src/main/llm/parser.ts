@@ -135,7 +135,9 @@ function findBestImageUrl(urls: string[], platform: Platform): string | null {
     hmv: [/\/item/, /hmv/],
     yahoo: [/\/product/, /yahoo/],
     cdjapan: [/cdjapan/, /\/pictures\//],
-    tower: [/tower\.jp/, /cdn\.tower/]
+    tower: [/tower\.jp/, /cdn\.tower/],
+    surugaya: [/suruga-ya/, /\/product\/detail\//],
+    zenmarket: [/zenmarket/, /itemCode/]
   }
 
   // First try platform-specific matches
@@ -184,7 +186,9 @@ function findBestLinkUrl(urls: string[], platform: Platform, pageUrl: string): s
     hmv: [/\/item\//, /\/product\//],
     yahoo: [/\/product\//, /\/item\//, /store\//],
     cdjapan: [/\/product\//],
-    tower: [/\/item\/\d+/]
+    tower: [/\/item\/\d+/],
+    surugaya: [/\/product\/detail\//],
+    zenmarket: [/\/product\//, /itemCode/, /item\.aspx/]
   }
 
   // First try platform-specific product link patterns

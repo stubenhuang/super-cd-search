@@ -4,11 +4,12 @@
 
 ## 功能特性
 
-- **多平台搜索**：从 Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping、CDJapan、Tower Records 查询 CD 信息
+- **多平台搜索**：从 Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping、CDJapan、Tower Records、Suruga-ya、ZenMarket 查询 CD 信息
 - **批量处理**：同时搜索多个目录号
 - **并行加速**：同一目录号的多平台并行查询、按域名智能限速
 - **缓存加速**：查询结果与产品详情页缓存（1 小时、跨会话磁盘持久化）、SOCKS 代理连接复用、封面缩略图懒加载
 - **价格对比**：跨平台比较价格
+- **币种切换**：价格支持美元（USD）与人民币（CNY）显示切换
 
 ## 支持平台
 
@@ -21,6 +22,8 @@
 | Yahoo Shopping | 网页抓取 | 日本电商平台 |
 | CDJapan | 网页抓取 | 日本 CD 直邮商店，按目录号直达商品页 |
 | Tower Records | 网页抓取 | 日本最大唱片连锁 |
+| Suruga-ya | 网页抓取 | 日本二手商店，需先在设置中完成 Cloudflare 验证 |
+| ZenMarket | 网页抓取 | 日本代购平台，需先在设置中完成 Cloudflare 验证 |
 
 ## 安装
 
@@ -65,6 +68,7 @@ npm run dist
 
 - **搜索源（Search Sources）**：分别管理「标准搜索」与「深度搜索」两种模式所查询的平台（默认标准 = Discogs + eBay，深度 = 全部平台）
 - **Fast Mode（跳过详情页）**：跳过商品详情页导航，以更少请求换取更快速度（详情字段可能缺失）
+- **Cloudflare 验证**：Suruga-ya 与 ZenMarket 使用 Cloudflare 反爬，需在设置面板点击「启动 Chrome 并验证」，应用会拉起一个真实 Chrome 窗口；在里面手动完成一次 Cloudflare 验证后，搜索会直接在这个 Chrome 里进行（需保持该 Chrome 窗口开启，验证有效期通常 30 分钟～数小时，失效后重新验证即可）
 - **Discogs API Token**：Discogs 个人访问令牌
 - **eBay Client ID**：eBay 开发者门户 OAuth 客户端 ID
 - **eBay Client Secret**：eBay 开发者门户 OAuth 客户端密钥

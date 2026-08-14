@@ -6,6 +6,8 @@ import { queryHmv } from '../queries/hmv'
 import { queryYahoo } from '../queries/yahoo'
 import { queryCdjapan } from '../queries/cdjapan'
 import { queryTower } from '../queries/tower'
+import { querySurugaya } from '../queries/surugaya'
+import { queryZenmarket } from '../queries/zenmarket'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
@@ -40,7 +42,9 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     { name: 'hmv', query: () => queryHmv(catalogNumber) },
     { name: 'yahoo', query: () => queryYahoo(catalogNumber) },
     { name: 'cdjapan', query: () => queryCdjapan(catalogNumber) },
-    { name: 'tower', query: () => queryTower(catalogNumber) }
+    { name: 'tower', query: () => queryTower(catalogNumber) },
+    { name: 'surugaya', query: () => querySurugaya(catalogNumber) },
+    { name: 'zenmarket', query: () => queryZenmarket(catalogNumber) }
   ]
 
   const platforms = registry.filter(p => enabledPlatforms.includes(p.name))

@@ -111,7 +111,9 @@ export function getCachedQueryResult(platform: Platform, catalogNumber: string):
 
 /** Store a successful query result (found / not_found) for later reuse. */
 export function cacheQueryResult(catalogNumber: string, result: QueryResult): void {
-  if (result.status === 'error') return
+  // Errors and challenge results are never cached, so a transient failure or an
+  // expired Cloudflare session is retried on the next run.
+  if (result.status === 'error' || result.status === 'challenge') return
   queryResultCache.set(queryCacheKey(result.platform, catalogNumber), result)
   schedulePersist()
 }

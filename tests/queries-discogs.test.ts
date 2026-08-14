@@ -69,10 +69,11 @@ describe('queryDiscogs', () => {
             ]
           })
         }
-        if (url.includes('/marketplace/price_suggestions')) {
+        if (url.includes('/marketplace/stats')) {
           return okJson({
-            'Very Good (VG)': { value: 10, currency: 'USD' },
-            'Near Mint (NM or M-)': { value: 20, currency: 'USD' }
+            lowest_price: { value: 10, currency: 'USD' },
+            num_for_sale: 3,
+            blocked_from_sale: false
           })
         }
         if (url.includes('/releases/')) {
@@ -95,7 +96,7 @@ describe('queryDiscogs', () => {
         name: 'UCCG-90530 Album',
         artist: 'Artist',
         priceMin: 10,
-        priceMax: 20,
+        priceMax: 10,
         coverUrl: 'https://cdn/cover.jpg',
         link: 'https://www.discogs.com/release/1',
         status: 'found',
@@ -116,13 +117,13 @@ describe('queryDiscogs', () => {
       expect(result.status).toBe('not_found')
     })
 
-    it('keeps null prices when price suggestions are incomplete', async () => {
+    it('keeps null prices when marketplace stats have no lowest price', async () => {
       mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
         if (url.includes('/database/search')) {
           return okJson({ results: [{ id: 99, title: 'A - B', catno: 'X-1' }] })
         }
-        if (url.includes('/marketplace/price_suggestions')) {
-          return okJson({ 'Very Good (VG)': { value: 10, currency: 'USD' } })
+        if (url.includes('/marketplace/stats')) {
+          return okJson({ num_for_sale: 0, blocked_from_sale: false })
         }
         if (url.includes('/releases/')) return okJson({})
         return { ok: false, status: 404 }
@@ -232,7 +233,7 @@ describe('queryDiscogs', () => {
       if (url.includes('/database/search')) {
         return okJson({ results: [{ id: 7, title: 'Artist - Cached Album', catno: 'CACHED-1', uri: '/release/7' }] })
       }
-      if (url.includes('/marketplace/price_suggestions')) return okJson({})
+      if (url.includes('/marketplace/stats')) return okJson({})
       if (url.includes('/releases/')) return okJson({})
       return { ok: false, status: 404 }
     })

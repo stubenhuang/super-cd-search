@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { DetailModal } from './DetailModal'
 import { normalizeCatalogNumber } from '../../shared/utils'
@@ -31,9 +31,11 @@ function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]):
 interface PlatformResultRowProps {
   result: QueryResult
   isLowestPrice: boolean
+  displayCurrency: DisplayCurrency
+  usdToCnyRate: number | null
 }
 
-const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice }: PlatformResultRowProps) {
+const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice, displayCurrency, usdToCnyRate }: PlatformResultRowProps) {
   const {
     containerRef: imageContainerRef,
     imageData,
@@ -45,12 +47,20 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
 
   const formatPrice = (min: number | null, max: number | null): string => {
     if (min === null && max === null) return '-'
+
+    const formatSingle = (usd: number): string => {
+      if (displayCurrency === 'CNY' && usdToCnyRate !== null) {
+        return `¥${(usd * usdToCnyRate).toFixed(2)}`
+      }
+      return `$${usd.toFixed(2)}`
+    }
+
     if (min === null || max === null) {
       const price = min ?? max
-      return price !== null ? `$${price.toFixed(2)}` : '-'
+      return price !== null ? formatSingle(price) : '-'
     }
-    if (min === max) return `$${min.toFixed(2)}`
-    return `$${min.toFixed(2)} - $${max.toFixed(2)}`
+    if (min === max) return formatSingle(min)
+    return `${formatSingle(min)} - ${formatSingle(max)}`
   }
 
   const getPriceLabel = (min: number | null, max: number | null): string => {
@@ -105,6 +115,11 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
                   </a>
                 )}
               </>
+            ) : result.status === 'challenge' ? (
+              <>
+                <div className="status-text">待验证</div>
+                <div className="error-hint" title={result.error || 'Cloudflare 验证未完成'}>⚠ {result.error || '请在设置中完成 Cloudflare 验证'}</div>
+              </>
             ) : result.status === 'error' ? (
               <>
                 <div className="status-text">请求错误</div>
@@ -124,9 +139,11 @@ interface ResultCardProps {
   catalogNumber: string
   results: QueryResult[]
   onTitleClick: (catalogNumber: string) => void
+  displayCurrency: DisplayCurrency
+  usdToCnyRate: number | null
 }
 
-const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick }: ResultCardProps) {
+const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate }: ResultCardProps) {
   const foundResult = results.find(r => r.status === 'found' && r.name)
   const displayName = foundResult?.name || catalogNumber
   const displayArtist = foundResult?.artist
@@ -157,6 +174,8 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
             key={r.platform}
             result={r}
             isLowestPrice={r.status === 'found' && r.priceMin !== null && r.priceMin === lowestPrice}
+            displayCurrency={displayCurrency}
+            usdToCnyRate={usdToCnyRate}
           />
         ))}
       </div>
@@ -214,6 +233,8 @@ function App() {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null)
   const prevIsLoadingRef = useRef(false)
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('USD')
+  const [usdToCnyRate, setUsdToCnyRate] = useState<number | null>(null)
 
   // Platforms queried by the currently running search. Resolved from the
   // latest settings each time a search starts (see handleSearch).
@@ -363,20 +384,60 @@ function App() {
     setShowDetailModal(true)
   }, [])
 
+  const handleCurrencyChange = useCallback((currency: DisplayCurrency) => {
+    setDisplayCurrency(currency)
+    void window.electronAPI.setSetting('displayCurrency', currency).catch(() => {})
+  }, [])
+
+  // Load the saved display currency and pre-fetch the USD -> CNY rate once, so
+  // toggling between currencies is instant afterwards.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const saved = await window.electronAPI.getSetting('displayCurrency')
+      if (!cancelled) setDisplayCurrency(saved === 'CNY' ? 'CNY' : 'USD')
+      const rate = await window.electronAPI.getUsdToDisplayRate('CNY')
+      if (!cancelled) setUsdToCnyRate(rate)
+    })().catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <div className="app-container">
       <header className="app-header">
         <h1>Super CD Search</h1>
-        <button
-          className="settings-button"
-          onClick={() => setShowSettings(true)}
-          title="Settings"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-        </button>
+        <div className="app-header-actions">
+          <div className="currency-toggle" role="group" aria-label="Currency">
+            <button
+              type="button"
+              className={displayCurrency === 'USD' ? 'active' : ''}
+              onClick={() => handleCurrencyChange('USD')}
+              title="美元"
+            >
+              USD
+            </button>
+            <button
+              type="button"
+              className={displayCurrency === 'CNY' ? 'active' : ''}
+              onClick={() => handleCurrencyChange('CNY')}
+              title="人民币"
+            >
+              CNY
+            </button>
+          </div>
+          <button
+            className="settings-button"
+            onClick={() => setShowSettings(true)}
+            title="Settings"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
       </header>
       <main className="app-main">
         <aside className="left-panel">
@@ -461,7 +522,7 @@ function App() {
                     const isComplete = platforms?.size === activePlatforms.length &&
                       activePlatforms.every(p => {
                         const s = platforms?.get(p)
-                        return s === 'complete' || s === 'not_found' || s === 'error'
+                        return s === 'complete' || s === 'not_found' || s === 'error' || s === 'challenge'
                       })
                     return (
                       <div key={cn} className={`progress-catalog-item ${isComplete ? 'complete' : ''}`}>
@@ -478,6 +539,7 @@ function App() {
                                   {status === 'loading' && '⏳'}
                                   {status === 'complete' && '✓'}
                                   {status === 'not_found' && '−'}
+                                  {status === 'challenge' && '⚠'}
                                   {status === 'error' && '✗'}
                                   {!status && '○'}
                                 </span>
@@ -527,6 +589,8 @@ function App() {
                       catalogNumber={catalogNumber}
                       results={resultData}
                       onTitleClick={handleTitleClick}
+                      displayCurrency={displayCurrency}
+                      usdToCnyRate={usdToCnyRate}
                     />
                   )
                 })}

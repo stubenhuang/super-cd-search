@@ -1,3 +1,5 @@
+import type { DisplayCurrency } from '../../shared/types'
+
 interface ExchangeRates {
   JPY: number
   EUR: number
@@ -96,4 +98,18 @@ export async function convertToUSDWithFallback(amount: number, fromCurrency: Cur
   const rate = FALLBACK_RATES[fromCurrency]
   if (!rate) return amount
   return Math.round(amount * rate * 100) / 100
+}
+
+/**
+ * Return the multiplier that converts 1 USD into the target display currency.
+ * ExchangeRates stores "1 foreign unit -> USD", so USD -> foreign is its
+ * reciprocal. Falls back to static rates when the API is unavailable, so this
+ * never rejects and never returns null.
+ */
+export async function getUsdToDisplayRate(target: DisplayCurrency): Promise<number> {
+  if (target === 'USD') return 1
+
+  const rates = await getExchangeRates()
+  const cnyToUsd = rates?.CNY ?? FALLBACK_RATES.CNY
+  return 1 / cnyToUsd
 }

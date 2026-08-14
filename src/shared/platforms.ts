@@ -11,7 +11,9 @@ export const PLATFORMS: Platform[] = [
   'hmv',
   'yahoo',
   'cdjapan',
-  'tower'
+  'tower',
+  'surugaya',
+  'zenmarket'
 ]
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -21,11 +23,26 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   hmv: 'HMV Japan',
   yahoo: 'Yahoo Shopping',
   cdjapan: 'CDJapan',
-  tower: 'Tower Records Japan'
+  tower: 'Tower Records Japan',
+  surugaya: 'Suruga-ya',
+  zenmarket: 'ZenMarket'
 }
 
 /** Default platform set for the standard search mode. */
 export const DEFAULT_STANDARD_PLATFORMS: Platform[] = ['discogs', 'ebay']
 
-/** Default platform set for the deep search mode (all platforms). */
-export const DEFAULT_DEEP_PLATFORMS: Platform[] = [...PLATFORMS]
+/**
+ * Default platform set for the deep search mode. The two Cloudflare-protected
+ * platforms are intentionally excluded: they need a manual verification step
+ * first, so new users opt in to them from the settings panel instead of having
+ * an unverified deep search fail by default.
+ */
+export const DEFAULT_DEEP_PLATFORMS: Platform[] = [
+  'discogs',
+  'ebay',
+  'kojima',
+  'hmv',
+  'yahoo',
+  'cdjapan',
+  'tower'
+]

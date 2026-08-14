@@ -35,33 +35,29 @@ function getCachedRelease(releaseId: number): ReleaseCacheEntry | null {
   return entry
 }
 
-async function getDiscogsPriceRange(releaseId: number, token: string): Promise<{ min: number | null; max: number | null }> {
+async function getDiscogsLowestPrice(releaseId: number, token: string): Promise<{ min: number | null; max: number | null }> {
   const cached = getCachedRelease(releaseId)
   if (cached) return cached.prices
 
   try {
-    const url = `${DISCOGS_API_URL}/marketplace/price_suggestions/${releaseId}?token=${token}`
+    const url = `${DISCOGS_API_URL}/marketplace/stats/${releaseId}?token=${token}`
     const response = await throttledFetch('api.discogs.com', url, undefined, API_THROTTLE)
 
     if (response.ok) {
-      const data = await response.json()
+      const data = await response.json() as {
+        lowest_price?: { value?: number; currency?: string }
+      }
 
-      // Extract VG and NM prices for typical condition range
-      const vgPrice = data['Very Good (VG)']?.value
-      const nmPrice = data['Near Mint (NM or M-)']?.value
-
-      if (vgPrice !== undefined && nmPrice !== undefined) {
-        const vgCurrency = data['Very Good (VG)']?.currency || 'USD'
-        const nmCurrency = data['Near Mint (NM or M-)']?.currency || 'USD'
-
-        return {
-          min: await convertToUSDWithFallback(vgPrice, vgCurrency as Currency),
-          max: await convertToUSDWithFallback(nmPrice, nmCurrency as Currency)
-        }
+      // The stats endpoint reports the current lowest marketplace listing,
+      // matching the "From $X" figure shown on the Discogs release page.
+      const lowest = data.lowest_price
+      if (lowest && typeof lowest.value === 'number') {
+        const usd = await convertToUSDWithFallback(lowest.value, (lowest.currency || 'USD') as Currency)
+        return { min: usd, max: usd }
       }
     }
   } catch (err) {
-    console.warn('Discogs price suggestions failed:', err)
+    console.warn('Discogs marketplace stats failed:', err)
   }
 
   return { min: null, max: null }
@@ -144,9 +140,9 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
   const artist = titleParts[0] || null
   const name = titleParts.slice(1).join(' - ') || first.title
 
-  // Fetch price range and release details concurrently.
+  // Fetch lowest marketplace price and release details concurrently.
   const [prices, details] = await Promise.all([
-    getDiscogsPriceRange(first.id, token),
+    getDiscogsLowestPrice(first.id, token),
     getReleaseDetails(first.id, token)
   ])
 
