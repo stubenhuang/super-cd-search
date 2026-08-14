@@ -19,6 +19,7 @@ beforeEach(() => {
   deleteSetting('deepPlatforms')
   deleteSetting('fastMode')
   deleteSetting('displayCurrency')
+  deleteSetting('theme')
   deleteSetting('llm')
 })
 
@@ -36,7 +37,8 @@ describe('settings', () => {
       standardPlatforms: DEFAULT_STANDARD_PLATFORMS,
       deepPlatforms: DEFAULT_DEEP_PLATFORMS,
       fastMode: undefined,
-      displayCurrency: 'USD'
+      displayCurrency: 'USD',
+      theme: 'light'
     })
     expect(getSetting('discogsToken')).toBeUndefined()
   })
@@ -89,6 +91,18 @@ describe('settings', () => {
     expect(getSetting('cookies')).toEqual(cookies)
     expect(getSetting('llm')).toEqual(llm)
     expect(getSettings().llm?.platformEnabled.ebay).toBe(false)
+  })
+
+  it('round-trips the theme setting and defaults to light', () => {
+    expect(getSetting('theme')).toBeUndefined()
+    expect(getSettings().theme).toBe('light')
+
+    setSetting('theme', 'dark')
+    expect(getSetting('theme')).toBe('dark')
+    expect(getSettings().theme).toBe('dark')
+
+    setSetting('theme', 'system')
+    expect(getSettings().theme).toBe('system')
   })
 
   it('deletes settings', () => {

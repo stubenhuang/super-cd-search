@@ -52,6 +52,50 @@
   --transition-fast: 0.15s ease;
   --transition-base: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Theme-tintable overlays */
+  --tooltip-bg: #2C2520;
+  --tooltip-fg: #FEFEFE;
+  --modal-footer-tint: rgba(237, 230, 218, 0.3);
+  --panel-header-bg: rgba(254, 254, 254, 0.5);
+}
+
+/* === Dark Theme === */
+:root[data-theme='dark'] {
+  --bg-primary: #1E1A16;
+  --bg-secondary: #26211A;
+  --bg-tertiary: #332C22;
+  --bg-card: #2B251C;
+
+  --text-primary: #F5EEE3;
+  --text-secondary: #CDC0AF;
+  --text-muted: #A89B88;
+
+  --accent-primary: #D4A72C;
+  --accent-hover: #E6BC4A;
+  --accent-light: #F0CE68;
+
+  --discogs: #E6E6E6;
+  --ebay: #E05B4E;
+  --kojima: #F0B43A;
+  --hmv: #4DA3DF;
+
+  --success: #8FBF6B;
+  --warning: #D4A72C;
+  --error: #D96A6E;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.65);
+  --shadow-glow: 0 0 40px rgba(212, 167, 44, 0.18);
+
+  --border-light: rgba(237, 230, 218, 0.10);
+  --border-medium: rgba(237, 230, 218, 0.20);
+
+  --tooltip-bg: #453C2F;
+  --tooltip-fg: #F5F0E8;
+  --modal-footer-tint: rgba(0, 0, 0, 0.28);
+  --panel-header-bg: rgba(30, 26, 22, 0.5);
 }
 
 /* === Reset & Base === */
@@ -222,7 +266,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(254, 254, 254, 0.5);
+  background: var(--panel-header-bg);
   backdrop-filter: blur(8px);
 }
 
@@ -419,8 +463,8 @@ body {
   right: -6px;
   width: 210px;
   padding: 8px 12px;
-  background: #2C2520;
-  color: #FEFEFE;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-fg);
   font-size: 12px;
   line-height: 1.45;
   border-radius: 8px;
@@ -439,7 +483,7 @@ body {
   top: 100%;
   right: 10px;
   border: 6px solid transparent;
-  border-top-color: #2C2520;
+  border-top-color: var(--tooltip-bg);
 }
 
 .search-mode-warning:hover .search-mode-warning-tooltip {
@@ -1217,7 +1261,7 @@ body {
   gap: 12px;
   padding: 16px 24px 24px;
   border-top: 1px solid var(--border-light);
-  background: linear-gradient(180deg, transparent 0%, rgba(237, 230, 218, 0.3) 100%);
+  background: linear-gradient(180deg, transparent 0%, var(--modal-footer-tint) 100%);
 }
 
 .detail-modal-copy-btn,

@@ -2,6 +2,8 @@ export type QueryStatus = 'found' | 'not_found' | 'error' | 'challenge'
 
 export type DisplayCurrency = 'USD' | 'CNY'
 
+export type ThemeMode = 'light' | 'dark' | 'system'
+
 export type Platform =
   | 'discogs'
   | 'ebay'
@@ -100,6 +102,8 @@ export interface Settings {
   fastMode?: boolean
   /** Currency used to display prices in the UI. */
   displayCurrency?: DisplayCurrency
+  /** UI theme mode: light, dark, or follow the operating system. */
+  theme?: ThemeMode
 }
 
 export interface BatchQueryProgress {

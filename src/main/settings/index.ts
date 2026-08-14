@@ -1,5 +1,5 @@
 import electronStore from 'electron-store'
-import type { Settings, Cookies, LLMSettings, Platform, DisplayCurrency } from '../../shared/types'
+import type { Settings, Cookies, LLMSettings, Platform, DisplayCurrency, ThemeMode } from '../../shared/types'
 import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 
 export type { Settings, Cookies, LLMSettings }
@@ -28,6 +28,7 @@ const schema = {
   deepPlatforms: { type: 'array' as const, default: DEFAULT_DEEP_PLATFORMS },
   fastMode: { type: 'boolean' as const, default: false },
   displayCurrency: { type: 'string' as const, default: 'USD' },
+  theme: { type: 'string' as const, default: 'light' },
   llm: {
     type: 'object' as const,
     properties: {
@@ -84,7 +85,8 @@ export function getSettings(): Settings {
     standardPlatforms: store.get('standardPlatforms') as Platform[] || DEFAULT_STANDARD_PLATFORMS,
     deepPlatforms: store.get('deepPlatforms') as Platform[] || DEFAULT_DEEP_PLATFORMS,
     fastMode: store.get('fastMode') as boolean || undefined,
-    displayCurrency: (store.get('displayCurrency') as DisplayCurrency) || 'USD'
+    displayCurrency: (store.get('displayCurrency') as DisplayCurrency) || 'USD',
+    theme: (store.get('theme') as ThemeMode) || 'light'
   }
 }
 

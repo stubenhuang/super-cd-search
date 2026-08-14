@@ -9,6 +9,7 @@ import type {
   BatchQueryProgress,
   BatchQueryResult,
   DisplayCurrency,
+  ThemeMode,
   CloudflarePlatform,
   CloudflareChallengeResult,
   CloudflareSessionStatus
@@ -24,6 +25,7 @@ export type {
   ThrottleStatus,
   BatchQueryResult,
   DisplayCurrency,
+  ThemeMode,
   CloudflarePlatform,
   CloudflareChallengeResult,
   CloudflareSessionStatus

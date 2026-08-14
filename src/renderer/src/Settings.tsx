@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus } from './electron-api'
+import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus, ThemeMode } from './electron-api'
 import { PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
+import { saveTheme } from './theme'
 import './Settings.css'
 
 interface SettingsPanelProps {
@@ -8,7 +9,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'cookies' | 'proxy' | 'sources' | 'llm' | 'cloudflare'
+type SectionKey = 'api' | 'cookies' | 'proxy' | 'sources' | 'llm' | 'cloudflare' | 'appearance'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SectionKey>('api')
@@ -45,6 +46,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [standardPlatforms, setStandardPlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
   const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
   const [fastMode, setFastMode] = useState(false)
+  const [theme, setTheme] = useState<ThemeMode>('light')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -123,6 +125,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
+    setTheme(settings.theme || 'light')
   }, [])
 
   const handleSave = async () => {
@@ -185,6 +188,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   if (!isOpen) return null
 
   const navItems: { key: SectionKey; icon: string; label: string }[] = [
+    { key: 'appearance', icon: '◐', label: '外观' },
     { key: 'api', icon: '◆', label: 'API Tokens' },
     { key: 'cookies', icon: '◈', label: 'Cookies' },
     { key: 'proxy', icon: '◉', label: 'Proxy' },
@@ -699,6 +703,42 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               <div className="st-section-desc" style={{ marginTop: '12px' }}>
                 提示：验证与搜索会在同一个真实 Chrome 窗口里进行。关闭该 Chrome 后需重新启动并验证；Cloudflare 验证有效期通常为 30 分钟～数小时。
               </div>
+            </div>
+          </div>
+        )
+
+      case 'appearance':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              选择应用外观。「跟随系统」会随操作系统的深色 / 浅色模式自动切换。
+            </div>
+            <div className="st-theme-options" role="radiogroup" aria-label="主题">
+              {([
+                { value: 'light', label: '白色', hint: '暖色纸张浅色主题' },
+                { value: 'dark', label: '黑色', hint: '暖调深色主题' },
+                { value: 'system', label: '跟随系统', hint: '跟随 macOS 外观' }
+              ] as { value: ThemeMode; label: string; hint: string }[]).map(option => (
+                <label
+                  key={option.value}
+                  className={`st-theme-option ${theme === option.value ? 'checked' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="theme"
+                    value={option.value}
+                    checked={theme === option.value}
+                    onChange={e => {
+                      const next = e.target.value as ThemeMode
+                      setTheme(next)
+                      void saveTheme(next)
+                    }}
+                  />
+                  <span className="st-theme-radio"></span>
+                  <span className="st-theme-label">{option.label}</span>
+                  <span className="st-theme-hint">{option.hint}</span>
+                </label>
+              ))}
             </div>
           </div>
         )
