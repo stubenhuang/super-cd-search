@@ -1,20 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createDomEvaluate } from './helpers/dom-evaluate'
 
-const { mockGetSetting, mockBrowserPool, mockConvert, mockTryLLMParse } = vi.hoisted(() => ({
+const { mockGetSetting, mockBrowserPool, mockConvert, mockTryLLMParse, mockThrottledFetch } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockBrowserPool: { acquire: vi.fn(), release: vi.fn() },
   mockConvert: vi.fn(async (amount: number) => Math.round(amount * 0.0067 * 100) / 100),
-  mockTryLLMParse: vi.fn()
+  mockTryLLMParse: vi.fn(),
+  mockThrottledFetch: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }))
 vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
+vi.mock('../src/main/throttle', () => ({ throttledFetch: mockThrottledFetch }))
 
 import { queryKojima } from '../src/main/queries/kojima'
 import { clearAllCaches } from '../src/main/queries/cache'
+
+function okJson(data: unknown) {
+  return { ok: true, status: 200, json: async () => data }
+}
+
+function notOk() {
+  return { ok: false, status: 404, json: async () => ({}) }
+}
 
 function createKojimaPage() {
   let headingCalls = 0
@@ -60,6 +70,7 @@ beforeEach(() => {
   mockTryLLMParse.mockResolvedValue(null)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: {} })
   mockBrowserPool.release.mockResolvedValue(undefined)
+  mockThrottledFetch.mockResolvedValue(notOk())
 })
 
 describe('queryKojima', () => {
@@ -93,12 +104,14 @@ describe('queryKojima', () => {
     expect(result.status).toBe('not_found')
   })
 
-  it('extracts card data and product page details with price', async () => {
+  it('extracts card data and JSON product details without rendering the product page', async () => {
+    mockThrottledFetch.mockResolvedValue(okJson({
+      price: 330000,
+      price_min: 330000,
+      description: '<p>Format: SACD</p><p>発売日: 2024-01-15</p><p>レーベル: Test Label</p><p>ジャンル: Jazz</p>',
+      tags: []
+    }))
     const { page, browser } = createKojimaPage()
-    page.evaluate = createDomEvaluate([
-      '<div class="price__regular"><span class="price-item--regular">¥3,300</span></div>',
-      '<div class="product__description">Format: SACD\n発売日: 2024-01-15\nレーベル: Test Label\nジャンル: Jazz\nアーティスト: Someone</div>'
-    ])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
     const result = await runWithFakeTimers(() => queryKojima('ABC-123'))
@@ -113,10 +126,18 @@ describe('queryKojima', () => {
       status: 'found',
       details: { format: 'SACD', released: '2024-01-15', label: 'Test Label', genre: 'Jazz', country: 'Japan' }
     })
-    expect(page.goto).toHaveBeenCalledWith('https://kojimarokuon.com/products/1', expect.anything())
+    // Only the search page is loaded; the product page is never rendered.
+    expect(page.goto).toHaveBeenCalledTimes(1)
+    expect(page.goto).toHaveBeenCalledWith(expect.stringContaining('/search/'), expect.anything())
+    expect(mockThrottledFetch).toHaveBeenCalledWith(
+      'kojimarokuon.com',
+      expect.stringContaining('/products/1.js'),
+      undefined,
+      expect.anything()
+    )
   })
 
-  it('extracts variant options, meta fields and tags when no description exists', async () => {
+  it('falls back to rendering when the JSON endpoint is unavailable', async () => {
     const { page, browser } = createKojimaPage()
     page.evaluate = createDomEvaluate([
       '<div class="product__price">¥1,000</div>',
@@ -125,6 +146,7 @@ describe('queryKojima', () => {
         '<div class="product-tags"><a>Jazz</a><a>Japan</a></div>'
     ])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+    // default mockThrottledFetch -> notOk(), so the JSON path returns null
 
     const result = await runWithFakeTimers(() => queryKojima('ABC-123'))
 
@@ -133,6 +155,7 @@ describe('queryKojima', () => {
       details: { format: 'SACD', released: '2024', genre: 'Jazz / Japan', country: 'Japan' }
     })
     expect(result.details?.label).toBeNull()
+    expect(page.goto).toHaveBeenCalledWith('https://kojimarokuon.com/products/1', expect.anything())
   })
 
   it('prefers DOM extraction and skips LLM when the name is found', async () => {
@@ -192,11 +215,8 @@ describe('queryKojima', () => {
   })
 
   it('serves a repeated lookup from the query cache without using the browser', async () => {
+    mockThrottledFetch.mockResolvedValue(okJson({ price: 200000, price_min: 200000, description: '', tags: [] }))
     const { page, browser } = createKojimaPage()
-    page.evaluate = createDomEvaluate([
-      '<div class="product__price">¥1,000</div>',
-      '<div class="product__description"></div>'
-    ])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
     const first = await runWithFakeTimers(() => queryKojima('CACHED-1'))
@@ -209,24 +229,23 @@ describe('queryKojima', () => {
     expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
   })
 
-  it('reuses cached product details across different catalog numbers', async () => {
+  it('reuses cached JSON product details across different catalog numbers', async () => {
+    mockThrottledFetch.mockResolvedValue(okJson({ price: 330000, price_min: 330000, description: '', tags: [] }))
     const { page, browser } = createKojimaPage()
-    page.evaluate = createDomEvaluate([
-      '<div class="product__price">¥2,000</div>',
-      '<div class="product__description"></div>'
-    ])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
 
     const first = await runWithFakeTimers(() => queryKojima('ALBUM-1'))
     expect(first.status).toBe('found')
-    // Search page + product page.
-    expect(page.goto).toHaveBeenCalledTimes(2)
+    // Only the search page is loaded; details come from the JSON endpoint.
+    expect(page.goto).toHaveBeenCalledTimes(1)
+    expect(mockThrottledFetch).toHaveBeenCalledTimes(1)
 
     page.goto.mockClear()
     const second = await runWithFakeTimers(() => queryKojima('ALBUM-2'))
     expect(second.status).toBe('found')
-    // Only the search page is loaded; product details come from the cache.
+    // Only the search page is loaded again; product data comes from the cache.
     expect(page.goto).toHaveBeenCalledTimes(1)
-    expect(second.priceMin).toBe(13.4)
+    expect(mockThrottledFetch).toHaveBeenCalledTimes(1)
+    expect(second.priceMin).toBe(22.11)
   })
 })

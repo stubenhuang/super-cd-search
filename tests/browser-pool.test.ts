@@ -36,6 +36,7 @@ function createFakePage() {
     setViewport: vi.fn().mockResolvedValue(undefined),
     evaluateOnNewDocument: vi.fn().mockResolvedValue(undefined),
     setRequestInterception: vi.fn().mockResolvedValue(undefined),
+    setExtraHTTPHeaders: vi.fn().mockResolvedValue(undefined),
     on: vi.fn(),
     close: vi.fn().mockResolvedValue(undefined)
   }
@@ -114,24 +115,41 @@ describe('browserPool', () => {
     await browserPool.release(first.browser, first.page)
     const fourth = await fourthPromise
 
-    // The waiter is served by the released browser with a fresh page
+    // The waiter is served by the released browser with the same reused page.
     expect(fourth.browser).toBe(browserA)
-    expect(browserA.newPage).toHaveBeenCalledTimes(2)
-    expect(pageA.close).toHaveBeenCalled()
+    expect(fourth.page).toBe(pageA)
+    expect(browserA.newPage).toHaveBeenCalledTimes(1)
+    expect(pageA.close).not.toHaveBeenCalled()
     expect(third.browser).toBe(browserC)
   })
 
-  it('release closes the page and ignores unknown browsers', async () => {
+  it('release resets the page state and ignores unknown browsers', async () => {
     const page = createFakePage()
     const browser = createFakeBrowser(page)
     mockLaunch.mockResolvedValue(browser)
 
     const acquired = await browserPool.acquire()
     await browserPool.release(acquired.browser, acquired.page)
-    expect(page.close).toHaveBeenCalled()
+    expect(page.close).not.toHaveBeenCalled()
+    expect(page.setExtraHTTPHeaders).toHaveBeenCalledWith({})
 
     await browserPool.release({} as never, createFakePage() as never)
     expect(mockLaunch).toHaveBeenCalledTimes(1)
+  })
+
+  it('reuses the same page across a sequential acquire/release cycle', async () => {
+    const page = createFakePage()
+    const browser = createFakeBrowser(page)
+    mockLaunch.mockResolvedValue(browser)
+
+    const first = await browserPool.acquire()
+    await browserPool.release(first.browser, first.page)
+
+    const second = await browserPool.acquire()
+    expect(second.browser).toBe(browser)
+    expect(second.page).toBe(page)
+    expect(browser.newPage).toHaveBeenCalledTimes(1)
+    expect(page.close).not.toHaveBeenCalled()
   })
 
   it('closeAll closes every browser and rejects queued waiters', async () => {

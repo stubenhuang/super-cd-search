@@ -223,7 +223,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
     // Wait for either result items or the no-results banner.
     await page.waitForSelector(
       '.srp-results, .srp-results .s-item, li.s-item, .brw-river-item, [data-listing-id], .srp-rail__no-results, .srp-no-results',
-      { timeout: 8000 }
+      { timeout: 4000 }
     ).catch(() => null)
 
     const noResults = await page.$('.srp-rail__no-results, .srp-no-results')

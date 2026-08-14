@@ -63,6 +63,8 @@ export interface Settings {
   standardPlatforms?: Platform[]
   /** Platforms queried by the deep search mode. */
   deepPlatforms?: Platform[]
+  /** Skip product-detail page navigations for a faster, lower-traffic search. */
+  fastMode?: boolean
 }
 
 export interface BatchQueryProgress {

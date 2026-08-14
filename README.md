@@ -7,7 +7,7 @@
 - **多平台搜索**：从 Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping、CDJapan、Tower Records 查询 CD 信息
 - **批量处理**：同时搜索多个目录号
 - **并行加速**：同一目录号的多平台并行查询、按域名智能限速
-- **缓存加速**：查询结果与产品详情页缓存（1 小时）、SOCKS 代理连接复用、封面缩略图懒加载
+- **缓存加速**：查询结果与产品详情页缓存（1 小时、跨会话磁盘持久化）、SOCKS 代理连接复用、封面缩略图懒加载
 - **价格对比**：跨平台比较价格
 
 ## 支持平台
@@ -64,6 +64,7 @@ npm run dist
 可在设置面板中配置 API 凭证与搜索源：
 
 - **搜索源（Search Sources）**：分别管理「标准搜索」与「深度搜索」两种模式所查询的平台（默认标准 = Discogs + eBay，深度 = 全部平台）
+- **Fast Mode（跳过详情页）**：跳过商品详情页导航，以更少请求换取更快速度（详情字段可能缺失）
 - **Discogs API Token**：Discogs 个人访问令牌
 - **eBay Client ID**：eBay 开发者门户 OAuth 客户端 ID
 - **eBay Client Secret**：eBay 开发者门户 OAuth 客户端密钥

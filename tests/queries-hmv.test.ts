@@ -243,4 +243,23 @@ describe('queryHmv', () => {
     expect(second.priceMin).toBe(14.74)
     expect(second.details).toMatchObject({ format: 'CD', country: 'Japan' })
   })
+
+  it('skips the product page navigation in fast mode', async () => {
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'cookies') return { hmv: 'cookie-value' }
+      if (key === 'fastMode') return true
+      return undefined
+    })
+    const { page, browser } = createHmvPage()
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const result = await runWithFakeTimers(() => queryHmv('ABC-123'))
+
+    expect(result.status).toBe('found')
+    expect(result.priceMin).toBe(14.74)
+    expect(result.details).toBeUndefined()
+    // Only the search page is loaded; no product page navigation happens.
+    expect(page.goto).toHaveBeenCalledTimes(1)
+    expect(page.goto).toHaveBeenCalledWith(expect.stringContaining('/search/'), expect.anything())
+  })
 })

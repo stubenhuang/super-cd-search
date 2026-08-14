@@ -229,4 +229,22 @@ describe('queryYahoo', () => {
     expect(page.goto).toHaveBeenCalledTimes(1)
     expect(second.details).toMatchObject({ format: 'CD' })
   })
+
+  it('skips the product page navigation in fast mode', async () => {
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'cookies') return { yahoo: 'cookie-value' }
+      if (key === 'fastMode') return true
+      return undefined
+    })
+    const { page, browser } = createYahooPage()
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const result = await runWithFakeTimers(() => queryYahoo('ABC-123'))
+
+    expect(result.status).toBe('found')
+    expect(result.priceMin).toBe(13.27)
+    expect(result.details).toBeUndefined()
+    // Only the search page is loaded; no product page navigation happens.
+    expect(page.goto).toHaveBeenCalledTimes(1)
+  })
 })

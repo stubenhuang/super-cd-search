@@ -5,6 +5,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { waitForResultOrNoResult } from './wait'
 
 const TOWER_WEB_URL = 'https://tower.jp'
 
@@ -33,10 +34,10 @@ async function queryTowerWeb(catalogNumber: string, cookies?: string): Promise<Q
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     // Wait briefly for the server-rendered result list to settle.
-    await page.waitForSelector(
-      '.TOL-item-search-result-PC-result-list-display-item, .TOL-search-result-PC-search-result-number',
-      { timeout: 8000 }
-    ).catch(() => null)
+    await waitForResultOrNoResult(page, {
+      resultSelector: '.TOL-item-search-result-PC-result-list-display-item, .TOL-search-result-PC-search-result-number',
+      timeoutMs: 4000
+    })
 
     const extracted = await page.evaluate(() => {
       const card = document.querySelector('.TOL-item-search-result-PC-result-list-display-item')

@@ -7,6 +7,7 @@ import type { CDDetails } from '../../shared/types'
 import { notFound, queryError } from './types'
 import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { waitForResultOrNoResult } from './wait'
 
 const DISCOGS_API_URL = 'https://api.discogs.com'
 const DISCOGS_WEB_URL = 'https://www.discogs.com'
@@ -187,8 +188,8 @@ async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise
     const searchUrl = `${DISCOGS_WEB_URL}/search/?q=&type=release&catno=${encodeURIComponent(catalogNumber)}`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
-    // Wait for results to load
-    await page.waitForSelector('div[role="listitem"]', { timeout: 8000 }).catch(() => null)
+    // Wait for results to load (fails fast when the empty state appears).
+    await waitForResultOrNoResult(page, { resultSelector: 'div[role="listitem"]', timeoutMs: 4000 })
 
     // Find first result item
     const firstResult = await page.$('div[role="listitem"]')

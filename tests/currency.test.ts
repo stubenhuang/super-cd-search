@@ -91,4 +91,15 @@ describe('currency', () => {
     await convertToUSD(100, 'JPY')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it('dedupes concurrent rate fetches into a single request', async () => {
+    const fetchMock = mockRatesFetch()
+    const { convertToUSD } = await loadCurrency()
+    await Promise.all([
+      convertToUSD(100, 'JPY'),
+      convertToUSD(10, 'EUR'),
+      convertToUSD(1, 'GBP')
+    ])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })

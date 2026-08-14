@@ -4,6 +4,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
+import { waitForResultOrNoResult } from './wait'
 
 const YAHOO_SHOPPING_URL = 'https://shopping.yahoo.co.jp'
 
@@ -17,7 +18,7 @@ async function getYahooProductDetails(page: import('puppeteer').Page, link: stri
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
     await page.waitForSelector(
       'table, .specTable, .productSpec, .productDescription, .itemDescription, [class*="description"]',
-      { timeout: 5000 }
+      { timeout: 3000 }
     ).catch(() => null)
 
     // Extract product details from the page
@@ -107,7 +108,7 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     // Wait for the first search result item.
-    await page.waitForSelector('.SearchResult_SearchResultItem__mJ7vY', { timeout: 8000 }).catch(() => null)
+    await waitForResultOrNoResult(page, { resultSelector: '.SearchResult_SearchResultItem__mJ7vY', timeoutMs: 4000 })
     const firstItem = await page.$('.SearchResult_SearchResultItem__mJ7vY')
     if (!firstItem) {
       return notFound('yahoo')
@@ -149,9 +150,10 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
       }
     }
 
-    // Try to get details from product page
+    // Try to get details from product page. In fast mode we skip this second
+    // navigation to keep traffic and latency low.
     let details: CDDetails | undefined
-    if (link) {
+    if (link && !getSetting('fastMode')) {
       details = await getYahooProductDetails(page, link)
       const hasDetails = details.label || details.format || details.released || details.genre
       if (!hasDetails) details = undefined

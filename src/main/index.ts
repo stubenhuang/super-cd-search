@@ -5,6 +5,8 @@ import { registerOrchestratorIpc } from './ipc/orchestrator'
 import { registerImageIpc } from './ipc/image'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
+import { initCachePersistence, flushCacheToDisk } from './queries/cache'
+import { prewarmExchangeRates } from './currency'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -48,6 +50,8 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  initCachePersistence(app.getPath('userData'))
+  prewarmExchangeRates()
   registerSettingsIpc()
   registerOrchestratorIpc()
   registerImageIpc()
@@ -74,4 +78,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  flushCacheToDisk()
 })

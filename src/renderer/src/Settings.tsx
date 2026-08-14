@@ -39,6 +39,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [llmPlatformTower, setLlmPlatformTower] = useState(true)
   const [standardPlatforms, setStandardPlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
   const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
+  const [fastMode, setFastMode] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -78,6 +79,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setLlmPlatformTower(llm?.platformEnabled?.tower ?? true)
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
+    setFastMode(settings.fastMode || false)
   }, [])
 
   const handleSave = async () => {
@@ -100,6 +102,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       await window.electronAPI.setSetting('proxyPort', proxyPort)
       await window.electronAPI.setSetting('standardPlatforms', standardPlatforms)
       await window.electronAPI.setSetting('deepPlatforms', deepPlatforms)
+      await window.electronAPI.setSetting('fastMode', fastMode)
       await window.electronAPI.setSetting('llm', {
         enabled: llmEnabled,
         apiBaseUrl: llmApiBaseUrl,
@@ -362,6 +365,20 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           <div className="st-section-content">
             <div className="st-section-desc">
               Choose which platforms each search mode queries. Standard mode defaults to Discogs + eBay; deep mode defaults to every platform.
+            </div>
+            <div className="st-toggle-row">
+              <div className="st-toggle-info">
+                <span className="st-toggle-title">Fast Mode（跳过详情页）</span>
+                <span className="st-toggle-desc">Skip product-detail page visits for a faster, lower-traffic search (details may be omitted)</span>
+              </div>
+              <label className="st-switch">
+                <input
+                  type="checkbox"
+                  checked={fastMode}
+                  onChange={e => setFastMode(e.target.checked)}
+                />
+                <span className="st-slider"></span>
+              </label>
             </div>
             <div className="st-field-group">
               <div className="st-field-group-title">

@@ -26,6 +26,7 @@ interface BrowserInstance {
   browser: Browser
   fingerprint: Fingerprint
   inUse: boolean
+  page: Page | null
 }
 
 interface AcquiredInstance {
@@ -46,7 +47,8 @@ class BrowserPool {
 
     if (available) {
       available.inUse = true
-      const page = await this.createPage(available)
+      const page = available.page ?? await this.createPage(available)
+      available.page = page
       return { browser: available.browser, page, fingerprint: available.fingerprint }
     }
 
@@ -55,6 +57,7 @@ class BrowserPool {
       this.instances.push(instance)
       instance.inUse = true
       const page = await this.createPage(instance)
+      instance.page = page
       return { browser: instance.browser, page, fingerprint: instance.fingerprint }
     }
 
@@ -64,7 +67,12 @@ class BrowserPool {
   }
 
   async release(browser: Browser, page: Page): Promise<void> {
-    await page.close().catch(() => {})
+    // Reuse the page instead of closing it: creating/destroying a page on every
+    // lookup is wasted Chromium IPC. Only page-level state that persists across
+    // navigations (extra HTTP headers) needs resetting. Cookies are domain-
+    // scoped, so one platform's cookie is never sent to another domain, and each
+    // query re-sets its own cookie before navigating.
+    await this.resetPage(page)
 
     const instance = this.instances.find(i => i.browser === browser)
     if (!instance) return
@@ -75,8 +83,7 @@ class BrowserPool {
       const waiter = this.waitQueue.shift()
       if (waiter) {
         instance.inUse = true
-        const newPage = await this.createPage(instance)
-        waiter.resolve({ browser: instance.browser, page: newPage, fingerprint: instance.fingerprint })
+        waiter.resolve({ browser: instance.browser, page, fingerprint: instance.fingerprint })
       }
     }
   }
@@ -112,7 +119,16 @@ class BrowserPool {
       args
     })
 
-    return { browser, fingerprint, inUse: false }
+    return { browser, fingerprint, inUse: false, page: null }
+  }
+
+  /**
+   * Reset page-level state that persists across navigations. Extra HTTP headers
+   * set by one platform (e.g. eBay's UA/Accept-Language) would otherwise leak
+   * into the next platform's requests and pollute its fingerprint.
+   */
+  private async resetPage(page: Page): Promise<void> {
+    await page.setExtraHTTPHeaders({}).catch(() => {})
   }
 
   private async applyFingerprint(page: Page, fingerprint: Fingerprint): Promise<void> {

@@ -17,6 +17,7 @@ beforeEach(() => {
   deleteSetting('proxyPort')
   deleteSetting('standardPlatforms')
   deleteSetting('deepPlatforms')
+  deleteSetting('fastMode')
   deleteSetting('llm')
 })
 
@@ -32,7 +33,8 @@ describe('settings', () => {
       proxyPort: undefined,
       llm: undefined,
       standardPlatforms: DEFAULT_STANDARD_PLATFORMS,
-      deepPlatforms: DEFAULT_DEEP_PLATFORMS
+      deepPlatforms: DEFAULT_DEEP_PLATFORMS,
+      fastMode: undefined
     })
     expect(getSetting('discogsToken')).toBeUndefined()
   })

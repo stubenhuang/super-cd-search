@@ -26,6 +26,7 @@ const schema = {
   proxyPort: { type: 'number' as const, default: 1080 },
   standardPlatforms: { type: 'array' as const, default: DEFAULT_STANDARD_PLATFORMS },
   deepPlatforms: { type: 'array' as const, default: DEFAULT_DEEP_PLATFORMS },
+  fastMode: { type: 'boolean' as const, default: false },
   llm: {
     type: 'object' as const,
     properties: {
@@ -78,7 +79,8 @@ export function getSettings(): Settings {
     proxyPort: store.get('proxyPort') as number || undefined,
     llm: store.get('llm') as LLMSettings | undefined,
     standardPlatforms: store.get('standardPlatforms') as Platform[] || DEFAULT_STANDARD_PLATFORMS,
-    deepPlatforms: store.get('deepPlatforms') as Platform[] || DEFAULT_DEEP_PLATFORMS
+    deepPlatforms: store.get('deepPlatforms') as Platform[] || DEFAULT_DEEP_PLATFORMS,
+    fastMode: store.get('fastMode') as boolean || undefined
   }
 }
 

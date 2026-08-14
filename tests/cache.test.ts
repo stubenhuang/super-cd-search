@@ -1,11 +1,16 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { mkdtempSync, writeFileSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import {
   createTtlCache,
   getCachedQueryResult,
   cacheQueryResult,
   getCachedProductData,
   cacheProductData,
-  clearAllCaches
+  clearAllCaches,
+  initCachePersistence,
+  flushCacheToDisk
 } from '../src/main/queries/cache'
 import type { QueryResult } from '../src/shared/types'
 
@@ -139,5 +144,62 @@ describe('product detail cache', () => {
 
     expect(getCachedProductData('yahoo', 'https://shopping.yahoo.co.jp/p/1')).toBeNull()
     expect(getCachedQueryResult('yahoo', 'X-1')).toBeNull()
+  })
+})
+
+describe('disk persistence', () => {
+  let dir: string
+
+  beforeEach(() => {
+    clearAllCaches()
+    dir = mkdtempSync(join(tmpdir(), 'scd-cache-'))
+  })
+
+  afterEach(() => {
+    clearAllCaches()
+    flushCacheToDisk()
+    initCachePersistence(null)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('persists query results and restores them on the next init', () => {
+    initCachePersistence(dir)
+    cacheQueryResult('X-1', found('discogs', 'Persisted Album'))
+    flushCacheToDisk()
+
+    clearAllCaches()
+    expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
+
+    initCachePersistence(dir)
+    expect(getCachedQueryResult('discogs', 'X-1')?.name).toBe('Persisted Album')
+  })
+
+  it('persists product details and restores them', () => {
+    initCachePersistence(dir)
+    cacheProductData('hmv', 'https://www.hmv.co.jp/product/9', { format: 'CD' })
+    flushCacheToDisk()
+
+    clearAllCaches()
+    initCachePersistence(dir)
+    expect(getCachedProductData<{ format: string }>('hmv', 'https://www.hmv.co.jp/product/9')).toEqual({ format: 'CD' })
+  })
+
+  it('skips expired entries when loading from disk', () => {
+    const file = join(dir, 'search-cache.json')
+    writeFileSync(file, JSON.stringify({
+      queryResults: {
+        'discogs:X-1': { value: found('discogs', 'Stale'), fetchedAt: Date.now() - 2 * 60 * 60 * 1000 }
+      },
+      productDetails: {}
+    }))
+
+    initCachePersistence(dir)
+    expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
+  })
+
+  it('tolerates a corrupt cache file', () => {
+    writeFileSync(join(dir, 'search-cache.json'), '{not json')
+    expect(() => initCachePersistence(dir)).not.toThrow()
+    expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
   })
 })

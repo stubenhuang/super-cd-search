@@ -1,11 +1,117 @@
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
+import { throttledFetch } from '../throttle'
+import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
+import { waitForResultOrNoResult } from './wait'
 
 const KOJIMA_WEB_URL = 'https://kojimarokuon.com'
+
+// Light throttle for the Shopify JSON endpoint: one lightweight GET per unique
+// product (cached thereafter), far cheaper than rendering the product page.
+const JSON_THROTTLE = { minDelay: 300, maxDelay: 800 }
+
+interface KojimaProductData {
+  price: number | null
+  details: CDDetails
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, '\n')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** Parse "Key: Value" lines out of the Shopify product description HTML. */
+function parseDetailsFromDescription(html: string, tags: string[] = []): CDDetails {
+  const details: CDDetails = { label: null, format: null, country: 'Japan', released: null, genre: null }
+
+  for (const line of stripHtml(html).split('\n')) {
+    const match = line.match(/^(.+?)[:：]\s*(.+)$/)
+    if (!match) continue
+    const key = match[1].toLowerCase()
+    const value = match[2].trim()
+
+    if (key.includes('format') || key.includes('フォーマット') || key.includes('形式')) {
+      if (!details.format) details.format = value
+    } else if (key.includes('release') || key.includes('発売') || key.includes('date')) {
+      if (!details.released) details.released = value
+    } else if (key.includes('label') || key.includes('レーベル')) {
+      if (!details.label) details.label = value
+    } else if (key.includes('genre') || key.includes('ジャンル')) {
+      if (!details.genre) details.genre = value
+    }
+  }
+
+  if (!details.genre && tags.length > 0) {
+    details.genre = tags.slice(0, 3).join(' / ')
+  }
+
+  return details
+}
+
+/**
+ * Fetch price and details from Shopify's `/products/{handle}.js` JSON endpoint
+ * instead of rendering the product page. Returns null when the URL has no
+ * handle or the endpoint is unavailable, so the caller can fall back to the
+ * render-based scraper.
+ */
+async function tryGetKojimaProductDataFromJson(link: string): Promise<KojimaProductData | null> {
+  const cached = getCachedProductData<KojimaProductData>('kojima', link)
+  if (cached) return cached
+
+  const handleMatch = link.match(/\/products\/([^/?#]+)/)
+  if (!handleMatch) return null
+  const handle = handleMatch[1]
+
+  try {
+    const url = `${KOJIMA_WEB_URL}/products/${encodeURIComponent(handle)}.js`
+    const response = await throttledFetch('kojimarokuon.com', url, undefined, JSON_THROTTLE)
+    if (!response.ok) return null
+
+    const data = await response.json() as {
+      price?: number
+      price_min?: number
+      price_max?: number
+      description?: string
+      tags?: string[]
+      variants?: Array<{ title?: string }>
+    }
+
+    // Shopify .js prices are integers in the store's minor unit (cents); for a
+    // JPY store dividing by 100 recovers the yen amount.
+    const rawPrice = data.price_min ?? data.price
+    let price: number | null = null
+    if (typeof rawPrice === 'number' && rawPrice > 0) {
+      price = await convertToUSDWithFallback(rawPrice / 100, 'JPY')
+    }
+
+    const details = parseDetailsFromDescription(data.description ?? '', data.tags ?? [])
+
+    // Variant titles often encode the format (e.g. "CD", "SACD").
+    if (!details.format) {
+      const variantText = data.variants?.map((v) => v.title).join(' ') ?? ''
+      if (variantText && /CD|SACD|LP|Vinyl/i.test(variantText)) {
+        details.format = variantText.trim()
+      }
+    }
+
+    const result: KojimaProductData = { price, details }
+    cacheProductData('kojima', link, result)
+    return result
+  } catch (err) {
+    console.warn('Kojima: Shopify JSON lookup failed, falling back to rendering:', err)
+    return null
+  }
+}
 
 async function getKojimaProductDetails(page: import('puppeteer').Page, link: string): Promise<{ price: number | null; details: CDDetails }> {
   const cached = getCachedProductData<{ price: number | null; details: CDDetails }>('kojima', link)
@@ -18,7 +124,7 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
     await page.waitForSelector(
       '.price__regular, .price-item, .product__price, .product__description, .product-specs, [data-product-price], .price',
-      { timeout: 5000 }
+      { timeout: 3000 }
     ).catch(() => null)
 
     // Extract price
@@ -143,7 +249,7 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     // Wait for the Shopify standard card structure.
-    await page.waitForSelector('.card', { timeout: 8000 }).catch(() => null)
+    await waitForResultOrNoResult(page, { resultSelector: '.card', timeoutMs: 4000 })
     const firstItem = await page.$('.card')
     if (!firstItem) {
       return notFound('kojima')
@@ -183,7 +289,10 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
     let details: CDDetails | undefined
 
     if (link) {
-      const productData = await getKojimaProductDetails(page, link)
+      // Prefer the lightweight JSON endpoint; fall back to rendering only when
+      // it is unavailable, so the common case avoids a second full page load.
+      const productData = await tryGetKojimaProductDataFromJson(link)
+        ?? await getKojimaProductDetails(page, link)
       priceMin = productData.price
       priceMax = productData.price
 

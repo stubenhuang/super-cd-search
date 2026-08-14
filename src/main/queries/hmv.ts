@@ -4,6 +4,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
+import { waitForResultOrNoResult } from './wait'
 
 const HMV_WEB_URL = 'https://www.hmv.co.jp'
 
@@ -18,7 +19,7 @@ async function getHmvProductDetails(page: import('puppeteer').Page, link: string
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
     await page.waitForSelector(
       '.priceInfoBlock, .price, .productSpec, .itemSpec, .specList, .detailInfo, .product-spec',
-      { timeout: 5000 }
+      { timeout: 3000 }
     ).catch(() => null)
 
     // Extract price
@@ -148,7 +149,7 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     // Wait for the product list; .clearfix identifies actual products.
-    await page.waitForSelector('.resultList > li.list.clearfix, li.list.clearfix', { timeout: 8000 }).catch(() => null)
+    await waitForResultOrNoResult(page, { resultSelector: '.resultList > li.list.clearfix, li.list.clearfix', timeoutMs: 4000 })
     const firstItem = await page.$('.resultList > li.list.clearfix, li.list.clearfix')
     if (!firstItem) {
       return notFound('hmv')
@@ -228,8 +229,9 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
       }
     }
 
-    // Navigate to product page for price (if not found) and details
-    if (link) {
+    // Navigate to product page for price (if not found) and details. In fast
+    // mode we skip this second navigation to keep traffic and latency low.
+    if (link && !getSetting('fastMode')) {
       const productData = await getHmvProductDetails(page, link)
       if (priceMin === null && productData.price !== null) {
         priceMin = productData.price

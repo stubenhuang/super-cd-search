@@ -31,13 +31,32 @@ async function fetchExchangeRates(): Promise<ExchangeRates | null> {
   }
 }
 
+let ratesPromise: Promise<ExchangeRates | null> | null = null
+
 async function getExchangeRates(): Promise<ExchangeRates | null> {
   if (cachedRates && Date.now() - cachedRates.updatedAt < CACHE_DURATION) {
     return cachedRates
   }
 
-  cachedRates = await fetchExchangeRates()
-  return cachedRates
+  // Dedupe concurrent callers: several prices in the same batch are converted
+  // at once, and without this each would fire its own network request.
+  if (!ratesPromise) {
+    ratesPromise = fetchExchangeRates()
+      .then((rates) => {
+        cachedRates = rates
+        return rates
+      })
+      .finally(() => {
+        ratesPromise = null
+      })
+  }
+
+  return ratesPromise
+}
+
+/** Kick off a non-blocking rate fetch at startup so the first conversion is instant. */
+export function prewarmExchangeRates(): void {
+  void getExchangeRates()
 }
 
 export type Currency = 'JPY' | 'EUR' | 'GBP' | 'CNY' | 'USD'
