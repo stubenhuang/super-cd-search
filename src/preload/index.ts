@@ -9,12 +9,15 @@ import type {
   CloudflareChallengeResult,
   CloudflareSessionStatus,
   DetailEnrichmentResult,
+  ExportFileResult,
+  ExcelExportPayload,
+  DirectorySelectResult,
   QueryResult,
   CDDetails
 } from '../shared/types'
 
 const validSendChannels = ['toMain', 'renderer:log'] as const
-const validReceiveChannels = ['fromMain', 'query:progress', 'detail:enrich-progress'] as const
+const validReceiveChannels = ['fromMain', 'query:progress', 'detail:enrich-progress', 'export:progress'] as const
 
 const validLogLevels = new Set(['debug', 'info', 'warn', 'error'])
 
@@ -55,6 +58,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('detail:enrich', catalogNumber, existingResults, knownDetails),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
+  exportExcel: (defaultFileName: string, payload: ExcelExportPayload, targetDirectory?: string): Promise<ExportFileResult> =>
+    ipcRenderer.invoke('export:excel', defaultFileName, payload, targetDirectory),
+  selectExportDirectory: (): Promise<DirectorySelectResult> =>
+    ipcRenderer.invoke('export:select-directory'),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),

@@ -15,7 +15,12 @@ import type {
   CloudflareChallengeResult,
   CloudflareSessionStatus,
   DetailEnrichProgress,
-  DetailEnrichmentResult
+  DetailEnrichmentResult,
+  ExportFileResult,
+  ExportProgress,
+  ExcelExportPayload,
+  ExcelExportRow,
+  DirectorySelectResult
 } from '../../shared/types'
 
 export type {
@@ -34,7 +39,12 @@ export type {
   CloudflareChallengeResult,
   CloudflareSessionStatus,
   DetailEnrichProgress,
-  DetailEnrichmentResult
+  DetailEnrichmentResult,
+  ExportFileResult,
+  ExportProgress,
+  ExcelExportPayload,
+  ExcelExportRow,
+  DirectorySelectResult
 }
 
 // Extended progress type for received messages (includes event)
@@ -64,6 +74,8 @@ export interface IElectronAPI {
     knownDetails?: CDDetails | null
   ) => Promise<DetailEnrichmentResult>
   cancelBatchQuery: () => Promise<void>
+  exportExcel: (defaultFileName: string, payload: ExcelExportPayload, targetDirectory?: string) => Promise<ExportFileResult>
+  selectExportDirectory: () => Promise<DirectorySelectResult>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
   startCloudflareChallenge: (platform: CloudflarePlatform) => Promise<CloudflareChallengeResult>

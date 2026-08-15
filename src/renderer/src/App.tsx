@@ -1,12 +1,15 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, ExportProgress } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { DetailModal } from './DetailModal'
+import { ExportModal, type ExportConfirmOptions } from './ExportModal'
+import { aggregateDetails, missingDetailKeys } from '../../shared/details'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { useCoverImage } from './hooks/useCoverImage'
 import { useI18n } from './i18n'
+import { buildExportRows } from './exportData'
 import './App.css'
 
 type SearchMode = 'standard' | 'deep'
@@ -22,6 +25,27 @@ function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]):
     }
   }
   return merged
+}
+
+function applyBatchResults(existing: Map<string, QueryResult[]>, batches: BatchQueryResult[]): Map<string, QueryResult[]> {
+  const merged = new Map(existing)
+  for (const batch of batches) {
+    const previous = merged.get(batch.catalogNumber) || []
+    merged.set(batch.catalogNumber, mergePlatformResults(previous, batch.results))
+  }
+  return merged
+}
+
+function hasCompleteDetails(results: QueryResult[], enrichedDetails?: CDDetails): boolean {
+  const merged = { ...aggregateDetails(results).details }
+  if (enrichedDetails) {
+    for (const key of Object.keys(merged) as (keyof CDDetails)[]) {
+      if (!merged[key] && enrichedDetails[key]) {
+        merged[key] = enrichedDetails[key]
+      }
+    }
+  }
+  return missingDetailKeys(merged).length === 0
 }
 
 interface PlatformResultRowProps {
@@ -250,6 +274,12 @@ function App() {
   const deepSearchSucceededRef = useRef(false)
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('USD')
   const [usdToCnyRate, setUsdToCnyRate] = useState<number | null>(null)
+  const [exportState, setExportState] = useState<'idle' | 'exporting' | 'saved' | 'error'>('idle')
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportProgressText, setExportProgressText] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const exportResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Left panel resizable width (persisted locally).
   const [leftPanelWidth, setLeftPanelWidth] = useState(340)
@@ -335,6 +365,22 @@ function App() {
     setIsCancelling(true)
     await window.electronAPI.cancelBatchQuery()
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (exportResetTimerRef.current) clearTimeout(exportResetTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleExportProgress = (...args: unknown[]) => {
+      const progress = args[0] as ExportProgress
+      if (progress?.phase === 'images') {
+        setExportProgressText(t('export.preparingImages', { current: progress.current, total: progress.total }))
+      }
+    }
+    window.electronAPI.receive('export:progress', handleExportProgress)
+  }, [t])
 
   useEffect(() => {
     const handleProgress = (...args: unknown[]) => {
@@ -511,6 +557,132 @@ function App() {
       return next
     })
   }, [])
+
+  const handleExportCsv = useCallback(() => {
+    if (isLoading || isDeepSearching || catalogOrder.length === 0) return
+
+    setExportError(null)
+    setExportProgressText(null)
+    setShowExportModal(true)
+    window.electronAPI.log('debug', 'app.export', 'Excel export modal opened', { catalogCount: catalogOrder.length })
+  }, [catalogOrder.length, isDeepSearching, isLoading])
+
+  const handleExportModalClose = useCallback(() => {
+    if (exportBusy) return
+    setShowExportModal(false)
+    setExportError(null)
+    setExportProgressText(null)
+    setExportState('idle')
+  }, [exportBusy])
+
+  const handleExportConfirm = useCallback(async (options: ExportConfirmOptions) => {
+    setExportBusy(true)
+    setExportError(null)
+    setExportState('exporting')
+    window.electronAPI.log('info', 'app.export', 'Excel export confirmed', {
+      directory: options.directory,
+      deepSearch: options.deepSearch,
+      smartGenerate: options.smartGenerate,
+      catalogCount: catalogOrder.length
+    })
+
+    try {
+      setExportProgressText(t('export.preparing'))
+
+      let workingResults = new Map(results)
+      let workingEnriched = new Map(enrichedDetails)
+
+      if (options.deepSearch) {
+        const emptyCatalogsToDig = catalogOrder.filter(cn => {
+          const rs = workingResults.get(cn)
+          return !rs || rs.length === 0 || !rs.some(r => r.status === 'found')
+        })
+
+        if (emptyCatalogsToDig.length > 0) {
+          let settings: Settings | undefined
+          try {
+            settings = await window.electronAPI.getSettings()
+          } catch {
+            settings = undefined
+          }
+          const platforms = settings?.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS
+          if (platforms.length === 0) {
+            throw new Error(t('error.noPlatforms'))
+          }
+
+          setExportProgressText(t('export.deepSearchingCount', { count: emptyCatalogsToDig.length }))
+          window.electronAPI.log('info', 'app.export', 'auto deep search started', { targets: emptyCatalogsToDig, platforms })
+          const batches = await window.electronAPI.executeBatchQuery(emptyCatalogsToDig, platforms)
+          workingResults = applyBatchResults(workingResults, batches)
+          setResults(workingResults)
+        }
+      }
+
+      if (options.smartGenerate) {
+        const total = catalogOrder.length
+        for (let index = 0; index < catalogOrder.length; index++) {
+          const catalogNumber = catalogOrder[index]
+          const currentResults = workingResults.get(catalogNumber) || []
+          const currentEnriched = workingEnriched.get(catalogNumber)
+
+          if (!hasCompleteDetails(currentResults, currentEnriched)) {
+            setExportProgressText(t('export.smartGenerating', { current: index + 1, total, catalogNumber }))
+            window.electronAPI.log('info', 'app.export', 'auto smart generation started', { catalogNumber })
+            const enrichment = await window.electronAPI.enrichDetails(catalogNumber, currentResults, currentEnriched)
+            workingEnriched.set(catalogNumber, enrichment.details)
+            setEnrichedDetails(new Map(workingEnriched))
+          }
+        }
+      }
+
+      setExportProgressText(t('export.writing'))
+
+      const formatPrice = (usd: number): string => {
+        if (displayCurrency === 'CNY' && usdToCnyRate !== null) {
+          return `¥${(usd * usdToCnyRate).toFixed(2)}`
+        }
+        return `$${usd.toFixed(2)}`
+      }
+
+      const headers = [
+        t('export.catalogNumber'),
+        t('export.image'),
+        t('export.details'),
+        t('export.lowestPrice'),
+        t('export.highestPrice')
+      ]
+      const rows = buildExportRows({
+        catalogNumbers: catalogOrder,
+        resultsByCatalog: workingResults,
+        enrichedDetailsByCatalog: workingEnriched,
+        formatPrice,
+        t: t as (key: string) => string
+      })
+
+      const now = new Date()
+      const stamp = `${now.toISOString().slice(0, 10)}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+      const fileName = `super-cd-search-results-${stamp}.xlsx`
+      const result = await window.electronAPI.exportExcel(fileName, { headers, rows }, options.directory)
+
+      if (result.status === 'saved') {
+        window.electronAPI.log('info', 'app.export', 'Excel exported', { filePath: result.filePath, catalogCount: catalogOrder.length })
+        setExportState('saved')
+        setShowExportModal(false)
+        if (exportResetTimerRef.current) clearTimeout(exportResetTimerRef.current)
+        exportResetTimerRef.current = setTimeout(() => setExportState('idle'), 2500)
+      } else if (result.status === 'error') {
+        setExportError(result.error || t('export.failed'))
+        setExportState('error')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      window.electronAPI.log('warn', 'app.export', 'Excel export failed', { error: message })
+      setExportError(message || t('export.failed'))
+      setExportState('error')
+    } finally {
+      setExportBusy(false)
+    }
+  }, [catalogOrder, displayCurrency, enrichedDetails, results, t, usdToCnyRate])
 
   const handleCurrencyChange = useCallback((currency: DisplayCurrency) => {
     setDisplayCurrency(currency)
@@ -741,16 +913,34 @@ function App() {
         <section className="right-panel">
           <div className="panel-header">
             <h2>{t('panel.results')}</h2>
-            {showDeepSearchButton && (
-              <button
-                className="deep-search-button"
-                onClick={handleDeepSearch}
-                disabled={isDeepSearching}
-                title={t('deepSearch.title')}
-              >
-                {isDeepSearching ? t('deepSearch.digging') : t('deepSearch.button')}
-              </button>
-            )}
+            <div className="panel-header-actions">
+              {showDeepSearchButton && (
+                <button
+                  className="deep-search-button"
+                  onClick={handleDeepSearch}
+                  disabled={isDeepSearching}
+                  title={t('deepSearch.title')}
+                >
+                  {isDeepSearching ? t('deepSearch.digging') : t('deepSearch.button')}
+                </button>
+              )}
+              {results.size > 0 && (
+                <button
+                  className="export-csv-button"
+                  onClick={handleExportCsv}
+                  disabled={exportState === 'exporting' || isLoading || isDeepSearching}
+                  title={t('export.title')}
+                >
+                  {exportState === 'exporting'
+                    ? t('export.exporting')
+                    : exportState === 'saved'
+                      ? t('export.saved')
+                      : exportState === 'error'
+                        ? t('export.failed')
+                        : t('export.button')}
+                </button>
+              )}
+            </div>
           </div>
           <div className="panel-content">
             {results.size === 0 && !hasProgress && (
@@ -797,6 +987,14 @@ function App() {
         </section>
       </main>
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <ExportModal
+        isOpen={showExportModal}
+        busy={exportBusy}
+        statusText={exportProgressText}
+        error={exportError}
+        onClose={handleExportModalClose}
+        onConfirm={handleExportConfirm}
+      />
       {showDetailModal && selectedCatalog && (
         <DetailModal
           isOpen={showDetailModal}

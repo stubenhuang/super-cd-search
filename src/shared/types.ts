@@ -165,6 +165,36 @@ export interface BatchQueryResult {
   results: QueryResult[]
 }
 
+export interface ExportFileResult {
+  status: 'saved' | 'cancelled' | 'error'
+  filePath?: string
+  error?: string
+}
+
+export interface DirectorySelectResult {
+  status: 'selected' | 'cancelled'
+  path?: string
+}
+
+export interface ExcelExportRow {
+  catalogNumber: string
+  imageUrl: string
+  details: string
+  lowestPrice: string
+  highestPrice: string
+}
+
+export interface ExcelExportPayload {
+  headers: string[]
+  rows: ExcelExportRow[]
+}
+
+export interface ExportProgress {
+  phase: 'images'
+  current: number
+  total: number
+}
+
 export interface ThrottleStatus {
   domains: Record<string, {
     pendingRequests: number

@@ -16,7 +16,7 @@ vi.mock('electron', () => {
       getFocusedWindow: vi.fn(() => null)
     },
     ipcMain: { handle, on: vi.fn() },
-    dialog: { showSaveDialog: vi.fn() },
+    dialog: { showSaveDialog: vi.fn(), showOpenDialog: vi.fn() },
     shell: { openExternal: vi.fn() },
     contextBridge: { exposeInMainWorld: vi.fn() },
     ipcRenderer: {

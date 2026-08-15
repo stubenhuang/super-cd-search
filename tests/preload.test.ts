@@ -46,8 +46,9 @@ describe('preload API', () => {
     api.receive('query:progress', fn)
     api.receive('fromMain', fn)
     api.receive('detail:enrich-progress', fn)
+    api.receive('export:progress', fn)
     api.receive('danger', fn)
-    expect(ipcRenderer.on).toHaveBeenCalledTimes(3)
+    expect(ipcRenderer.on).toHaveBeenCalledTimes(4)
   })
 
   it('forwards settings calls to ipcRenderer.invoke', async () => {
@@ -82,6 +83,12 @@ describe('preload API', () => {
 
     await api.enrichDetails('X-1', [], null)
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('detail:enrich', 'X-1', [], null)
+
+    await api.exportExcel('result.xlsx', { headers: ['编号'], rows: [] }, '/tmp/exports')
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('export:excel', 'result.xlsx', { headers: ['编号'], rows: [] }, '/tmp/exports')
+
+    await api.selectExportDirectory()
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('export:select-directory')
 
     await api.cancelBatchQuery()
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('cancelBatchQuery')

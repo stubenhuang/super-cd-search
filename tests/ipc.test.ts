@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ipcMain } from 'electron'
+import { ipcMain, dialog } from 'electron'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
 const { mockGetSettings, mockGetSetting, mockSetSetting, mockDeleteSetting } = vi.hoisted(() => ({
   mockGetSettings: vi.fn(),
@@ -36,6 +38,10 @@ const { mockLogFromRenderer } = vi.hoisted(() => ({
   mockLogFromRenderer: vi.fn()
 }))
 
+const { mockWriteExcelFile } = vi.hoisted(() => ({
+  mockWriteExcelFile: vi.fn()
+}))
+
 vi.mock('../src/main/settings', () => ({
   getSettings: mockGetSettings,
   getSetting: mockGetSetting,
@@ -67,6 +73,10 @@ vi.mock('../src/main/llm/enrich', () => ({
   enrichDetails: mockEnrichDetails
 }))
 
+vi.mock('../src/main/excel/exporter', () => ({
+  writeExcelFile: mockWriteExcelFile
+}))
+
 vi.mock('../src/main/logger', () => ({
   logger: {
     debug: vi.fn(),
@@ -84,6 +94,7 @@ import { registerCurrencyIpc } from '../src/main/ipc/currency'
 import { registerCloudflareIpc } from '../src/main/ipc/cloudflare'
 import { registerEnrichmentIpc } from '../src/main/ipc/enrich'
 import { registerLoggingIpc } from '../src/main/ipc/log'
+import { registerExportIpc } from '../src/main/ipc/export'
 
 function handler(channel: string) {
   const call = vi.mocked(ipcMain.handle).mock.calls.find(([ch]) => ch === channel)
@@ -216,5 +227,59 @@ describe('registerLoggingIpc', () => {
 
     onHandler('renderer:log')(null, 'info', 'app.search', 'no meta')
     expect(mockLogFromRenderer).toHaveBeenCalledWith('info', 'app.search', 'no meta', undefined)
+  })
+})
+
+describe('registerExportIpc', () => {
+  const payload = {
+    headers: ['编号', '图片', '详情', '最低价', '最高价'],
+    rows: [{ catalogNumber: 'X-1', imageUrl: '', details: '编号: X-1', lowestPrice: '$10.00', highestPrice: '$20.00' }]
+  }
+
+  it('writes the workbook through the selected save path', async () => {
+    const filePath = join(tmpdir(), `scd-export-${Date.now()}.xlsx`)
+    vi.mocked(dialog.showSaveDialog).mockResolvedValue({ canceled: false, filePath } as never)
+    mockWriteExcelFile.mockResolvedValue(undefined)
+
+    registerExportIpc()
+    const result = await handler('export:excel')(null, 'default.xlsx', payload)
+
+    expect(result).toEqual({ status: 'saved', filePath })
+    expect(mockWriteExcelFile).toHaveBeenCalledWith(payload, filePath, undefined, expect.any(Function))
+  })
+
+  it('writes directly to the target directory without a save dialog', async () => {
+    const dir = join(tmpdir(), `scd-export-dir-${Date.now()}`)
+    mockWriteExcelFile.mockResolvedValue(undefined)
+    registerExportIpc()
+    const result = await handler('export:excel')(null, 'result.xlsx', payload, dir)
+
+    expect(result).toEqual({ status: 'saved', filePath: join(dir, 'result.xlsx') })
+    expect(mockWriteExcelFile).toHaveBeenCalledWith(payload, join(dir, 'result.xlsx'), undefined, expect.any(Function))
+  })
+
+  it('selects an export directory', async () => {
+    const dir = join(tmpdir(), 'chosen-dir')
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [dir] } as never)
+
+    registerExportIpc()
+    expect(await handler('export:select-directory')(null)).toEqual({ status: 'selected', path: dir })
+  })
+
+  it('returns cancelled when the save dialog is dismissed', async () => {
+    vi.mocked(dialog.showSaveDialog).mockResolvedValue({ canceled: true, filePath: undefined } as never)
+
+    registerExportIpc()
+    const result = await handler('export:excel')(null, 'default.xlsx', payload)
+    expect(result).toEqual({ status: 'cancelled' })
+  })
+
+  it('returns an error result when the export throws', async () => {
+    vi.mocked(dialog.showSaveDialog).mockRejectedValue(new Error('dialog failed'))
+
+    registerExportIpc()
+    const result = await handler('export:excel')(null, 'default.xlsx', payload)
+    expect(result.status).toBe('error')
+    expect(result.error).toBe('dialog failed')
   })
 })
