@@ -50,5 +50,4 @@ release/
 .playwright-mcp/
 
 # Documentation
-docs/
 tasks/
