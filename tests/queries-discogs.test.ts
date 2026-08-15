@@ -14,7 +14,13 @@ vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }))
 vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
-import { queryDiscogs, clearReleaseCache } from '../src/main/queries/discogs'
+import {
+  queryDiscogs,
+  queryDiscogsByBarcode,
+  normalizeDiscogsBarcode,
+  clearReleaseCache,
+  clearDiscogsBarcodeCache
+} from '../src/main/queries/discogs'
 import { clearAllCaches } from '../src/main/queries/cache'
 
 function okJson(data: unknown) {
@@ -47,6 +53,7 @@ function createDiscogsPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   clearAllCaches()
+  clearDiscogsBarcodeCache()
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'discogsToken') return 'token-123'
     if (key === 'cookies') return { discogs: 'cookie-value' }
@@ -248,6 +255,107 @@ describe('queryDiscogs', () => {
         path: '/'
       })
       expect(mockBrowserPool.release).toHaveBeenCalledWith(browser, page)
+    })
+  })
+
+  describe('barcode lookup', () => {
+    it('normalizes scanned barcodes to 8-14 digits', () => {
+      expect(normalizeDiscogsBarcode(' 4988006812345 ')).toBe('4988006812345')
+      expect(normalizeDiscogsBarcode('4 988006 812345')).toBe('4988006812345')
+      expect(normalizeDiscogsBarcode('4-988006-812345')).toBe('4988006812345')
+      expect(normalizeDiscogsBarcode('123')).toBeNull()
+      expect(normalizeDiscogsBarcode('123456789012345')).toBeNull()
+      expect(normalizeDiscogsBarcode('ABCDEFGHIJKL')).toBeNull()
+    })
+
+    it('returns no_token when Discogs token is not configured', async () => {
+      mockGetSetting.mockImplementation((key: string) => {
+        if (key === 'discogsToken') return undefined
+        return undefined
+      })
+
+      expect(await queryDiscogsByBarcode('4988006812345')).toEqual({
+        status: 'no_token',
+        barcode: '4988006812345'
+      })
+      expect(mockThrottledFetch).not.toHaveBeenCalled()
+    })
+
+    it('resolves a barcode to a catalog number and caches the full result', async () => {
+      mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
+        if (url.includes('/database/search')) {
+          if (url.includes('barcode=')) {
+            return okJson({
+              results: [
+                { id: 77, title: 'Artist - Barcode Album', catno: 'SICP 6480', cover_image: 'https://cdn/cover.jpg', uri: '/release/77' }
+              ]
+            })
+          }
+          return okJson({ results: [] })
+        }
+        if (url.includes('/marketplace/stats')) {
+          return okJson({ lowest_price: { value: 20, currency: 'USD' } })
+        }
+        if (url.includes('/releases/77')) {
+          return okJson({
+            labels: [{ name: 'Barcode Label' }],
+            formats: [{ name: 'CD', descriptions: ['Album'] }],
+            country: 'Japan',
+            released: '2023-01-02',
+            year: '2023',
+            genres: ['Rock'],
+            styles: []
+          })
+        }
+        return { ok: false, status: 404 }
+      })
+
+      const lookup = await queryDiscogsByBarcode('4 988006 812345')
+      expect(lookup).toMatchObject({
+        status: 'found',
+        barcode: '4988006812345',
+        catalogNumber: 'SICP-6480',
+        title: 'Artist - Barcode Album'
+      })
+      expect(lookup.result).toMatchObject({
+        platform: 'discogs',
+        name: 'Barcode Album',
+        artist: 'Artist',
+        priceMin: 20,
+        priceMax: 20,
+        status: 'found'
+      })
+
+      const callsBefore = mockThrottledFetch.mock.calls.length
+      const cached = await queryDiscogs('SICP-6480')
+      expect(cached).toMatchObject({ platform: 'discogs', status: 'found', name: 'Barcode Album' })
+      expect(mockThrottledFetch.mock.calls.length).toBe(callsBefore)
+    })
+
+    it('caches not_found barcode lookups', async () => {
+      mockThrottledFetch.mockResolvedValue(okJson({ results: [] }))
+
+      expect(await queryDiscogsByBarcode('4988006812345')).toMatchObject({ status: 'not_found' })
+      expect(await queryDiscogsByBarcode('4988006812345')).toMatchObject({ status: 'not_found' })
+      expect(mockThrottledFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns an error when the release has no catalog number', async () => {
+      mockThrottledFetch.mockResolvedValue(okJson({
+        results: [{ id: 88, title: 'No Catno Album', uri: '/release/88' }]
+      }))
+
+      const lookup = await queryDiscogsByBarcode('4988006812345')
+      expect(lookup.status).toBe('error')
+      expect(lookup.message).toContain('目录号')
+    })
+
+    it('returns an error when the API fails and never falls back to scraping', async () => {
+      mockThrottledFetch.mockResolvedValue({ ok: false, status: 500 })
+
+      const lookup = await queryDiscogsByBarcode('4988006812345')
+      expect(lookup.status).toBe('error')
+      expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
     })
   })
 

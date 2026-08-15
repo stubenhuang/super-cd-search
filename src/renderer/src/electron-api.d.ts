@@ -20,7 +20,12 @@ import type {
   ExportProgress,
   ExcelExportPayload,
   ExcelExportRow,
-  DirectorySelectResult
+  DirectorySelectResult,
+  LanCandidate,
+  LanServerStatus,
+  LanCatalogAddedEvent,
+  BarcodeProvider,
+  BarcodeCatalogCandidate
 } from '../../shared/types'
 
 export type {
@@ -44,7 +49,12 @@ export type {
   ExportProgress,
   ExcelExportPayload,
   ExcelExportRow,
-  DirectorySelectResult
+  DirectorySelectResult,
+  LanCandidate,
+  LanServerStatus,
+  LanCatalogAddedEvent,
+  BarcodeProvider,
+  BarcodeCatalogCandidate
 }
 
 // Extended progress type for received messages (includes event)
@@ -82,6 +92,11 @@ export interface IElectronAPI {
   cancelCloudflareChallenge: () => Promise<void>
   getCloudflareStatus: (platform: CloudflarePlatform) => Promise<CloudflareSessionStatus>
   closeCloudflareSession: () => Promise<void>
+  getLanStatus: () => Promise<LanServerStatus>
+  getLanCandidates: () => Promise<LanCandidate[]>
+  applyLanServer: () => Promise<LanServerStatus>
+  regenerateLanToken: () => Promise<LanServerStatus>
+  setLanSearchAvailability: (available: boolean) => Promise<void>
 }
 
 declare global {

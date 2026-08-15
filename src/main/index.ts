@@ -12,6 +12,8 @@ import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
 import { initCloudflareChrome, closeCloudflareChrome } from './cloudflare'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
+import { registerLanIpc } from './ipc/lan'
+import { applyLanServer, closeLanServer } from './lan'
 import { initCachePersistence, flushCacheToDisk } from './queries/cache'
 import { prewarmExchangeRates } from './currency'
 
@@ -71,7 +73,7 @@ function cliLogLevel(): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const defaultLevel: LogLevel = VITE_DEV_SERVER_URL ? 'debug' : 'info'
   initLogger({
     dir: join(app.getPath('userData'), 'logs'),
@@ -90,6 +92,7 @@ app.whenReady().then(() => {
   registerExportIpc()
   registerImageIpc()
   registerThrottleIpc()
+  registerLanIpc()
   registerCurrencyIpc()
   registerCloudflareIpc()
 
@@ -98,6 +101,16 @@ app.whenReady().then(() => {
     logger.debug('main', 'openExternal called', { url })
     await shell.openExternal(url)
   })
+
+  // Start the LAN server (when enabled) before the window appears so the
+  // settings panel can immediately show the QR code / status.
+  try {
+    await applyLanServer()
+  } catch (err) {
+    logger.error('lan', 'failed to apply LAN server settings on startup', {
+      error: err instanceof Error ? err.message : String(err)
+    })
+  }
 
   createWindow()
 
@@ -119,6 +132,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  logger.debug('main', 'before-quit: flushing cache')
+  logger.debug('main', 'before-quit: flushing cache and stopping LAN server')
   flushCacheToDisk()
+  void closeLanServer()
 })

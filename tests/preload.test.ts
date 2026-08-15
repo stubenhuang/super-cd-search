@@ -47,8 +47,9 @@ describe('preload API', () => {
     api.receive('fromMain', fn)
     api.receive('detail:enrich-progress', fn)
     api.receive('export:progress', fn)
+    api.receive('lan:catalog-added', fn)
     api.receive('danger', fn)
-    expect(ipcRenderer.on).toHaveBeenCalledTimes(4)
+    expect(ipcRenderer.on).toHaveBeenCalledTimes(5)
   })
 
   it('forwards settings calls to ipcRenderer.invoke', async () => {
@@ -101,5 +102,25 @@ describe('preload API', () => {
 
     await api.fetchImage('https://example.com/a.png', 240)
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('fetchImage', 'https://example.com/a.png', 240)
+  })
+
+  it('forwards LAN connection calls to ipcRenderer.invoke', async () => {
+    api = await loadPreload()
+    vi.mocked(ipcRenderer.invoke).mockResolvedValue({ state: 'disabled' })
+
+    await api.getLanStatus()
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:getStatus')
+
+    await api.getLanCandidates()
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:getCandidates')
+
+    await api.applyLanServer()
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:apply')
+
+    await api.regenerateLanToken()
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:regenerateToken')
+
+    await api.setLanSearchAvailability(true)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:setAvailability', true)
   })
 })

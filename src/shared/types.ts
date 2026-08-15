@@ -86,6 +86,69 @@ export interface LLMSettings {
   }
 }
 
+/** A usable LAN address detected on this computer. */
+export interface LanCandidate {
+  address: string
+  interfaceName: string
+}
+
+export type LanServerState = 'disabled' | 'stopped' | 'running' | 'error' | 'no_network'
+
+/** Live status of the built-in LAN server (IPC-facing). */
+export interface LanServerStatus {
+  state: LanServerState
+  /** Whether the user has the LAN connection feature switched on. */
+  enabled: boolean
+  /** Address the server is bound to. Empty means "auto". */
+  host: string
+  port: number
+  /**
+   * Full URL including the one-time LAN access token. Only send this to the
+   * renderer when it needs to build the QR code; never write it to logs.
+   */
+  url?: string
+  error?: string
+}
+
+/** Sources that can translate a CD barcode into a catalog number. */
+export type BarcodeProvider = 'discogs' | 'tower' | 'hmv' | 'yahoo' | 'surugaya'
+
+export type BarcodeCandidateConfidence = 'high' | 'low'
+
+/** A catalog number candidate resolved from a barcode by one source. */
+export interface BarcodeCatalogCandidate {
+  catalogNumber: string
+  title: string
+  source: BarcodeProvider
+  productUrl?: string
+  confidence: BarcodeCandidateConfidence
+}
+
+export type LanBarcodeLookupStatus = 'added' | 'candidates' | 'not_found' | 'unavailable' | 'no_token' | 'error'
+
+/** Result of a phone-side barcode lookup submitted to the LAN server. */
+export interface LanBarcodeLookupResponse {
+  status: LanBarcodeLookupStatus
+  /** The normalized barcode that was looked up. */
+  barcode: string
+  /** Catalog number added automatically (when status is `added`). */
+  catalogNumber?: string
+  /** Release title shown to the user (when added). */
+  title?: string
+  /** Source that produced an automatic high-confidence match. */
+  source?: BarcodeProvider
+  /** Low-confidence candidates the phone user must choose from. */
+  candidates?: BarcodeCatalogCandidate[]
+  /** Human-readable message for non-success states. */
+  message?: string
+}
+
+/** Sent from the main process to the desktop renderer after a phone lookup. */
+export interface LanCatalogAddedEvent {
+  catalogNumber: string
+  title?: string
+}
+
 export interface Settings {
   discogsToken?: string
   ebayClientId?: string
@@ -107,6 +170,20 @@ export interface Settings {
   theme?: ThemeMode
   /** UI language: Chinese or English. */
   language?: Language
+  /** Enable the LAN-only HTTP server so a phone can connect via QR code. */
+  lanEnabled?: boolean
+  /**
+   * IPv4 address the LAN server should bind to. Empty means auto-detect;
+   * only private (LAN) IPv4 addresses are accepted.
+   */
+  lanHost?: string
+  /** Port for the LAN server. */
+  lanPort?: number
+  /**
+   * Enabled barcode->catalog-number providers, in lookup priority order.
+   * Disabled providers are simply absent from this list.
+   */
+  barcodeProviders?: BarcodeProvider[]
 }
 
 export interface BatchQueryProgress {

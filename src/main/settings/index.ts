@@ -4,8 +4,8 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { hostname, userInfo } from 'os'
 import electronStore from 'electron-store'
-import type { Settings, Cookies, LLMSettings, Platform, DisplayCurrency, ThemeMode, Language } from '../../shared/types'
-import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
+import type { Settings, Cookies, LLMSettings, Platform, DisplayCurrency, ThemeMode, Language, BarcodeProvider } from '../../shared/types'
+import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 
 export type { Settings, Cookies, LLMSettings }
 
@@ -35,6 +35,12 @@ const schema = {
   displayCurrency: { type: 'string' as const, default: 'USD' },
   theme: { type: 'string' as const, default: 'light' },
   language: { type: 'string' as const, default: 'zh' },
+  lanEnabled: { type: 'boolean' as const, default: false },
+  lanHost: { type: 'string' as const, default: '' },
+  lanPort: { type: 'number' as const, default: 8787 },
+  /** Internal only: randomized access token embedded in the LAN QR URL. */
+  lanToken: { type: 'string' as const, default: '' },
+  barcodeProviders: { type: 'array' as const, default: DEFAULT_BARCODE_PROVIDERS },
   llm: {
     type: 'object' as const,
     properties: {
@@ -234,7 +240,11 @@ export function getSettings(): Settings {
     fastMode: store.get('fastMode') as boolean || undefined,
     displayCurrency: (store.get('displayCurrency') as DisplayCurrency) || 'USD',
     theme: (store.get('theme') as ThemeMode) || 'light',
-    language: (store.get('language') as Language) || 'zh'
+    language: (store.get('language') as Language) || 'zh',
+    lanEnabled: store.get('lanEnabled') as boolean || undefined,
+    lanHost: store.get('lanHost') as string || undefined,
+    lanPort: store.get('lanPort') as number || undefined,
+    barcodeProviders: store.get('barcodeProviders') as BarcodeProvider[] || DEFAULT_BARCODE_PROVIDERS
   }
 }
 
@@ -248,4 +258,14 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
 
 export function deleteSetting<K extends keyof Settings>(key: K): void {
   store.delete(key)
+}
+
+/** LAN access token lives in the same encrypted settings file but is never
+ * returned by getSettings(); only the LAN server manager reads/writes it. */
+export function getLanToken(): string {
+  return (store.get('lanToken') as string) || ''
+}
+
+export function setLanToken(token: string): void {
+  store.set('lanToken', token)
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus, ThemeMode, Language } from './electron-api'
-import { PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
+import QRCode from 'qrcode'
+import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus, ThemeMode, Language, LanCandidate, LanServerStatus, BarcodeProvider } from './electron-api'
+import { PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { saveTheme } from './theme'
 import { useI18n } from './i18n'
 import './Settings.css'
@@ -10,7 +11,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'cookies' | 'proxy' | 'sources' | 'llm' | 'cloudflare' | 'appearance'
+type SectionKey = 'api' | 'cookies' | 'proxy' | 'lan' | 'sources' | 'llm' | 'cloudflare' | 'appearance'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const { t, language, setLanguage } = useI18n()
@@ -28,6 +29,15 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [proxyEnabled, setProxyEnabled] = useState(false)
   const [proxyHost, setProxyHost] = useState('')
   const [proxyPort, setProxyPort] = useState(1080)
+  const [lanEnabled, setLanEnabled] = useState(false)
+  const [lanPort, setLanPort] = useState(8787)
+  const [barcodeProviders, setBarcodeProviders] = useState<BarcodeProvider[]>(DEFAULT_BARCODE_PROVIDERS)
+  const [lanBindChoice, setLanBindChoice] = useState('auto')
+  const [lanCustomHost, setLanCustomHost] = useState('')
+  const [lanCandidates, setLanCandidates] = useState<LanCandidate[]>([])
+  const [lanStatus, setLanStatus] = useState<LanServerStatus>({ state: 'disabled', enabled: false, host: '', port: 8787 })
+  const [lanQr, setLanQr] = useState('')
+  const [lanBusy, setLanBusy] = useState(false)
   const [llmEnabled, setLlmEnabled] = useState(false)
   const [llmApiBaseUrl, setLlmApiBaseUrl] = useState('https://api.openai.com/v1')
   const [llmApiKey, setLlmApiKey] = useState('')
@@ -65,6 +75,34 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setCfSurugaya(s)
     setCfZenmarket(z)
   }, [])
+
+  const generateLanQr = useCallback(async (url?: string) => {
+    if (!url) {
+      setLanQr('')
+      return
+    }
+    try {
+      const dataUrl = await QRCode.toDataURL(url, {
+        width: 264,
+        margin: 1,
+        color: { dark: '#2C2520', light: '#FEFEFE' }
+      })
+      setLanQr(dataUrl)
+    } catch {
+      setLanQr('')
+    }
+  }, [])
+
+  const refreshLanStatus = useCallback(async () => {
+    const [status, candidates] = await Promise.all([
+      window.electronAPI.getLanStatus(),
+      window.electronAPI.getLanCandidates()
+    ])
+    setLanStatus(status)
+    setLanCandidates(candidates)
+    await generateLanQr(status.state === 'running' ? status.url : undefined)
+    return { status, candidates }
+  }, [generateLanQr])
 
   const handleCloudflareChallenge = async (platform: CloudflarePlatform) => {
     setCfBusy(prev => ({ ...prev, [platform]: true }))
@@ -117,6 +155,21 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setProxyEnabled(settings.proxyEnabled || false)
     setProxyHost(settings.proxyHost || '')
     setProxyPort(settings.proxyPort || 1080)
+    setLanEnabled(settings.lanEnabled || false)
+    setLanPort(settings.lanPort || 8787)
+    setBarcodeProviders(settings.barcodeProviders ?? DEFAULT_BARCODE_PROVIDERS)
+    const lan = await refreshLanStatus()
+    const savedLanHost = settings.lanHost || ''
+    if (!savedLanHost) {
+      setLanBindChoice('auto')
+      setLanCustomHost('')
+    } else if (lan.candidates.some(candidate => candidate.address === savedLanHost)) {
+      setLanBindChoice(savedLanHost)
+      setLanCustomHost('')
+    } else {
+      setLanBindChoice('custom')
+      setLanCustomHost(savedLanHost)
+    }
     const llm = settings.llm
     setLlmEnabled(llm?.enabled || false)
     setLlmApiBaseUrl(llm?.apiBaseUrl || 'https://api.openai.com/v1')
@@ -136,7 +189,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
     setTheme(settings.theme || 'light')
-  }, [])
+  }, [refreshCloudflareStatus, refreshLanStatus])
 
   const handleSave = async () => {
     setSaving(true)
@@ -156,6 +209,16 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       await window.electronAPI.setSetting('proxyEnabled', proxyEnabled)
       await window.electronAPI.setSetting('proxyHost', proxyHost)
       await window.electronAPI.setSetting('proxyPort', proxyPort)
+      const lanHostToSave =
+        lanBindChoice === 'auto'
+          ? ''
+          : lanBindChoice === 'custom'
+            ? lanCustomHost.trim()
+            : lanBindChoice
+      await window.electronAPI.setSetting('lanEnabled', lanEnabled)
+      await window.electronAPI.setSetting('lanHost', lanHostToSave)
+      await window.electronAPI.setSetting('lanPort', lanPort)
+      await window.electronAPI.setSetting('barcodeProviders', barcodeProviders)
       await window.electronAPI.setSetting('standardPlatforms', standardPlatforms)
       await window.electronAPI.setSetting('deepPlatforms', deepPlatforms)
       await window.electronAPI.setSetting('fastMode', fastMode)
@@ -176,6 +239,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           zenmarket: llmPlatformZenmarket
         }
       })
+      const lanStatusAfter = await window.electronAPI.applyLanServer()
+      setLanStatus(lanStatusAfter)
+      await generateLanQr(lanStatusAfter.state === 'running' ? lanStatusAfter.url : undefined)
       window.electronAPI.log('debug', 'settings', 'settings saved', { llmEnabled, llmModel, llmApiBaseUrl })
       setToast({ kind: 'success', text: t('settings.saved') })
       setTimeout(() => setToast(null), 3000)
@@ -185,6 +251,56 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       setTimeout(() => setToast(null), 3000)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleRegenerateLanToken = async () => {
+    setLanBusy(true)
+    try {
+      const status = await window.electronAPI.regenerateLanToken()
+      setLanStatus(status)
+      await generateLanQr(status.state === 'running' ? status.url : undefined)
+      setToast({ kind: 'success', text: t('lan.tokenRegenerated') })
+    } catch {
+      setToast({ kind: 'error', text: t('lan.tokenRegenerateFailed') })
+    } finally {
+      setLanBusy(false)
+    }
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const toggleBarcodeProvider = (provider: BarcodeProvider) => {
+    setBarcodeProviders(prev => {
+      if (prev.includes(provider)) return prev.filter(p => p !== provider)
+      // Re-enable in the canonical provider order at the end of the list.
+      return BARCODE_PROVIDERS.filter(p => prev.includes(p) || p === provider)
+    })
+  }
+
+  const moveBarcodeProvider = (provider: BarcodeProvider, direction: -1 | 1) => {
+    setBarcodeProviders(prev => {
+      const index = prev.indexOf(provider)
+      const target = index + direction
+      if (index < 0 || target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      const [item] = next.splice(index, 1)
+      next.splice(target, 0, item)
+      return next
+    })
+  }
+
+  const lanStatusText = () => {
+    switch (lanStatus.state) {
+      case 'running':
+        return t('lan.stateRunning', { host: lanStatus.host, port: lanStatus.port })
+      case 'error':
+        return t('lan.stateError', { error: lanStatus.error || t('lan.unknownError') })
+      case 'no_network':
+        return lanStatus.error || t('lan.stateNoNetwork')
+      case 'stopped':
+        return t('lan.stateStopped')
+      default:
+        return t('lan.stateDisabled')
     }
   }
 
@@ -203,6 +319,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     { key: 'api', icon: '◆', label: t('nav.api') },
     { key: 'cookies', icon: '◈', label: t('nav.cookies') },
     { key: 'proxy', icon: '◉', label: t('nav.proxy') },
+    { key: 'lan', icon: '▣', label: t('nav.lan') },
     { key: 'sources', icon: '◎', label: t('nav.sources') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
     { key: 'cloudflare', icon: '◈', label: t('nav.cloudflare') }
@@ -417,6 +534,178 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   />
                 </div>
               </div>
+            </div>
+          </div>
+        )
+
+      case 'lan':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              {t('lan.desc')}
+            </div>
+            <div className="st-toggle-row">
+              <div className="st-toggle-info">
+                <span className="st-toggle-title">{t('lan.enable')}</span>
+                <span className="st-toggle-desc">{t('lan.enableDesc')}</span>
+              </div>
+              <label className="st-switch">
+                <input
+                  type="checkbox"
+                  checked={lanEnabled}
+                  onChange={e => setLanEnabled(e.target.checked)}
+                />
+                <span className="st-slider"></span>
+              </label>
+            </div>
+            <div className={lanEnabled ? '' : 'st-section-disabled'}>
+              <div className="st-inline-fields">
+                <div className="st-field">
+                  <div className="st-lan-label-row">
+                    <label className="st-label">
+                      <span className="st-label-icon">▣</span> {t('lan.bindAddress')}
+                    </label>
+                    <button
+                      type="button"
+                      className="st-btn-cancel st-lan-refresh"
+                      onClick={() => void refreshLanStatus()}
+                      disabled={!lanEnabled}
+                    >
+                      {t('lan.refresh')}
+                    </button>
+                  </div>
+                  <select
+                    className="st-input"
+                    value={lanBindChoice}
+                    onChange={e => {
+                      setLanBindChoice(e.target.value)
+                      if (e.target.value === 'auto') setLanCustomHost('')
+                    }}
+                    disabled={!lanEnabled}
+                  >
+                    <option value="auto">{t('lan.autoDetect')}</option>
+                    {lanCandidates.map(candidate => (
+                      <option key={candidate.address} value={candidate.address}>
+                        {candidate.address} — {candidate.interfaceName}
+                      </option>
+                    ))}
+                    <option value="custom">{t('lan.customAddress')}</option>
+                  </select>
+                </div>
+                <div className="st-field">
+                  <label className="st-label">
+                    <span className="st-label-icon">▣</span> {t('lan.port')}
+                  </label>
+                  <input
+                    type="number"
+                    className="st-input"
+                    value={lanPort}
+                    onChange={e => setLanPort(parseInt(e.target.value, 10) || 8787)}
+                    placeholder="8787"
+                    disabled={!lanEnabled}
+                  />
+                </div>
+              </div>
+              {lanBindChoice === 'custom' && (
+                <div className="st-field">
+                  <label className="st-label">
+                    <span className="st-label-icon">▣</span> {t('lan.customAddressLabel')}
+                  </label>
+                  <input
+                    type="text"
+                    className="st-input"
+                    value={lanCustomHost}
+                    onChange={e => setLanCustomHost(e.target.value.trim())}
+                    placeholder="192.168.1.100"
+                    disabled={!lanEnabled}
+                  />
+                </div>
+              )}
+              <div className="st-field-hint">{t('lan.bindHint')}</div>
+              <div className="st-field-group">
+                <div className="st-field-group-title">
+                  <span className="st-icon">▣</span> {t('lan.providers')}
+                </div>
+                <div className="st-section-desc">{t('lan.providersDesc')}</div>
+                <div className="st-provider-list">
+                  {barcodeProviders.map((provider, index) => (
+                    <div key={provider} className="st-provider-row">
+                      <span className="st-provider-order">{index + 1}</span>
+                      <div className="st-provider-info">
+                        <span className="st-provider-name">{BARCODE_PROVIDER_LABELS[provider]}</span>
+                        {provider === 'surugaya' && cfSurugaya.state !== 'verified' && (
+                          <span className="st-provider-hint">{t('lan.surugayaHint')}</span>
+                        )}
+                      </div>
+                      <div className="st-provider-actions">
+                        <button
+                          type="button"
+                          className="st-btn-cancel st-provider-move"
+                          onClick={() => moveBarcodeProvider(provider, -1)}
+                          disabled={!lanEnabled || index === 0}
+                          title={t('lan.moveUp')}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="st-btn-cancel st-provider-move"
+                          onClick={() => moveBarcodeProvider(provider, 1)}
+                          disabled={!lanEnabled || index === barcodeProviders.length - 1}
+                          title={t('lan.moveDown')}
+                        >
+                          ↓
+                        </button>
+                        <label className="st-switch st-provider-switch" title={t('lan.disableProvider')}>
+                          <input
+                            type="checkbox"
+                            checked
+                            onChange={() => toggleBarcodeProvider(provider)}
+                            disabled={!lanEnabled}
+                          />
+                          <span className="st-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {BARCODE_PROVIDERS.filter(provider => !barcodeProviders.includes(provider)).length > 0 && (
+                  <div className="st-provider-disabled">
+                    <div className="st-section-desc">{t('lan.disabledProviders')}</div>
+                    <div className="st-provider-disabled-list">
+                      {BARCODE_PROVIDERS.filter(provider => !barcodeProviders.includes(provider)).map(provider => (
+                        <button
+                          key={provider}
+                          type="button"
+                          className="st-btn-cancel"
+                          onClick={() => toggleBarcodeProvider(provider)}
+                          disabled={!lanEnabled}
+                        >
+                          + {BARCODE_PROVIDER_LABELS[provider]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className={`st-lan-status ${lanStatus.state === 'error' || lanStatus.state === 'no_network' ? 'error' : ''}`}>
+                {lanStatusText()}
+              </div>
+              {lanEnabled && lanStatus.state === 'running' && lanQr && (
+                <div className="st-lan-qr">
+                  <img className="st-qr-image" src={lanQr} alt={t('lan.qrAlt')} />
+                  <div className="st-lan-qr-hint">{t('lan.scanHint')}</div>
+                  <div className="st-lan-url">http://{lanStatus.host}:{lanStatus.port}/</div>
+                  <button
+                    type="button"
+                    className="st-btn-cancel"
+                    onClick={() => void handleRegenerateLanToken()}
+                    disabled={lanBusy}
+                  >
+                    {lanBusy ? t('lan.regenerating') : t('lan.regenerateToken')}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )

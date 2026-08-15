@@ -20,6 +20,12 @@ const MAX_CATALOG_NUMBERS = 10
 export type { BatchQueryProgress, BatchQueryResult }
 
 let abortController: AbortController | null = null
+let batchQueryRunning = false
+
+/** Whether a batch query is currently executing in the main process. */
+export function isBatchQueryRunning(): boolean {
+  return batchQueryRunning
+}
 
 function emitProgress(event: string, data: BatchQueryProgress): void {
   const windows = BrowserWindow.getAllWindows()
@@ -144,63 +150,67 @@ export async function executeBatchQuery(catalogNumbers: string[], platforms: Pla
   abortController = new AbortController()
   const signal = abortController.signal
 
-  const trimmed = catalogNumbers.map(c => normalizeCatalogNumber(c)).filter(c => c.length > 0)
+  batchQueryRunning = true
+  try {
+    const trimmed = catalogNumbers.map(c => normalizeCatalogNumber(c)).filter(c => c.length > 0)
 
-  if (trimmed.length === 0) {
-    throw new Error('No catalog numbers provided')
-  }
+    if (trimmed.length === 0) {
+      throw new Error('No catalog numbers provided')
+    }
 
-  if (trimmed.length > MAX_CATALOG_NUMBERS) {
-    throw new Error(`Maximum ${MAX_CATALOG_NUMBERS} catalog numbers allowed`)
-  }
+    if (trimmed.length > MAX_CATALOG_NUMBERS) {
+      throw new Error(`Maximum ${MAX_CATALOG_NUMBERS} catalog numbers allowed`)
+    }
 
-  if (platforms.length === 0) {
-    throw new Error('No platforms selected')
-  }
+    if (platforms.length === 0) {
+      throw new Error('No platforms selected')
+    }
 
-  const results: BatchQueryResult[] = new Array(trimmed.length)
-  let currentIndex = 0
+    const results: BatchQueryResult[] = new Array(trimmed.length)
+    let currentIndex = 0
 
-  async function processNext(): Promise<void> {
-    while (currentIndex < trimmed.length) {
-      if (signal.aborted) {
-        return
-      }
-      const idx = currentIndex++
-      const catalogNumber = trimmed[idx]!
-      try {
-        const queryResults = await queryAllPlatforms(catalogNumber, signal, platforms)
-        results[idx] = { catalogNumber, results: queryResults }
-      } catch {
-        // Continue processing next catalog even if this one failed
+    async function processNext(): Promise<void> {
+      while (currentIndex < trimmed.length) {
         if (signal.aborted) {
           return
         }
+        const idx = currentIndex++
+        const catalogNumber = trimmed[idx]!
+        try {
+          const queryResults = await queryAllPlatforms(catalogNumber, signal, platforms)
+          results[idx] = { catalogNumber, results: queryResults }
+        } catch {
+          // Continue processing next catalog even if this one failed
+          if (signal.aborted) {
+            return
+          }
+        }
       }
     }
+
+    const workers = Array.from(
+      { length: Math.min(MAX_CONCURRENT_CATALOGS, trimmed.length) },
+      () => processNext()
+    )
+
+    await Promise.all(workers)
+
+    if (signal.aborted) {
+      logger.debug('orchestrator', 'batch query cancelled', { durationMs: Date.now() - batchStartedAt })
+      emitProgress(QueryEvents.BATCH_CANCELLED, { catalogNumber: '', platform: 'all', status: 'error' })
+    }
+
+    const completed = results.filter(r => r !== undefined)
+    logger.debug('orchestrator', 'execute batch query complete', {
+      catalogCount: completed.length,
+      durationMs: Date.now() - batchStartedAt,
+      cancelled: signal.aborted
+    })
+    return completed
+  } finally {
+    batchQueryRunning = false
+    if (abortController?.signal === signal) {
+      abortController = null
+    }
   }
-
-  const workers = Array.from(
-    { length: Math.min(MAX_CONCURRENT_CATALOGS, trimmed.length) },
-    () => processNext()
-  )
-
-  await Promise.all(workers)
-
-  if (abortController?.signal === signal) {
-    abortController = null
-  }
-
-  if (signal.aborted) {
-    logger.debug('orchestrator', 'batch query cancelled', { durationMs: Date.now() - batchStartedAt })
-    emitProgress(QueryEvents.BATCH_CANCELLED, { catalogNumber: '', platform: 'all', status: 'error' })
-  }
-
-  const completed = results.filter(r => r !== undefined)
-  logger.debug('orchestrator', 'execute batch query complete', {
-    catalogCount: completed.length,
-    durationMs: Date.now() - batchStartedAt,
-    cancelled: signal.aborted
-  })
-  return completed
 }

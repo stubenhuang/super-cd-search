@@ -26,6 +26,7 @@ vi.mock('../src/main/queries/zenmarket', () => ({ queryZenmarket: mockQueryZenma
 import {
   executeBatchQuery,
   cancelBatchQuery,
+  isBatchQueryRunning,
   type BatchQueryResult
 } from '../src/main/orchestrator'
 
@@ -156,5 +157,23 @@ describe('executeBatchQuery', () => {
     const results: BatchQueryResult[] = await promise
     expect(results).toEqual([])
     expect(sendMock.mock.calls.some(([, data]) => data.event === 'query:batch-cancelled')).toBe(true)
+  })
+
+  it('exposes whether a batch query is currently running', async () => {
+    let resolveDiscogs: (value: unknown) => void = () => {}
+    mockQueryDiscogs.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveDiscogs = resolve
+        })
+    )
+
+    expect(isBatchQueryRunning()).toBe(false)
+    const promise = executeBatchQuery(['X-1'])
+    await vi.waitFor(() => expect(isBatchQueryRunning()).toBe(true))
+
+    resolveDiscogs(found('discogs'))
+    await promise
+    expect(isBatchQueryRunning()).toBe(false)
   })
 })

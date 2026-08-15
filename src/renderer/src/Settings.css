@@ -949,6 +949,170 @@
   transform: none;
 }
 
+/* === LAN connection === */
+.st-lan-status {
+  margin: 14px 0;
+  padding: 9px 12px;
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-md);
+  background: var(--st-bg-secondary);
+  color: var(--st-text-secondary);
+  font-family: var(--st-font-body);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.st-lan-status.error {
+  border-color: rgba(166, 61, 64, 0.35);
+  background: var(--st-danger-soft, rgba(166, 61, 64, 0.04));
+  color: var(--st-error);
+}
+
+.st-lan-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 4px;
+  padding: 18px;
+  background: var(--st-bg-secondary);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-lg);
+}
+
+.st-qr-image {
+  width: 200px;
+  height: 200px;
+  padding: 8px;
+  background: #FEFEFE;
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-md);
+  box-shadow: var(--st-shadow-sm);
+}
+
+.st-lan-qr-hint {
+  max-width: 380px;
+  text-align: center;
+  font-family: var(--st-font-body);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--st-text-secondary);
+}
+
+.st-lan-url {
+  font-family: var(--st-font-mono);
+  font-size: 12px;
+  color: var(--st-accent);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.st-lan-qr .st-btn-cancel {
+  margin-top: 2px;
+}
+
+.st-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.st-provider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--st-bg-primary);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-md);
+}
+
+.st-provider-order {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--st-accent-soft);
+  color: var(--st-accent);
+  font-family: var(--st-font-body);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.st-provider-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.st-provider-name {
+  font-family: var(--st-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--st-text-primary);
+}
+
+.st-provider-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--st-text-muted);
+}
+
+.st-provider-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-provider-move {
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.st-provider-switch {
+  transform: scale(0.82);
+  transform-origin: right center;
+}
+
+.st-provider-disabled {
+  margin-top: 12px;
+}
+
+.st-provider-disabled-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.st-provider-disabled-list .st-btn-cancel {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.st-lan-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.st-lan-label-row .st-label {
+  margin-bottom: 0;
+}
+
+.st-lan-refresh {
+  padding: 4px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* === Cloudflare verification === */
 .st-cf-status {
   margin-bottom: 10px;

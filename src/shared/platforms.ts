@@ -1,4 +1,4 @@
-import type { Platform } from './types'
+import type { BarcodeProvider, Platform } from './types'
 
 /**
  * Canonical platform order used across the app: result ordering, export
@@ -46,3 +46,22 @@ export const DEFAULT_DEEP_PLATFORMS: Platform[] = [
   'cdjapan',
   'tower'
 ]
+
+/** All barcode -> catalog-number providers in their default priority order. */
+export const BARCODE_PROVIDERS: BarcodeProvider[] = [
+  'discogs',
+  'tower',
+  'hmv',
+  'yahoo',
+  'surugaya'
+]
+
+export const DEFAULT_BARCODE_PROVIDERS: BarcodeProvider[] = [...BARCODE_PROVIDERS]
+
+export const BARCODE_PROVIDER_LABELS: Record<BarcodeProvider, string> = {
+  discogs: 'Discogs',
+  tower: 'Tower Records Japan',
+  hmv: 'HMV Japan',
+  yahoo: 'Yahoo Shopping',
+  surugaya: 'Suruga-ya'
+}

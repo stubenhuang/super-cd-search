@@ -42,6 +42,14 @@ const { mockWriteExcelFile } = vi.hoisted(() => ({
   mockWriteExcelFile: vi.fn()
 }))
 
+const { mockGetLanStatus, mockGetLanCandidates, mockApplyLanServer, mockRegenerateLanToken, mockSetLanSearchAvailability } = vi.hoisted(() => ({
+  mockGetLanStatus: vi.fn(),
+  mockGetLanCandidates: vi.fn(),
+  mockApplyLanServer: vi.fn(),
+  mockRegenerateLanToken: vi.fn(),
+  mockSetLanSearchAvailability: vi.fn()
+}))
+
 vi.mock('../src/main/settings', () => ({
   getSettings: mockGetSettings,
   getSetting: mockGetSetting,
@@ -77,6 +85,14 @@ vi.mock('../src/main/excel/exporter', () => ({
   writeExcelFile: mockWriteExcelFile
 }))
 
+vi.mock('../src/main/lan', () => ({
+  applyLanServer: mockApplyLanServer,
+  getLanServerStatus: mockGetLanStatus,
+  listLanCandidates: mockGetLanCandidates,
+  regenerateLanToken: mockRegenerateLanToken,
+  setLanSearchAvailability: mockSetLanSearchAvailability
+}))
+
 vi.mock('../src/main/logger', () => ({
   logger: {
     debug: vi.fn(),
@@ -95,6 +111,7 @@ import { registerCloudflareIpc } from '../src/main/ipc/cloudflare'
 import { registerEnrichmentIpc } from '../src/main/ipc/enrich'
 import { registerLoggingIpc } from '../src/main/ipc/log'
 import { registerExportIpc } from '../src/main/ipc/export'
+import { registerLanIpc } from '../src/main/ipc/lan'
 
 function handler(channel: string) {
   const call = vi.mocked(ipcMain.handle).mock.calls.find(([ch]) => ch === channel)
@@ -127,6 +144,27 @@ describe('registerSettingsIpc', () => {
 
     await handler('deleteSetting')(null, 'discogsToken')
     expect(mockDeleteSetting).toHaveBeenCalledWith('discogsToken')
+  })
+})
+
+describe('registerLanIpc', () => {
+  it('registers the LAN status, candidate and lifecycle handlers', async () => {
+    mockGetLanStatus.mockReturnValue({ state: 'disabled', enabled: false, host: '', port: 8787 })
+    mockGetLanCandidates.mockReturnValue([{ address: '192.168.1.5', interfaceName: 'en0' }])
+    mockApplyLanServer.mockResolvedValue({ state: 'running', enabled: true, host: '192.168.1.5', port: 8787, url: 'http://192.168.1.5:8787/?token=x' })
+    mockRegenerateLanToken.mockResolvedValue({ state: 'running', enabled: true, host: '192.168.1.5', port: 8787, url: 'http://192.168.1.5:8787/?token=y' })
+
+    registerLanIpc()
+
+    expect(await handler('lan:getStatus')()).toEqual({ state: 'disabled', enabled: false, host: '', port: 8787 })
+    expect(await handler('lan:getCandidates')()).toEqual([{ address: '192.168.1.5', interfaceName: 'en0' }])
+    expect(await handler('lan:apply')()).toMatchObject({ state: 'running' })
+    expect(await handler('lan:regenerateToken')()).toMatchObject({ url: 'http://192.168.1.5:8787/?token=y' })
+
+    await handler('lan:setAvailability')(null, true)
+    expect(mockSetLanSearchAvailability).toHaveBeenCalledWith(true)
+    await handler('lan:setAvailability')(null, false)
+    expect(mockSetLanSearchAvailability).toHaveBeenCalledWith(false)
   })
 })
 

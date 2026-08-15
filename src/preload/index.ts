@@ -13,11 +13,13 @@ import type {
   ExcelExportPayload,
   DirectorySelectResult,
   QueryResult,
-  CDDetails
+  CDDetails,
+  LanCandidate,
+  LanServerStatus
 } from '../shared/types'
 
 const validSendChannels = ['toMain', 'renderer:log'] as const
-const validReceiveChannels = ['fromMain', 'query:progress', 'detail:enrich-progress', 'export:progress'] as const
+const validReceiveChannels = ['fromMain', 'query:progress', 'detail:enrich-progress', 'export:progress', 'lan:catalog-added'] as const
 
 const validLogLevels = new Set(['debug', 'info', 'warn', 'error'])
 
@@ -72,5 +74,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCloudflareStatus: (platform: CloudflarePlatform): Promise<CloudflareSessionStatus> =>
     ipcRenderer.invoke('cloudflare:getStatus', platform),
   closeCloudflareSession: (): Promise<void> =>
-    ipcRenderer.invoke('cloudflare:close')
+    ipcRenderer.invoke('cloudflare:close'),
+  getLanStatus: (): Promise<LanServerStatus> =>
+    ipcRenderer.invoke('lan:getStatus'),
+  getLanCandidates: (): Promise<LanCandidate[]> =>
+    ipcRenderer.invoke('lan:getCandidates'),
+  applyLanServer: (): Promise<LanServerStatus> =>
+    ipcRenderer.invoke('lan:apply'),
+  regenerateLanToken: (): Promise<LanServerStatus> =>
+    ipcRenderer.invoke('lan:regenerateToken'),
+  setLanSearchAvailability: (available: boolean): Promise<void> =>
+    ipcRenderer.invoke('lan:setAvailability', available)
 })

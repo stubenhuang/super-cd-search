@@ -503,6 +503,24 @@ body.is-resizing {
   40%, 80% { transform: translateX(4px); }
 }
 
+/* === Phone-added catalog notice === */
+.mobile-notice {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--success-bg, rgba(93, 122, 74, 0.12));
+  border: 1px solid var(--success, #5d7a4a);
+  border-radius: 8px;
+  color: var(--success, #5d7a4a);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.mobile-notice.error {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--error);
+}
+
 /* === Search Mode Selector === */
 .search-mode-selector {
   margin-top: 16px;

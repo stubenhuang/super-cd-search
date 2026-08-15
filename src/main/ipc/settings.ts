@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron'
 import { getSettings, getSetting, setSetting, deleteSetting, type Settings } from '../settings'
 import { clearSearchCache } from '../queries/cache'
-import { clearReleaseCache } from '../queries/discogs'
+import { clearReleaseCache, clearDiscogsBarcodeCache } from '../queries/discogs'
 import { clearItemDetailsCache } from '../queries/ebay'
+import { clearBarcodeResolutionCache } from '../barcode/resolver'
 
 export function registerSettingsIpc(): void {
   ipcMain.handle('getSettings', () => {
@@ -24,6 +25,8 @@ export function registerSettingsIpc(): void {
   ipcMain.handle('clearSearchCache', () => {
     clearSearchCache()
     clearReleaseCache()
+    clearDiscogsBarcodeCache()
+    clearBarcodeResolutionCache()
     clearItemDetailsCache()
   })
 }

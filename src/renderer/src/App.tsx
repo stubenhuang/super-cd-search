@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, ExportProgress } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, ExportProgress, LanCatalogAddedEvent } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { DetailModal } from './DetailModal'
 import { ExportModal, type ExportConfirmOptions } from './ExportModal'
@@ -254,6 +254,8 @@ function App() {
   const { t } = useI18n()
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [mobileNotice, setMobileNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const mobileNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState<Map<string, QueryResult[]>>(new Map())
   const [enrichedDetails, setEnrichedDetails] = useState<Map<string, CDDetails>>(new Map())
@@ -326,6 +328,7 @@ function App() {
     }
 
     setError(null)
+    void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     setIsLoading(true)
     setProgressStatus(new Map())
     setCompletedCatalogs(new Set())
@@ -369,8 +372,41 @@ function App() {
   useEffect(() => {
     return () => {
       if (exportResetTimerRef.current) clearTimeout(exportResetTimerRef.current)
+      if (mobileNoticeTimerRef.current) clearTimeout(mobileNoticeTimerRef.current)
     }
   }, [])
+
+  // Report whether the desktop search controls are idle to the LAN server.
+  // Phone barcode submissions are rejected while any search/export work is in
+  // progress (checked again in the main process right before writing).
+  useEffect(() => {
+    const available = !isLoading && !isCancelling && !isDeepSearching && !exportBusy
+    void window.electronAPI.setLanSearchAvailability(available).catch(() => {})
+    return () => {
+      void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
+    }
+  }, [isLoading, isCancelling, isDeepSearching, exportBusy])
+
+  // Numbers added from the phone are appended to the search box (deduplicated).
+  useEffect(() => {
+    const handleCatalogAdded = (...args: unknown[]) => {
+      const data = args[0] as LanCatalogAddedEvent
+      const catalogNumber = normalizeCatalogNumber(data?.catalogNumber || '')
+      if (!catalogNumber) return
+
+      setInput(prev => {
+        const existing = parseCatalogNumbers(prev)
+        if (existing.includes(catalogNumber)) return prev
+        const base = prev.trimEnd()
+        return base ? `${base}\n${catalogNumber}` : catalogNumber
+      })
+      setMobileNotice({ kind: 'success', text: t('mobile.addedToast', { catalogNumber }) })
+      if (mobileNoticeTimerRef.current) clearTimeout(mobileNoticeTimerRef.current)
+      mobileNoticeTimerRef.current = setTimeout(() => setMobileNotice(null), 4000)
+    }
+
+    window.electronAPI.receive('lan:catalog-added', handleCatalogAdded)
+  }, [parseCatalogNumbers, t])
 
   useEffect(() => {
     const handleExportProgress = (...args: unknown[]) => {
@@ -515,6 +551,7 @@ function App() {
     }
 
     setError(null)
+    void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     cancelledRef.current = false
     deepSearchSucceededRef.current = false
     setDeepSearchTargets(targets)
@@ -576,6 +613,7 @@ function App() {
   }, [exportBusy])
 
   const handleExportConfirm = useCallback(async (options: ExportConfirmOptions) => {
+    void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     setExportBusy(true)
     setExportError(null)
     setExportState('exporting')
@@ -802,6 +840,7 @@ function App() {
               rows={10}
             />
             {error && <div className="error-message">{error}</div>}
+            {mobileNotice && <div className={`mobile-notice ${mobileNotice.kind}`}>{mobileNotice.text}</div>}
             <div className="search-mode-selector">
               <label className="search-mode-label" htmlFor="search-mode">{t('input.searchMode')}</label>
               <div className="search-mode-field">

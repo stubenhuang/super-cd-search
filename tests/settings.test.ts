@@ -3,9 +3,11 @@ import {
   getSettings,
   getSetting,
   setSetting,
-  deleteSetting
+  deleteSetting,
+  getLanToken,
+  setLanToken
 } from '../src/main/settings'
-import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../src/shared/platforms'
+import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../src/shared/platforms'
 
 beforeEach(() => {
   deleteSetting('discogsToken')
@@ -22,6 +24,11 @@ beforeEach(() => {
   deleteSetting('theme')
   deleteSetting('language')
   deleteSetting('llm')
+  deleteSetting('lanEnabled')
+  deleteSetting('lanHost')
+  deleteSetting('lanPort')
+  deleteSetting('barcodeProviders')
+  setLanToken('')
 })
 
 describe('settings', () => {
@@ -40,7 +47,11 @@ describe('settings', () => {
       fastMode: undefined,
       displayCurrency: 'USD',
       theme: 'light',
-      language: 'zh'
+      language: 'zh',
+      lanEnabled: undefined,
+      lanHost: undefined,
+      lanPort: undefined,
+      barcodeProviders: DEFAULT_BARCODE_PROVIDERS
     })
     expect(getSetting('discogsToken')).toBeUndefined()
   })
@@ -66,6 +77,27 @@ describe('settings', () => {
     expect(getSetting('proxyHost')).toBe('127.0.0.1')
     expect(getSetting('proxyPort')).toBe(8080)
     expect(getSettings().discogsToken).toBe('token-123')
+  })
+
+  it('round-trips LAN settings without exposing the access token in getSettings', () => {
+    setSetting('lanEnabled', true)
+    setSetting('lanHost', '192.168.1.5')
+    setSetting('lanPort', 9000)
+    setLanToken('secret-token')
+
+    expect(getSetting('lanEnabled')).toBe(true)
+    expect(getSetting('lanHost')).toBe('192.168.1.5')
+    expect(getSetting('lanPort')).toBe(9000)
+    expect(getSettings()).toMatchObject({ lanEnabled: true, lanHost: '192.168.1.5', lanPort: 9000 })
+    expect('lanToken' in getSettings()).toBe(false)
+    expect(getLanToken()).toBe('secret-token')
+  })
+
+  it('round-trips the barcode provider order', () => {
+    setSetting('barcodeProviders', ['tower', 'discogs', 'surugaya'])
+
+    expect(getSetting('barcodeProviders')).toEqual(['tower', 'discogs', 'surugaya'])
+    expect(getSettings().barcodeProviders).toEqual(['tower', 'discogs', 'surugaya'])
   })
 
   it('round-trips nested object settings', () => {
