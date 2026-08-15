@@ -198,13 +198,9 @@ body {
 .settings-button:hover,
 .lan-button:hover {
   background: var(--bg-card);
-  color: var(--text-primary);
+  color: var(--accent-primary);
   border-color: var(--accent-primary);
   box-shadow: var(--shadow-sm);
-}
-
-.lan-button {
-  color: var(--accent-primary);
 }
 
 .app-header-actions {
