@@ -39,15 +39,19 @@
 
 ### 开发
 
+开发和打包统一使用项目脚本 `super-cd.sh`（macOS / Linux）和 `super-cd.ps1`（Windows）。
+
 ```bash
-# 安装依赖
+# 1. 安装依赖
 npm install
 
-# 启动开发服务器
-npm run dev
-```
+# 2. 清理 + 构建 + 启动开发服务器
+# macOS / Linux
+./super-cd.sh fresh
 
-> Windows 下可直接用 `.\super-cd.ps1 fresh`（等价于清理 + 构建 + 启动开发服务器）。
+# Windows (PowerShell)
+.\super-cd.ps1 fresh
+```
 
 ### 测试
 
@@ -59,20 +63,27 @@ npm test
 npm run test:coverage
 ```
 
-### 构建
+### 构建与打包
 
 ```bash
-# 生产构建
-npm run build
+# 打包 macOS DMG（macOS / Linux）
+./super-cd.sh mac
 
-# 打包为 macOS 应用 (DMG/ZIP)
-npm run dist
+# 交叉打包 Windows ZIP（macOS / Linux）
+./super-cd.sh win
 
-# 打包为 Windows 应用 (ZIP / portable)
-npm run dist:win
+# Windows (PowerShell) 打包 Windows ZIP
+.\super-cd.ps1 win
 ```
 
-> Windows 下也可用 `.\super-cd.ps1 win` 打包；macOS / Linux 下用 `./super-cd.sh win` 交叉打包 Windows 应用。
+脚本命令一览：
+
+| 命令 | 说明 |
+|------|------|
+| `./super-cd.sh fresh` / `.\super-cd.ps1 fresh` | 清理 `out/`、`release/`，重新构建并启动开发服务器 |
+| `./super-cd.sh mac` | 清理 + 构建 + 打包 macOS DMG |
+| `./super-cd.sh win` / `.\super-cd.ps1 win` | 清理 + 构建 + 打包 Windows ZIP |
+| `./super-cd.sh help` | 查看脚本帮助 |
 
 ## 配置
 
