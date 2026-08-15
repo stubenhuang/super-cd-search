@@ -50,10 +50,7 @@ function createTowerPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   clearAllCaches()
-  mockGetSetting.mockImplementation((key: string) => {
-    if (key === 'cookies') return { tower: 'cookie-value' }
-    return undefined
-  })
+  mockGetSetting.mockReturnValue(undefined)
   mockTryLLMParse.mockResolvedValue(null)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: {} })
   mockBrowserPool.release.mockResolvedValue(undefined)

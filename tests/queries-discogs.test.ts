@@ -56,7 +56,6 @@ beforeEach(() => {
   clearDiscogsBarcodeCache()
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'discogsToken') return 'token-123'
-    if (key === 'cookies') return { discogs: 'cookie-value' }
     return undefined
   })
   mockTryLLMParse.mockResolvedValue(null)
@@ -248,12 +247,7 @@ describe('queryDiscogs', () => {
         link: 'https://www.discogs.com/release/123456',
         status: 'found'
       })
-      expect(page.setCookie).toHaveBeenCalledWith({
-        name: 'discogs_dot_com',
-        value: 'cookie-value',
-        domain: '.discogs.com',
-        path: '/'
-      })
+      expect(page.setCookie).not.toHaveBeenCalled()
       expect(mockBrowserPool.release).toHaveBeenCalledWith(browser, page)
     })
   })
@@ -363,7 +357,6 @@ describe('queryDiscogs', () => {
     it('returns not_found when the page shows no results', async () => {
       mockGetSetting.mockImplementation((key: string) => {
         if (key === 'discogsToken') return undefined
-        if (key === 'cookies') return {}
         return undefined
       })
       const { page, browser } = createDiscogsPage()

@@ -344,19 +344,10 @@ export async function queryDiscogsByBarcode(barcode: string): Promise<DiscogsBar
   }
 }
 
-async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
+async function queryDiscogsWeb(catalogNumber: string): Promise<QueryResult> {
   const { browser, page } = await browserPool.acquire()
 
   try {
-    if (cookies) {
-      await page.setCookie({
-        name: 'discogs_dot_com',
-        value: cookies,
-        domain: '.discogs.com',
-        path: '/'
-      })
-    }
-
     const searchUrl = `${DISCOGS_WEB_URL}/search/?q=&type=release&catno=${encodeURIComponent(catalogNumber)}`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
@@ -400,8 +391,7 @@ export async function queryDiscogs(catalogNumber: string): Promise<QueryResult> 
   if (cached) return cached
 
   const token = getSetting('discogsToken')
-  const cookies = getSetting('cookies')?.discogs
-  logger.debug('queries.discogs', 'query mode', { catalogNumber, hasApiToken: !!token, hasCookies: !!cookies })
+  logger.debug('queries.discogs', 'query mode', { catalogNumber, hasApiToken: !!token })
 
   let result: QueryResult
 
@@ -411,14 +401,14 @@ export async function queryDiscogs(catalogNumber: string): Promise<QueryResult> 
     } catch (err) {
       logger.warn('queries.discogs', 'API failed, falling back to web scraping', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
       try {
-        result = await queryDiscogsWeb(catalogNumber, cookies)
+        result = await queryDiscogsWeb(catalogNumber)
       } catch (webErr) {
         result = queryError('discogs', webErr instanceof Error ? webErr.message : 'Unknown error')
       }
     }
   } else {
     try {
-      result = await queryDiscogsWeb(catalogNumber, cookies)
+      result = await queryDiscogsWeb(catalogNumber)
     } catch (err) {
       result = queryError('discogs', err instanceof Error ? err.message : 'Unknown error')
     }

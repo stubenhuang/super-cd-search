@@ -38,16 +38,6 @@ export interface QueryResult {
   details?: CDDetails
 }
 
-export interface Cookies {
-  discogs?: string
-  ebay?: string
-  kojima?: string
-  hmv?: string
-  yahoo?: string
-  cdjapan?: string
-  tower?: string
-}
-
 /** Platforms that require a manual Cloudflare verification step. */
 export type CloudflarePlatform = 'surugaya' | 'zenmarket'
 
@@ -153,7 +143,6 @@ export interface Settings {
   discogsToken?: string
   ebayClientId?: string
   ebayClientSecret?: string
-  cookies?: Cookies
   proxyEnabled?: boolean
   proxyHost?: string
   proxyPort?: number

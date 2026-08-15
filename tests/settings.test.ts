@@ -13,7 +13,6 @@ beforeEach(() => {
   deleteSetting('discogsToken')
   deleteSetting('ebayClientId')
   deleteSetting('ebayClientSecret')
-  deleteSetting('cookies')
   deleteSetting('proxyEnabled')
   deleteSetting('proxyHost')
   deleteSetting('proxyPort')
@@ -38,7 +37,6 @@ describe('settings', () => {
       discogsToken: undefined,
       ebayClientId: undefined,
       ebayClientSecret: undefined,
-      cookies: undefined,
       proxyEnabled: undefined,
       proxyHost: undefined,
       proxyPort: undefined,
@@ -109,7 +107,6 @@ describe('settings', () => {
   })
 
   it('round-trips nested object settings', () => {
-    const cookies = { discogs: 'abc', ebay: 'def' }
     const llm = {
       enabled: true,
       apiBaseUrl: 'https://api.example.com/v1',
@@ -126,10 +123,8 @@ describe('settings', () => {
       }
     }
 
-    setSetting('cookies', cookies)
     setSetting('llm', llm)
 
-    expect(getSetting('cookies')).toEqual(cookies)
     expect(getSetting('llm')).toEqual(llm)
     expect(getSettings().llm?.platformEnabled.ebay).toBe(false)
   })

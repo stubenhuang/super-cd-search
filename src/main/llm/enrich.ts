@@ -71,14 +71,6 @@ const PLATFORM_HEADERS: Partial<Record<Platform, Record<string, string>>> = {
   cdjapan: { 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' }
 }
 
-const PLATFORM_COOKIES: Partial<Record<Platform, { name: string; domain: string }>> = {
-  hmv: { name: 'hmv', domain: '.hmv.co.jp' },
-  yahoo: { name: 'yahoo', domain: '.shopping.yahoo.co.jp' },
-  tower: { name: 'tower', domain: '.tower.jp' },
-  kojima: { name: 'kojimarokuon', domain: '.kojimarokuon.com' },
-  cdjapan: { name: 'cdjapan', domain: '.cdjapan.co.jp' }
-}
-
 function emitProgress(progress: DetailEnrichProgress): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send('detail:enrich-progress', progress)
@@ -124,12 +116,6 @@ async function fetchProductHtml(platform: SmartFillPlatform, url: string): Promi
     const headers = PLATFORM_HEADERS[platform]
     if (headers) {
       await page.setExtraHTTPHeaders(headers)
-    }
-
-    const cookie = PLATFORM_COOKIES[platform]
-    const cookieValue = getSetting('cookies')?.[platform]
-    if (cookie && cookieValue) {
-      await page.setCookie({ name: cookie.name, value: cookieValue, domain: cookie.domain, path: '/' })
     }
 
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })

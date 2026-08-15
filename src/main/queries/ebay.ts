@@ -335,7 +335,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
   }
 }
 
-async function queryEbayWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
+async function queryEbayWeb(catalogNumber: string): Promise<QueryResult> {
   const { browser, page } = await browserPool.acquire()
 
   try {
@@ -364,15 +364,6 @@ async function queryEbayWeb(catalogNumber: string, cookies?: string): Promise<Qu
       'User-Agent': userAgent
     })
 
-    if (cookies) {
-      await page.setCookie({
-        name: 'ebay',
-        value: cookies,
-        domain: '.ebay.com',
-        path: '/'
-      })
-    }
-
     // Try main domain first
     let result = await queryEbayDomain(page, EBAY_WEB_URL, catalogNumber)
 
@@ -395,8 +386,7 @@ export async function queryEbay(catalogNumber: string): Promise<QueryResult> {
   const cached = getCachedQueryResult('ebay', catalogNumber)
   if (cached) return cached
 
-  const cookies = getSetting('cookies')?.ebay
-  logger.debug('queries.ebay', 'query mode', { catalogNumber, hasApiToken: !!getSetting('ebayClientId') && !!getSetting('ebayClientSecret'), hasCookies: !!cookies })
+  logger.debug('queries.ebay', 'query mode', { catalogNumber, hasApiToken: !!getSetting('ebayClientId') && !!getSetting('ebayClientSecret') })
 
   let result: QueryResult
 
@@ -405,7 +395,7 @@ export async function queryEbay(catalogNumber: string): Promise<QueryResult> {
   } catch (err) {
     logger.warn('queries.ebay', 'API failed, falling back to web scraping', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     try {
-      result = await queryEbayWeb(catalogNumber, cookies)
+      result = await queryEbayWeb(catalogNumber)
     } catch (webErr) {
       result = queryError('ebay', webErr instanceof Error ? webErr.message : 'Unknown error')
     }

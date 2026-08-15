@@ -42,10 +42,7 @@ function makePage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockGetSetting.mockImplementation((key: string) => {
-    if (key === 'cookies') return { tower: 't', hmv: 'h', yahoo: 'y' }
-    return undefined
-  })
+  mockGetSetting.mockReturnValue(undefined)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: makePage() })
   mockBrowserPool.release.mockResolvedValue(undefined)
   mockWait.mockResolvedValue(undefined)

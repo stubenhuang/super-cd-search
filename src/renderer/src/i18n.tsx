@@ -99,7 +99,6 @@ const zh = {
 
   'nav.appearance': '外观',
   'nav.api': 'API 令牌',
-  'nav.cookies': 'Cookies',
   'nav.proxy': '代理',
   'nav.lan': '局域网连接',
   'nav.sources': '搜索源',
@@ -125,11 +124,6 @@ const zh = {
   'api.ebay.clientIdPlaceholder': '你的 eBay Client ID',
   'api.ebay.clientSecret': 'Client Secret',
   'api.ebay.clientSecretPlaceholder': '你的 eBay Client Secret',
-
-  // Cookies
-  'cookies.desc': '粘贴浏览器 Cookie 以便进行已登录抓取，从而访问受限地区的内容。',
-  'cookies.label': '{name} Cookie',
-  'cookies.placeholder': '在此粘贴 Cookie 字符串...',
 
   // Proxy
   'proxy.desc': '通过 SOCKS5 代理转发全部网络流量，用于隐私保护或地区访问。',
@@ -337,7 +331,6 @@ const en: Record<keyof typeof zh, string> = {
 
   'nav.appearance': 'Appearance',
   'nav.api': 'API Tokens',
-  'nav.cookies': 'Cookies',
   'nav.proxy': 'Proxy',
   'nav.lan': 'LAN Connection',
   'nav.sources': 'Search Sources',
@@ -361,10 +354,6 @@ const en: Record<keyof typeof zh, string> = {
   'api.ebay.clientIdPlaceholder': 'Your eBay Client ID',
   'api.ebay.clientSecret': 'Client Secret',
   'api.ebay.clientSecretPlaceholder': 'Your eBay Client Secret',
-
-  'cookies.desc': 'Paste browser cookies for authenticated scraping. This allows access to region-restricted content.',
-  'cookies.label': '{name} Cookies',
-  'cookies.placeholder': 'Paste cookies string here...',
 
   'proxy.desc': 'Route all network traffic through a SOCKS5 proxy for privacy or region access.',
   'proxy.enable': 'Enable SOCKS5 Proxy',

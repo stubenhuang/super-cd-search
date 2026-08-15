@@ -128,19 +128,10 @@ async function getHmvProductDetails(page: import('puppeteer').Page, link: string
   }
 }
 
-async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
+async function queryHmvWeb(catalogNumber: string): Promise<QueryResult> {
   const { browser, page } = await browserPool.acquire()
 
   try {
-    if (cookies) {
-      await page.setCookie({
-        name: 'hmv',
-        value: cookies,
-        domain: '.hmv.co.jp',
-        path: '/'
-      })
-    }
-
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'en-US,en;q=0.9'
     })
@@ -260,12 +251,10 @@ export async function queryHmv(catalogNumber: string): Promise<QueryResult> {
   const cached = getCachedQueryResult('hmv', catalogNumber)
   if (cached) return cached
 
-  const cookies = getSetting('cookies')?.hmv
-
   let result: QueryResult
 
   try {
-    result = await queryHmvWeb(catalogNumber, cookies)
+    result = await queryHmvWeb(catalogNumber)
   } catch (err) {
     logger.warn('queries.hmv', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('hmv', err instanceof Error ? err.message : 'Unknown error')

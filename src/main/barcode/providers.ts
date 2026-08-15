@@ -1,4 +1,3 @@
-import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { acquireCloudflarePage, getCloudflareStatus, isCloudflareChallenge } from '../cloudflare'
 import { waitForResultOrNoResult } from '../queries/wait'
@@ -85,10 +84,6 @@ export async function resolveDiscogsBarcode(barcode: string): Promise<BarcodePro
 async function resolveTowerBarcode(barcode: string): Promise<BarcodeProviderOutcome> {
   const { browser, page } = await browserPool.acquire()
   try {
-    const cookies = getSetting('cookies')?.tower
-    if (cookies) {
-      await page.setCookie({ name: 'tower', value: cookies, domain: '.tower.jp', path: '/' })
-    }
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' })
 
     const searchUrl = `${TOWER_WEB_URL}/search/item/${encodeURIComponent(barcode)}`
@@ -159,10 +154,6 @@ async function resolveTowerBarcode(barcode: string): Promise<BarcodeProviderOutc
 async function resolveHmvBarcode(barcode: string): Promise<BarcodeProviderOutcome> {
   const { browser, page } = await browserPool.acquire()
   try {
-    const cookies = getSetting('cookies')?.hmv
-    if (cookies) {
-      await page.setCookie({ name: 'hmv', value: cookies, domain: '.hmv.co.jp', path: '/' })
-    }
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' })
 
     const searchUrl = `${HMV_WEB_URL}/en/search/keyword_${encodeURIComponent(barcode)}/target_ALL/type_sr/`
@@ -216,10 +207,6 @@ async function resolveHmvBarcode(barcode: string): Promise<BarcodeProviderOutcom
 async function resolveYahooBarcode(barcode: string): Promise<BarcodeProviderOutcome> {
   const { browser, page } = await browserPool.acquire()
   try {
-    const cookies = getSetting('cookies')?.yahoo
-    if (cookies) {
-      await page.setCookie({ name: 'yahoo', value: cookies, domain: '.shopping.yahoo.co.jp', path: '/' })
-    }
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' })
 
     const searchUrl = `${YAHOO_SHOPPING_URL}/search/${encodeURIComponent(barcode)}/0/?first=1&tab_ex=commerce`

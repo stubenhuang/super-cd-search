@@ -4,28 +4,15 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { hostname, userInfo } from 'os'
 import electronStore from 'electron-store'
-import type { Settings, Cookies, LLMSettings, Platform, DisplayCurrency, ThemeMode, Language, BarcodeProvider } from '../../shared/types'
+import type { Settings, LLMSettings, Platform, DisplayCurrency, ThemeMode, Language, BarcodeProvider } from '../../shared/types'
 import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 
-export type { Settings, Cookies, LLMSettings }
+export type { Settings, LLMSettings }
 
 const schema = {
   discogsToken: { type: 'string' as const, default: '' },
   ebayClientId: { type: 'string' as const, default: '' },
   ebayClientSecret: { type: 'string' as const, default: '' },
-  cookies: {
-    type: 'object' as const,
-    properties: {
-      discogs: { type: 'string' as const, default: '' },
-      ebay: { type: 'string' as const, default: '' },
-      kojima: { type: 'string' as const, default: '' },
-      hmv: { type: 'string' as const, default: '' },
-      yahoo: { type: 'string' as const, default: '' },
-      cdjapan: { type: 'string' as const, default: '' },
-      tower: { type: 'string' as const, default: '' }
-    },
-    default: {}
-  },
   proxyEnabled: { type: 'boolean' as const, default: false },
   proxyHost: { type: 'string' as const, default: '' },
   proxyPort: { type: 'number' as const, default: 1080 },
@@ -231,7 +218,6 @@ export function getSettings(): Settings {
     discogsToken: store.get('discogsToken') as string || undefined,
     ebayClientId: store.get('ebayClientId') as string || undefined,
     ebayClientSecret: store.get('ebayClientSecret') as string || undefined,
-    cookies: store.get('cookies') as Cookies || undefined,
     proxyEnabled: store.get('proxyEnabled') as boolean || undefined,
     proxyHost: store.get('proxyHost') as string || undefined,
     proxyPort: store.get('proxyPort') as number || undefined,

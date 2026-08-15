@@ -1,4 +1,3 @@
-import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { throttledFetch } from '../throttle'
 import { convertToUSDWithFallback } from '../currency'
@@ -228,19 +227,10 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
   }
 }
 
-async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
+async function queryKojimaWeb(catalogNumber: string): Promise<QueryResult> {
   const { browser, page } = await browserPool.acquire()
 
   try {
-    if (cookies) {
-      await page.setCookie({
-        name: 'kojimarokuon',
-        value: cookies,
-        domain: '.kojimarokuon.com',
-        path: '/'
-      })
-    }
-
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
     })
@@ -319,12 +309,10 @@ export async function queryKojima(catalogNumber: string): Promise<QueryResult> {
   const cached = getCachedQueryResult('kojima', catalogNumber)
   if (cached) return cached
 
-  const cookies = getSetting('cookies')?.kojima
-
   let result: QueryResult
 
   try {
-    result = await queryKojimaWeb(catalogNumber, cookies)
+    result = await queryKojimaWeb(catalogNumber)
   } catch (err) {
     logger.warn('queries.kojima', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('kojima', err instanceof Error ? err.message : 'Unknown error')

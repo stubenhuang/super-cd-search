@@ -87,19 +87,10 @@ async function getYahooProductDetails(page: import('puppeteer').Page, link: stri
   }
 }
 
-async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
+async function queryYahooWeb(catalogNumber: string): Promise<QueryResult> {
   const { browser, page } = await browserPool.acquire()
 
   try {
-    if (cookies) {
-      await page.setCookie({
-        name: 'yahoo',
-        value: cookies,
-        domain: '.shopping.yahoo.co.jp',
-        path: '/'
-      })
-    }
-
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
     })
@@ -183,12 +174,10 @@ export async function queryYahoo(catalogNumber: string): Promise<QueryResult> {
   const cached = getCachedQueryResult('yahoo', catalogNumber)
   if (cached) return cached
 
-  const cookies = getSetting('cookies')?.yahoo
-
   let result: QueryResult
 
   try {
-    result = await queryYahooWeb(catalogNumber, cookies)
+    result = await queryYahooWeb(catalogNumber)
   } catch (err) {
     logger.warn('queries.yahoo', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('yahoo', err instanceof Error ? err.message : 'Unknown error')

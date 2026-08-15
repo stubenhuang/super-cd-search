@@ -11,7 +11,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'cookies' | 'proxy' | 'lan' | 'sources' | 'llm' | 'cloudflare' | 'appearance'
+type SectionKey = 'api' | 'proxy' | 'lan' | 'sources' | 'llm' | 'cloudflare' | 'appearance'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const { t, language, setLanguage } = useI18n()
@@ -19,13 +19,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [discogsToken, setDiscogsToken] = useState('')
   const [ebayClientId, setEbayClientId] = useState('')
   const [ebayClientSecret, setEbayClientSecret] = useState('')
-  const [cookiesDiscogs, setCookiesDiscogs] = useState('')
-  const [cookiesEbay, setCookiesEbay] = useState('')
-  const [cookiesKojima, setCookiesKojima] = useState('')
-  const [cookiesHmv, setCookiesHmv] = useState('')
-  const [cookiesYahoo, setCookiesYahoo] = useState('')
-  const [cookiesCdjapan, setCookiesCdjapan] = useState('')
-  const [cookiesTower, setCookiesTower] = useState('')
   const [proxyEnabled, setProxyEnabled] = useState(false)
   const [proxyHost, setProxyHost] = useState('')
   const [proxyPort, setProxyPort] = useState(1080)
@@ -145,13 +138,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setDiscogsToken(settings.discogsToken || '')
     setEbayClientId(settings.ebayClientId || '')
     setEbayClientSecret(settings.ebayClientSecret || '')
-    setCookiesDiscogs(settings.cookies?.discogs || '')
-    setCookiesEbay(settings.cookies?.ebay || '')
-    setCookiesKojima(settings.cookies?.kojima || '')
-    setCookiesHmv(settings.cookies?.hmv || '')
-    setCookiesYahoo(settings.cookies?.yahoo || '')
-    setCookiesCdjapan(settings.cookies?.cdjapan || '')
-    setCookiesTower(settings.cookies?.tower || '')
     setProxyEnabled(settings.proxyEnabled || false)
     setProxyHost(settings.proxyHost || '')
     setProxyPort(settings.proxyPort || 1080)
@@ -197,15 +183,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       await window.electronAPI.setSetting('discogsToken', discogsToken)
       await window.electronAPI.setSetting('ebayClientId', ebayClientId)
       await window.electronAPI.setSetting('ebayClientSecret', ebayClientSecret)
-      await window.electronAPI.setSetting('cookies', {
-        discogs: cookiesDiscogs,
-        ebay: cookiesEbay,
-        kojima: cookiesKojima,
-        hmv: cookiesHmv,
-        yahoo: cookiesYahoo,
-        cdjapan: cookiesCdjapan,
-        tower: cookiesTower
-      })
       await window.electronAPI.setSetting('proxyEnabled', proxyEnabled)
       await window.electronAPI.setSetting('proxyHost', proxyHost)
       await window.electronAPI.setSetting('proxyPort', proxyPort)
@@ -317,7 +294,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const navItems: { key: SectionKey; icon: string; label: string }[] = [
     { key: 'appearance', icon: '◐', label: t('nav.appearance') },
     { key: 'api', icon: '◆', label: t('nav.api') },
-    { key: 'cookies', icon: '◈', label: t('nav.cookies') },
     { key: 'proxy', icon: '◉', label: t('nav.proxy') },
     { key: 'lan', icon: '▣', label: t('nav.lan') },
     { key: 'sources', icon: '◎', label: t('nav.sources') },
@@ -388,99 +364,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   placeholder={t('api.ebay.clientSecretPlaceholder')}
                 />
               </div>
-            </div>
-          </div>
-        )
-
-      case 'cookies':
-        return (
-          <div className="st-section-content">
-            <div className="st-section-desc">
-              {t('cookies.desc')}
-            </div>
-            <div className="st-field">
-              <label className="st-label">
-                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'Discogs' })}
-              </label>
-              <textarea
-                className="st-textarea"
-                value={cookiesDiscogs}
-                onChange={e => setCookiesDiscogs(e.target.value)}
-                placeholder={t('cookies.placeholder')}
-                rows={3}
-              />
-            </div>
-            <div className="st-field">
-              <label className="st-label">
-                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'eBay' })}
-              </label>
-              <textarea
-                className="st-textarea"
-                value={cookiesEbay}
-                onChange={e => setCookiesEbay(e.target.value)}
-                placeholder={t('cookies.placeholder')}
-                rows={3}
-              />
-            </div>
-            <div className="st-field">
-              <label className="st-label">
-                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'Kojima Rokuon' })}
-              </label>
-              <textarea
-                className="st-textarea"
-                value={cookiesKojima}
-                onChange={e => setCookiesKojima(e.target.value)}
-                placeholder={t('cookies.placeholder')}
-                rows={3}
-              />
-            </div>
-            <div className="st-field">
-              <label className="st-label">
-                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'HMV Japan' })}
-              </label>
-              <textarea
-                className="st-textarea"
-                value={cookiesHmv}
-                onChange={e => setCookiesHmv(e.target.value)}
-                placeholder={t('cookies.placeholder')}
-                rows={3}
-              />
-            </div>
-            <div className="st-field">
-              <label className="st-label">
-                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'Yahoo Shopping' })}
-              </label>
-              <textarea
-                className="st-textarea"
-                value={cookiesYahoo}
-                onChange={e => setCookiesYahoo(e.target.value)}
-                placeholder={t('cookies.placeholder')}
-                rows={3}
-              />
-            </div>
-            <div className="st-field">
-              <label className="st-label">
-                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'CDJapan' })}
-              </label>
-              <textarea
-                className="st-textarea"
-                value={cookiesCdjapan}
-                onChange={e => setCookiesCdjapan(e.target.value)}
-                placeholder={t('cookies.placeholder')}
-                rows={3}
-              />
-            </div>
-            <div className="st-field">
-              <label className="st-label">
-                <span className="st-label-icon">◈</span> {t('cookies.label', { name: 'Tower Records' })}
-              </label>
-              <textarea
-                className="st-textarea"
-                value={cookiesTower}
-                onChange={e => setCookiesTower(e.target.value)}
-                placeholder={t('cookies.placeholder')}
-                rows={3}
-              />
             </div>
           </div>
         )

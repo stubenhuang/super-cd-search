@@ -11,17 +11,10 @@ export interface QueryResult {
     status: QueryStatus;
     error?: string;
 }
-export interface Cookies {
-    discogs?: string;
-    ebay?: string;
-    kojima?: string;
-    hmv?: string;
-}
 export interface Settings {
     discogsToken?: string;
     ebayClientId?: string;
     ebayClientSecret?: string;
-    cookies?: Cookies;
 }
 export interface BatchQueryProgress {
     event: string;

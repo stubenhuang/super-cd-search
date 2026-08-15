@@ -63,10 +63,7 @@ async function runWithFakeTimers<T>(fn: () => Promise<T>, totalMs = 30000): Prom
 beforeEach(() => {
   vi.clearAllMocks()
   clearAllCaches()
-  mockGetSetting.mockImplementation((key: string) => {
-    if (key === 'cookies') return { kojima: 'cookie-value' }
-    return undefined
-  })
+  mockGetSetting.mockReturnValue(undefined)
   mockTryLLMParse.mockResolvedValue(null)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: {} })
   mockBrowserPool.release.mockResolvedValue(undefined)
@@ -84,12 +81,7 @@ describe('queryKojima', () => {
     const result = await runWithFakeTimers(() => queryKojima('ABC-123'))
 
     expect(result.status).toBe('not_found')
-    expect(page.setCookie).toHaveBeenCalledWith({
-      name: 'kojimarokuon',
-      value: 'cookie-value',
-      domain: '.kojimarokuon.com',
-      path: '/'
-    })
+    expect(page.setCookie).not.toHaveBeenCalled()
     expect(mockBrowserPool.release).toHaveBeenCalledWith(browser, page)
   })
 

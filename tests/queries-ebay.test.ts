@@ -84,7 +84,6 @@ beforeEach(() => {
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'ebayClientId') return 'client-id'
     if (key === 'ebayClientSecret') return 'client-secret'
-    if (key === 'cookies') return { ebay: 'cookie-value' }
     return undefined
   })
   mockTryLLMParse.mockResolvedValue(null)
@@ -102,7 +101,6 @@ describe('queryEbay', () => {
     mockGetSetting.mockImplementation((key: string) => {
       if (key === 'ebayClientId') return undefined
       if (key === 'ebayClientSecret') return undefined
-      if (key === 'cookies') return { ebay: 'cookie-value' }
       return undefined
     })
     const { queryEbay } = await loadEbay()
@@ -115,7 +113,7 @@ describe('queryEbay', () => {
     const result = await runWithFakeTimers(() => queryEbay('ABC-123'))
 
     expect(result.status).toBe('not_found')
-    expect(page.setCookie).toHaveBeenCalled()
+    expect(page.setCookie).not.toHaveBeenCalled()
     expect(mockBrowserPool.release).toHaveBeenCalledWith(browser, page)
   })
 

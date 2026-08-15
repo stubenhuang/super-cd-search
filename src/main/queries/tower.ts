@@ -1,4 +1,3 @@
-import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
@@ -13,19 +12,10 @@ const TOWER_WEB_URL = 'https://tower.jp'
  * Tower Records Japan exposes an item search at /search/item/{catalogNumber}.
  * The result list is server-rendered; we read the first result card directly.
  */
-async function queryTowerWeb(catalogNumber: string, cookies?: string): Promise<QueryResult> {
+async function queryTowerWeb(catalogNumber: string): Promise<QueryResult> {
   const { browser, page } = await browserPool.acquire()
 
   try {
-    if (cookies) {
-      await page.setCookie({
-        name: 'tower',
-        value: cookies,
-        domain: '.tower.jp',
-        path: '/'
-      })
-    }
-
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
     })
@@ -146,12 +136,10 @@ export async function queryTower(catalogNumber: string): Promise<QueryResult> {
   const cached = getCachedQueryResult('tower', catalogNumber)
   if (cached) return cached
 
-  const cookies = getSetting('cookies')?.tower
-
   let result: QueryResult
 
   try {
-    result = await queryTowerWeb(catalogNumber, cookies)
+    result = await queryTowerWeb(catalogNumber)
   } catch (err) {
     logger.warn('queries.tower', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('tower', err instanceof Error ? err.message : 'Unknown error')

@@ -71,9 +71,7 @@ class BrowserPool {
   async release(browser: Browser, page: Page): Promise<void> {
     // Reuse the page instead of closing it: creating/destroying a page on every
     // lookup is wasted Chromium IPC. Only page-level state that persists across
-    // navigations (extra HTTP headers) needs resetting. Cookies are domain-
-    // scoped, so one platform's cookie is never sent to another domain, and each
-    // query re-sets its own cookie before navigating.
+    // navigations (extra HTTP headers) needs resetting.
     await this.resetPage(page)
 
     const instance = this.instances.find(i => i.browser === browser)

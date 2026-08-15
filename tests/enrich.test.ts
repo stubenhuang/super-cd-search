@@ -100,10 +100,9 @@ function foundResult(platform: QueryResult['platform'], details?: QueryResult['d
   }
 }
 
-function setupLlm(llm: unknown, cookies?: unknown): void {
+function setupLlm(llm: unknown): void {
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'llm') return llm
-    if (key === 'cookies') return cookies
     return undefined
   })
 }
@@ -334,17 +333,12 @@ describe('enrichDetails', () => {
     expect(send).toHaveBeenCalledWith('detail:enrich-progress', expect.objectContaining({ platform: 'tower' }))
   })
 
-  it('applies the configured cookie when fetching a regular product page', async () => {
-    setupLlm(fullLlmSettings, { tower: 'tower-cookie' })
+  it('does not inject any configured cookie when fetching a regular product page', async () => {
+    setupLlm(fullLlmSettings)
     const page = setupBrowserPage()
 
     await enrichDetails('X-1', [])
-    expect(page.setCookie).toHaveBeenCalledWith({
-      name: 'tower',
-      value: 'tower-cookie',
-      domain: '.tower.jp',
-      path: '/'
-    })
+    expect(page.setCookie).not.toHaveBeenCalled()
   })
 
   it('skips a source when its detail page cannot be fetched', async () => {
