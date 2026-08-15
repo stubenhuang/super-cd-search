@@ -53,7 +53,6 @@
   --status-loading-bg: rgba(184, 134, 11, 0.1);
   --status-success-bg: rgba(93, 122, 74, 0.1);
   --status-error-bg: rgba(166, 61, 64, 0.1);
-  --lowest-bg: linear-gradient(135deg, rgba(93, 122, 74, 0.08) 0%, rgba(93, 122, 74, 0.02) 100%);
   --card-highlight: rgba(255, 255, 255, 0.5);
   --overlay-bg: rgba(44, 37, 32, 0.6);
   --warning-icon: #d97706;
@@ -122,7 +121,7 @@
   --status-loading-bg: rgba(212, 167, 44, 0.14);
   --status-success-bg: rgba(143, 191, 107, 0.14);
   --status-error-bg: rgba(217, 106, 110, 0.14);
-  --lowest-bg: linear-gradient(135deg, rgba(143, 191, 107, 0.12) 0%, rgba(143, 191, 107, 0.03) 100%);
+
   --card-highlight: rgba(255, 255, 255, 0.06);
   --overlay-bg: rgba(0, 0, 0, 0.7);
   --warning-icon: #F0A93C;
@@ -984,11 +983,6 @@ body.is-resizing {
   border: 1px solid var(--border-light);
 }
 
-.platform-card.lowest {
-  background: var(--lowest-bg);
-  border: 1px solid var(--success);
-}
-
 .platform-card.not_found,
 .platform-card.error {
   opacity: 0.5;
@@ -1042,16 +1036,37 @@ body.is-resizing {
   background: var(--text-muted);
 }
 
-/* Lowest price badge */
-.platform-card .lowest-bar {
-  background: var(--success);
+/* Lowest / highest price badges (floating corner pills) */
+.platform-card .price-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  padding: 3px 8px;
+  border-radius: 999px;
   color: white;
-  text-align: center;
-  padding: 4px 8px;
+  font-family: var(--font-body);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1.3;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(44, 37, 32, 0.18);
+  pointer-events: none;
+}
+
+.platform-card .price-badge.lowest {
+  background: var(--success);
+}
+
+.platform-card .price-badge.highest {
+  background: var(--warning);
+}
+
+/* When a card is both lowest and highest (single priced source), stack the
+   pills so both stay visible. */
+.platform-card .price-badge.lowest + .price-badge.highest {
+  top: 32px;
 }
 
 .platform-card-content {
@@ -1123,10 +1138,6 @@ body.is-resizing {
   color: var(--text-primary);
   line-height: 1.1;
   letter-spacing: -0.02em;
-}
-
-.platform-card.lowest .platform-card-details .price {
-  color: var(--success);
 }
 
 .platform-card-details .price-label {

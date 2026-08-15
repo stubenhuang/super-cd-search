@@ -43,6 +43,7 @@ const zh = {
 
   // Result cards
   'result.lowest': '★ 最低价',
+  'result.highest': '▲ 最高价',
   'result.noImage': '无图',
   'result.viewDetails': '查看详情 →',
   'result.fixedPrice': '固定价格',
@@ -219,6 +220,7 @@ const en: Record<keyof typeof zh, string> = {
   'results.placeholder': 'Search results will appear here.',
 
   'result.lowest': '★ Lowest Price',
+  'result.highest': '▲ Highest Price',
   'result.noImage': 'No Image',
   'result.viewDetails': 'View Details →',
   'result.fixedPrice': 'Fixed Price',

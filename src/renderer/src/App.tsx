@@ -27,11 +27,12 @@ function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]):
 interface PlatformResultRowProps {
   result: QueryResult
   isLowestPrice: boolean
+  isHighestPrice: boolean
   displayCurrency: DisplayCurrency
   usdToCnyRate: number | null
 }
 
-const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice, displayCurrency, usdToCnyRate }: PlatformResultRowProps) {
+const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice, isHighestPrice, displayCurrency, usdToCnyRate }: PlatformResultRowProps) {
   const { t } = useI18n()
   const {
     containerRef: imageContainerRef,
@@ -72,15 +73,13 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
     window.electronAPI.openExternal(url).catch(err => console.error('openExternal error:', err))
   }
 
-  const cardClass = `platform-card ${result.status}${isLowestPrice ? ' lowest' : ''}`
+  const cardClass = `platform-card ${result.status}`
 
   return (
     <div className={cardClass} data-platform={result.platform}>
-      {isLowestPrice ? (
-        <div className="lowest-bar">{t('result.lowest')}</div>
-      ) : (
-        <div className="brand-bar" />
-      )}
+      <div className="brand-bar" />
+      {isLowestPrice && <span className="price-badge lowest">{t('result.lowest')}</span>}
+      {isHighestPrice && <span className="price-badge highest">{t('result.highest')}</span>}
       <div className="platform-card-content">
         <div className="platform-card-name">{PLATFORM_LABELS[result.platform] || result.platform}</div>
         <div className="platform-card-body">
@@ -146,11 +145,17 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
   const displayName = foundResult?.name || catalogNumber
   const displayArtist = foundResult?.artist
 
-  const lowestPrice = useMemo(() => {
-    const prices = results
-      .filter(r => r.status === 'found' && r.priceMin !== null)
-      .map(r => r.priceMin as number)
-    return prices.length > 0 ? Math.min(...prices) : null
+  const priceBounds = useMemo(() => {
+    const candidates = results
+      .filter(r => r.status === 'found' && (r.priceMin !== null || r.priceMax !== null))
+      .map(r => ({
+        min: r.priceMin ?? r.priceMax as number,
+        max: r.priceMax ?? r.priceMin as number
+      }))
+    return {
+      lowestPrice: candidates.length > 0 ? Math.min(...candidates.map(c => c.min)) : null,
+      highestPrice: candidates.length > 0 ? Math.max(...candidates.map(c => c.max)) : null
+    }
   }, [results])
 
   return (
@@ -167,15 +172,20 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
         {displayArtist && <span className="result-artist">— {displayArtist}</span>}
       </div>
       <div className="platform-results">
-        {results.map(r => (
-          <PlatformResultRow
-            key={r.platform}
-            result={r}
-            isLowestPrice={r.status === 'found' && r.priceMin !== null && r.priceMin === lowestPrice}
-            displayCurrency={displayCurrency}
-            usdToCnyRate={usdToCnyRate}
-          />
-        ))}
+        {results.map(r => {
+          const effectiveMin = r.priceMin ?? r.priceMax
+          const effectiveMax = r.priceMax ?? r.priceMin
+          return (
+            <PlatformResultRow
+              key={r.platform}
+              result={r}
+              isLowestPrice={r.status === 'found' && effectiveMin !== null && effectiveMin === priceBounds.lowestPrice}
+              isHighestPrice={r.status === 'found' && effectiveMax !== null && effectiveMax === priceBounds.highestPrice}
+              displayCurrency={displayCurrency}
+              usdToCnyRate={usdToCnyRate}
+            />
+          )
+        })}
       </div>
     </div>
   )
