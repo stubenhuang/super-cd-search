@@ -1,5 +1,6 @@
 import type { LLMSettings } from '../../shared/types'
 import type { ChatMessage, ChatOptions, LLMResponse } from './types'
+import { logger } from '../logger'
 
 const DEFAULT_TIMEOUT = 60000
 /** Deterministic JSON extraction; no longer user-configurable. */
@@ -59,6 +60,10 @@ export class LLMClient {
       // empty. Retry once without the cap so the model has room for its final
       // JSON answer.
       if (err instanceof EmptyLLMResponseError && options?.maxTokens !== undefined) {
+        logger.warn('llm.client', 'empty response with max_tokens cap, retrying without cap', {
+          model: this.settings.model,
+          previousMaxTokens: options.maxTokens
+        })
         return await this.request(messages, { ...options, maxTokens: undefined })
       }
       throw err
@@ -67,6 +72,14 @@ export class LLMClient {
 
   private async request(messages: ChatMessage[], options?: ChatOptions): Promise<LLMResponse> {
     const url = buildChatUrl(this.settings.apiBaseUrl)
+    const startedAt = Date.now()
+    logger.debug('llm.client', 'chat request start', {
+      model: this.settings.model,
+      url,
+      messageCount: messages.length,
+      promptCharacters: messages.reduce((total, m) => total + m.content.length, 0),
+      maxTokens: options?.maxTokens
+    })
 
     const body: Record<string, unknown> = {
       model: this.settings.model,
@@ -92,9 +105,15 @@ export class LLMClient {
       })
 
       clearTimeout(timeoutId)
+      logger.debug('llm.client', 'chat request response', {
+        model: this.settings.model,
+        status: response.status,
+        durationMs: Date.now() - startedAt
+      })
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error')
+        logger.warn('llm.client', 'chat request failed', { model: this.settings.model, status: response.status, errorText: errorText.slice(0, 500) })
         throw new Error(`LLM API error ${response.status}: ${errorText}`)
       }
 
@@ -117,6 +136,7 @@ export class LLMClient {
       // OpenAI-compatible fallback for providers that put the final answer in
       // `reasoning_content` while leaving `content` empty.
       if (!content && typeof choice?.message?.reasoning_content === 'string') {
+        logger.debug('llm.client', 'content empty, falling back to reasoning_content', { model: this.settings.model })
         content = choice.message.reasoning_content.trim()
       }
 
@@ -125,6 +145,12 @@ export class LLMClient {
           `Empty response from LLM (finish_reason: ${choice?.finish_reason ?? 'unknown'})`
         )
       }
+
+      logger.debug('llm.client', 'chat request complete', {
+        model: this.settings.model,
+        contentCharacters: content.length,
+        durationMs: Date.now() - startedAt
+      })
 
       return {
         content,

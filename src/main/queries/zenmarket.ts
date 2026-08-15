@@ -3,6 +3,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, cloudflareChallenge, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
+import { logger } from '../logger'
 
 const ZENMARKET_WEB_URL = 'https://zenmarket.jp'
 
@@ -15,6 +16,7 @@ const ZENMARKET_SEARCH_PATH = '/en/yshopping.aspx'
 async function queryZenmarketWeb(catalogNumber: string): Promise<QueryResult> {
   const acquired = await acquireCloudflarePage()
   if (!acquired) {
+    logger.debug('queries.zenmarket', 'real-Chrome session unavailable', { catalogNumber })
     return cloudflareChallenge('zenmarket')
   }
 
@@ -25,9 +27,11 @@ async function queryZenmarketWeb(catalogNumber: string): Promise<QueryResult> {
     })
 
     const searchUrl = `${ZENMARKET_WEB_URL}${ZENMARKET_SEARCH_PATH}?q=${encodeURIComponent(catalogNumber)}`
+    logger.debug('queries.zenmarket', 'open search page', { catalogNumber, searchUrl })
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     if (await isCloudflareChallenge(page)) {
+      logger.debug('queries.zenmarket', 'Cloudflare challenge detected', { catalogNumber })
       return cloudflareChallenge('zenmarket')
     }
 
@@ -58,6 +62,13 @@ async function queryZenmarketWeb(catalogNumber: string): Promise<QueryResult> {
       const link = anchor.getAttribute('href')
 
       return { name, cover, priceText, link }
+    })
+
+    logger.debug('queries.zenmarket', 'search extraction done', {
+      catalogNumber,
+      hasResult: !!extracted,
+      hasName: !!extracted?.name,
+      priceText: extracted?.priceText
     })
 
     if (!extracted) {
@@ -110,6 +121,7 @@ async function queryZenmarketWeb(catalogNumber: string): Promise<QueryResult> {
 }
 
 export async function queryZenmarket(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.zenmarket', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('zenmarket', catalogNumber)
   if (cached) return cached
 
@@ -117,6 +129,7 @@ export async function queryZenmarket(catalogNumber: string): Promise<QueryResult
   try {
     result = await queryZenmarketWeb(catalogNumber)
   } catch (err) {
+    logger.warn('queries.zenmarket', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('zenmarket', err instanceof Error ? err.message : 'Unknown error')
   }
 

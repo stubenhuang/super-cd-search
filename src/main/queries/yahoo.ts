@@ -4,6 +4,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
+import { logger } from '../logger'
 
 const YAHOO_SHOPPING_URL = 'https://shopping.yahoo.co.jp'
 
@@ -81,7 +82,7 @@ async function getYahooProductDetails(page: import('puppeteer').Page, link: stri
     cacheProductData('yahoo', link, details)
     return details
   } catch (err) {
-    console.warn('Yahoo: failed to get details from product page:', err)
+    logger.warn('queries.yahoo', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
     return details
   }
 }
@@ -104,11 +105,13 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
     })
 
     const searchUrl = `${YAHOO_SHOPPING_URL}/search/${encodeURIComponent(catalogNumber)}/0/?first=1&tab_ex=commerce`
+    logger.debug('queries.yahoo', 'open search page', { catalogNumber, searchUrl })
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     // Wait for the first search result item.
     await waitForResultOrNoResult(page, { resultSelector: '.SearchResult_SearchResultItem__mJ7vY', timeoutMs: 4000 })
     const firstItem = await page.$('.SearchResult_SearchResultItem__mJ7vY')
+    logger.debug('queries.yahoo', 'search result resolution', { catalogNumber, foundFirstItem: !!firstItem })
     if (!firstItem) {
       return notFound('yahoo')
     }
@@ -136,6 +139,15 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
       }
     }
 
+    logger.debug('queries.yahoo', 'search card extracted', {
+      catalogNumber,
+      hasName: !!name,
+      link,
+      coverUrl: !!coverUrl,
+      priceText,
+      storeName
+    })
+
     if (!name) {
       return notFound('yahoo')
     }
@@ -144,6 +156,7 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
     // navigation to keep traffic and latency low.
     let details: CDDetails | undefined
     if (link && !getSetting('fastMode')) {
+      logger.debug('queries.yahoo', 'fetch product detail page', { catalogNumber, link })
       details = await getYahooProductDetails(page, link)
       const hasDetails = details.label || details.format || details.released || details.genre
       if (!hasDetails) details = undefined
@@ -166,6 +179,7 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
 }
 
 export async function queryYahoo(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.yahoo', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('yahoo', catalogNumber)
   if (cached) return cached
 
@@ -176,6 +190,7 @@ export async function queryYahoo(catalogNumber: string): Promise<QueryResult> {
   try {
     result = await queryYahooWeb(catalogNumber, cookies)
   } catch (err) {
+    logger.warn('queries.yahoo', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('yahoo', err instanceof Error ? err.message : 'Unknown error')
   }
 

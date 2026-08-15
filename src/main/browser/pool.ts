@@ -3,6 +3,7 @@ import { puppeteer } from './puppeteer'
 import { findChromeExecutable } from './chrome-path'
 import { generateFingerprint, type Fingerprint } from './fingerprint'
 import { getSetting } from '../settings'
+import { logger } from '../logger'
 
 const MAX_CONCURRENT = 3
 
@@ -44,6 +45,7 @@ class BrowserPool {
     const available = this.instances.find(i => !i.inUse)
 
     if (available) {
+      logger.debug('browser.pool', 'reusing available instance', { activeInstances: this.instances.length, queueLength: this.waitQueue.length })
       available.inUse = true
       const page = available.page ?? await this.createPage(available)
       available.page = page
@@ -51,6 +53,7 @@ class BrowserPool {
     }
 
     if (this.instances.length < MAX_CONCURRENT) {
+      logger.debug('browser.pool', 'creating new browser instance', { activeInstances: this.instances.length, maxConcurrent: MAX_CONCURRENT })
       const instance = await this.createInstance()
       this.instances.push(instance)
       instance.inUse = true
@@ -59,6 +62,7 @@ class BrowserPool {
       return { browser: instance.browser, page, fingerprint: instance.fingerprint }
     }
 
+    logger.debug('browser.pool', 'all instances busy, queueing acquire', { activeInstances: this.instances.length, queueLength: this.waitQueue.length })
     return new Promise((resolve, reject) => {
       this.waitQueue.push({ resolve, reject })
     })
@@ -73,20 +77,27 @@ class BrowserPool {
     await this.resetPage(page)
 
     const instance = this.instances.find(i => i.browser === browser)
-    if (!instance) return
+    if (!instance) {
+      logger.debug('browser.pool', 'release for unknown instance', { activeInstances: this.instances.length })
+      return
+    }
 
     instance.inUse = false
 
     if (this.waitQueue.length > 0) {
       const waiter = this.waitQueue.shift()
       if (waiter) {
+        logger.debug('browser.pool', 'handing released instance to queued waiter', { queueLength: this.waitQueue.length })
         instance.inUse = true
         waiter.resolve({ browser: instance.browser, page, fingerprint: instance.fingerprint })
       }
+    } else {
+      logger.debug('browser.pool', 'instance released', { activeInstances: this.instances.length, queueLength: this.waitQueue.length })
     }
   }
 
   async closeAll(): Promise<void> {
+    logger.debug('browser.pool', 'closing all browser instances', { activeInstances: this.instances.length })
     await Promise.all(this.instances.map(i => i.browser.close()))
     this.instances = []
     this.waitQueue.forEach(w => w.reject(new Error('Browser pool closed')))
@@ -109,12 +120,14 @@ class BrowserPool {
 
     if (proxyEnabled && proxyHost && proxyPort) {
       args.push(`--proxy-server=socks5://${proxyHost}:${proxyPort}`)
+      logger.debug('browser.pool', 'launching browser with SOCKS proxy', { proxyHost, proxyPort })
     }
 
     // Prefer a system Chrome/Edge install so headless scraping works even when
     // the bundled puppeteer Chromium is not shipped with the packaged app.
     // Fall back to puppeteer's default Chromium when no system browser exists.
     const chromePath = findChromeExecutable()
+    logger.debug('browser.pool', 'launching browser', { chromePath: chromePath ?? 'puppeteer-bundled' })
     const browser = await puppeteer.launch({
       headless: true,
       ...(chromePath ? { executablePath: chromePath } : {}),

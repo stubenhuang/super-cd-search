@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import type { QueryResult, Platform } from '../../shared/types'
+import { logger } from '../logger'
 
 /**
  * Shared in-memory caches for scraper resources.
@@ -114,26 +115,36 @@ function queryCacheKey(platform: Platform, catalogNumber: string): string {
  * Errors are never cached, so a transient failure is retried on the next run.
  */
 export function getCachedQueryResult(platform: Platform, catalogNumber: string): QueryResult | null {
-  return queryResultCache.get(queryCacheKey(platform, catalogNumber)) ?? null
+  const key = queryCacheKey(platform, catalogNumber)
+  const cached = queryResultCache.get(key) ?? null
+  logger.debug('cache', cached ? 'query cache hit' : 'query cache miss', { platform, catalogNumber: catalogNumber.toUpperCase(), key })
+  return cached
 }
 
 /** Store a successful query result (found / not_found) for later reuse. */
 export function cacheQueryResult(catalogNumber: string, result: QueryResult): void {
   // Errors and challenge results are never cached, so a transient failure or an
   // expired Cloudflare session is retried on the next run.
-  if (result.status === 'error' || result.status === 'challenge') return
+  if (result.status === 'error' || result.status === 'challenge') {
+    logger.debug('cache', 'not caching transient result', { platform: result.platform, catalogNumber: catalogNumber.toUpperCase(), status: result.status })
+    return
+  }
   queryResultCache.set(queryCacheKey(result.platform, catalogNumber), result)
+  logger.debug('cache', 'query result cached', { platform: result.platform, catalogNumber: catalogNumber.toUpperCase() })
   schedulePersist()
 }
 
 /** Return cached product-page data keyed by product URL, or null. */
 export function getCachedProductData<T>(platform: Platform, productUrl: string): T | null {
-  return (productDetailCache.get(`${platform}:${productUrl}`) as T | undefined) ?? null
+  const cached = (productDetailCache.get(`${platform}:${productUrl}`) as T | undefined) ?? null
+  logger.debug('cache', cached ? 'product data cache hit' : 'product data cache miss', { platform, productUrl })
+  return cached
 }
 
 /** Store product-page data (details/price) keyed by product URL. */
 export function cacheProductData(platform: Platform, productUrl: string, value: unknown): void {
   productDetailCache.set(`${platform}:${productUrl}`, value)
+  logger.debug('cache', 'product data cached', { platform, productUrl })
   schedulePersist()
 }
 
@@ -195,6 +206,7 @@ function cacheFilePath(): string | null {
  */
 export function initCachePersistence(dir?: string | null): void {
   persistenceDir = dir ?? null
+  logger.debug('cache', 'cache persistence init', { enabled: !!persistenceDir, dir: persistenceDir ?? undefined })
   if (!persistenceDir) return
   loadCacheFromDisk()
 }
@@ -204,19 +216,32 @@ function loadCacheFromDisk(): void {
   if (!file) return
   try {
     const data = JSON.parse(readFileSync(file, 'utf-8')) as PersistedCacheEntry
+    let queryResultsLoaded = 0
+    let productDetailsLoaded = 0
+    let staleSkipped = 0
+    let legacySkipped = 0
+
     for (const [key, entry] of Object.entries(data.queryResults ?? {})) {
-      if (!key.startsWith(QUERY_CACHE_KEY_PREFIX)) continue
+      if (!key.startsWith(QUERY_CACHE_KEY_PREFIX)) {
+        legacySkipped++
+        continue
+      }
       if (Date.now() - entry.fetchedAt <= CACHE_TTL) {
         queryResultCache.seed(key, entry.value, entry.fetchedAt)
+        queryResultsLoaded++
+      } else {
+        staleSkipped++
       }
     }
     for (const [key, entry] of Object.entries(data.productDetails ?? {})) {
       if (Date.now() - entry.fetchedAt <= CACHE_TTL) {
         productDetailCache.seed(key, entry.value, entry.fetchedAt)
+        productDetailsLoaded++
       }
     }
+    logger.debug('cache', 'loaded cache from disk', { file, queryResultsLoaded, productDetailsLoaded, staleSkipped, legacySkipped })
   } catch {
-    // Missing or corrupt file: start empty.
+    logger.debug('cache', 'missing or corrupt cache file, starting empty', { file })
   }
 }
 
@@ -241,6 +266,7 @@ function schedulePersist(): void {
 function writeCacheToDisk(): void {
   const dir = persistenceDir
   if (!dir) return
+  const startedAt = Date.now()
   try {
     mkdirSync(dir, { recursive: true })
     const data: PersistedCacheEntry = {
@@ -248,7 +274,13 @@ function writeCacheToDisk(): void {
       productDetails: Object.fromEntries(productDetailCache.entries())
     }
     writeFileSync(join(dir, CACHE_FILE_NAME), JSON.stringify(data))
+    logger.debug('cache', 'cache persisted to disk', {
+      file: join(dir, CACHE_FILE_NAME),
+      queryResultCount: Object.keys(data.queryResults).length,
+      productDetailCount: Object.keys(data.productDetails).length,
+      durationMs: Date.now() - startedAt
+    })
   } catch (err) {
-    console.warn('Failed to persist search cache:', err)
+    logger.warn('cache', 'failed to persist search cache', { error: err instanceof Error ? err.message : String(err) })
   }
 }

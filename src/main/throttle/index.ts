@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { getSetting } from '../settings'
+import { logger } from '../logger'
 import type { ThrottleStatus } from '../../shared/types'
 
 // Node.js native fetch supports agent option for custom connections
@@ -105,9 +106,11 @@ export async function throttledFetch(
 
   return new Promise<Response>((resolve, reject) => {
     const state = getDomainState(domain)
+    logger.debug('throttle', 'request queued', { domain, url, pending: state.pending.length + 1, active: state.active })
 
     const executeRequest = async () => {
       const timeoutMs = throttle?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS
+      logger.debug('throttle', 'request executing', { domain, url })
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -127,8 +130,10 @@ export async function throttledFetch(
 
         if (response.status === 429) {
           const backoff = backoffStates.get(domain) || { attempt: 0, nextDelay: BACKOFF_DELAYS[0] }
+          logger.warn('throttle', 'rate limited, applying backoff', { domain, url, attempt: backoff.attempt, nextDelay: backoff.nextDelay })
 
           if (backoff.attempt >= MAX_RETRIES) {
+            logger.warn('throttle', 'rate limit retries exhausted', { domain, url, maxRetries: MAX_RETRIES })
             state.active = false
             backoffStates.delete(domain)
             reject(new Error(
@@ -161,12 +166,14 @@ export async function throttledFetch(
         backoffStates.delete(domain)
         state.active = false
         state.lastRequestTime = Date.now()
+        logger.debug('throttle', 'request complete', { domain, url, status: response.status })
         resolve(response)
         processQueue(domain)
       } catch (err) {
         clearTimeout(timeout)
         state.active = false
         state.lastRequestTime = Date.now()
+        logger.warn('throttle', 'request failed', { domain, url, error: err instanceof Error ? err.message : String(err) })
         reject(err)
         processQueue(domain)
       }

@@ -176,9 +176,11 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           zenmarket: llmPlatformZenmarket
         }
       })
+      window.electronAPI.log('debug', 'settings', 'settings saved', { llmEnabled, llmModel, llmApiBaseUrl })
       setToast({ kind: 'success', text: t('settings.saved') })
       setTimeout(() => setToast(null), 3000)
     } catch {
+      window.electronAPI.log('warn', 'settings', 'settings save failed')
       setToast({ kind: 'error', text: t('settings.saveFailed') })
       setTimeout(() => setToast(null), 3000)
     } finally {

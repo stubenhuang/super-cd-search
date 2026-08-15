@@ -1,4 +1,5 @@
 import type { DisplayCurrency } from '../../shared/types'
+import { logger } from '../logger'
 
 interface ExchangeRates {
   JPY: number
@@ -14,12 +15,17 @@ const CACHE_DURATION = 60 * 60 * 1000 // 1 hour
 async function fetchExchangeRates(): Promise<ExchangeRates | null> {
   try {
     // Use free API that doesn't require key
+    logger.debug('currency', 'fetching exchange rates')
     const response = await fetch('https://open.er-api.com/v6/latest/USD')
-    if (!response.ok) return null
+    if (!response.ok) {
+      logger.warn('currency', 'exchange rate API returned non-ok', { status: response.status })
+      return null
+    }
 
     const data = await response.json()
     if (!data.rates) return null
 
+    logger.debug('currency', 'exchange rates fetched', { jpyToUsd: 1 / data.rates.JPY, cnyToUsd: 1 / data.rates.CNY })
     return {
       JPY: 1 / data.rates.JPY, // JPY to USD
       EUR: 1 / data.rates.EUR, // EUR to USD
@@ -28,7 +34,7 @@ async function fetchExchangeRates(): Promise<ExchangeRates | null> {
       updatedAt: Date.now()
     }
   } catch (err) {
-    console.warn('Failed to fetch exchange rates:', err)
+    logger.warn('currency', 'failed to fetch exchange rates', { error: err instanceof Error ? err.message : String(err) })
     return null
   }
 }
@@ -94,6 +100,7 @@ export async function convertToUSDWithFallback(amount: number, fromCurrency: Cur
   if (result !== null) return result
 
   // Use fallback rates if API fails
+  logger.debug('currency', 'using fallback exchange rate', { amount, fromCurrency })
   if (fromCurrency === 'USD') return amount
   const rate = FALLBACK_RATES[fromCurrency]
   if (!rate) return amount

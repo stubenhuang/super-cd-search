@@ -4,6 +4,7 @@ import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { logger } from '../logger'
 
 const CDJAPAN_WEB_URL = 'https://www.cdjapan.co.jp'
 
@@ -28,6 +29,7 @@ async function queryCdjapanWeb(catalogNumber: string, cookies?: string): Promise
     }
 
     const productUrl = `${CDJAPAN_WEB_URL}/product/${encodeURIComponent(catalogNumber)}`
+    logger.debug('queries.cdjapan', 'open product page', { catalogNumber, productUrl })
     await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     const extracted = await page.evaluate(() => {
@@ -50,7 +52,17 @@ async function queryCdjapanWeb(catalogNumber: string, cookies?: string): Promise
       return { name, artist, cover, released, priceText, priceCurrency, format }
     })
 
+    logger.debug('queries.cdjapan', 'DOM extraction done', {
+      catalogNumber,
+      hasName: !!extracted.name,
+      priceText: extracted.priceText,
+      priceCurrency: extracted.priceCurrency,
+      format: extracted.format,
+      released: extracted.released
+    })
+
     if (!extracted.name) {
+      logger.debug('queries.cdjapan', 'product name missing, returning not_found', { catalogNumber, productUrl })
       return notFound('cdjapan')
     }
 
@@ -71,6 +83,7 @@ async function queryCdjapanWeb(catalogNumber: string, cookies?: string): Promise
           const usd = await convertToUSDWithFallback(amount, currency)
           priceMin = usd
           priceMax = usd
+          logger.debug('queries.cdjapan', 'price converted', { catalogNumber, amount, currency, usd })
         }
       }
     }
@@ -106,6 +119,7 @@ async function queryCdjapanWeb(catalogNumber: string, cookies?: string): Promise
 }
 
 export async function queryCdjapan(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.cdjapan', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('cdjapan', catalogNumber)
   if (cached) return cached
 
@@ -116,6 +130,7 @@ export async function queryCdjapan(catalogNumber: string): Promise<QueryResult> 
   try {
     result = await queryCdjapanWeb(catalogNumber, cookies)
   } catch (err) {
+    logger.warn('queries.cdjapan', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('cdjapan', err instanceof Error ? err.message : 'Unknown error')
   }
 

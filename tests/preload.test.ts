@@ -31,6 +31,15 @@ describe('preload API', () => {
     expect(ipcRenderer.send).toHaveBeenCalledWith('toMain', { x: 1 })
   })
 
+  it('forwards renderer logs with a safe level', async () => {
+    api = await loadPreload()
+    api.log('debug', 'app.search', 'search started', { catalogNumber: 'X-1' })
+    api.log('bogus', 'app.search', 'falls back to info')
+
+    expect(ipcRenderer.send).toHaveBeenCalledWith('renderer:log', 'debug', 'app.search', 'search started', { catalogNumber: 'X-1' })
+    expect(ipcRenderer.send).toHaveBeenCalledWith('renderer:log', 'info', 'app.search', 'falls back to info', undefined)
+  })
+
   it('only subscribes on whitelisted channels', async () => {
     api = await loadPreload()
     const fn = vi.fn()

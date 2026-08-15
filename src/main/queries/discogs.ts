@@ -7,6 +7,7 @@ import type { CDDetails } from '../../shared/types'
 import { notFound, queryError } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
+import { logger } from '../logger'
 
 const DISCOGS_API_URL = 'https://api.discogs.com'
 const DISCOGS_WEB_URL = 'https://www.discogs.com'
@@ -61,7 +62,7 @@ async function getDiscogsLowestPrice(releaseId: number, token: string): Promise<
       }
     }
   } catch (err) {
-    console.warn('Discogs marketplace stats failed:', err)
+    logger.warn('queries.discogs', 'marketplace stats failed', { releaseId, error: err instanceof Error ? err.message : String(err) })
   }
 
   return { min: null, max: null }
@@ -69,13 +70,18 @@ async function getDiscogsLowestPrice(releaseId: number, token: string): Promise<
 
 async function getReleaseDetails(releaseId: number, token: string): Promise<CDDetails> {
   const cached = getCachedRelease(releaseId)
-  if (cached) return cached.details
+  if (cached) {
+    logger.debug('queries.discogs', 'release details cache hit', { releaseId })
+    return cached.details
+  }
 
   try {
     const url = `${DISCOGS_API_URL}/releases/${releaseId}?token=${token}`
+    logger.debug('queries.discogs', 'fetch release details', { releaseId })
     const response = await throttledFetch('api.discogs.com', url, undefined, API_THROTTLE)
 
     if (!response.ok) {
+      logger.debug('queries.discogs', 'release details request failed', { releaseId, status: response.status })
       return { label: null, format: null, country: null, released: null, genre: null }
     }
 
@@ -102,21 +108,24 @@ async function getReleaseDetails(releaseId: number, token: string): Promise<CDDe
 
     const genreParts = [...(data.genres || []), ...(data.styles || [])]
 
-    return {
+    const details: CDDetails = {
       label: data.labels?.[0]?.name || null,
       format: formatParts.length > 0 ? formatParts.join(', ') : null,
       country: data.country || null,
       released: data.released || data.released_formatted || (data.year != null ? String(data.year) : null),
       genre: genreParts.length > 0 ? genreParts.join(', ') : null
     }
+    logger.debug('queries.discogs', 'release details parsed', { releaseId, details })
+    return details
   } catch (err) {
-    console.warn('Discogs release details failed:', err)
+    logger.warn('queries.discogs', 'release details failed', { releaseId, error: err instanceof Error ? err.message : String(err) })
     return { label: null, format: null, country: null, released: null, genre: null }
   }
 }
 
 async function queryDiscogsApi(catalogNumber: string, token: string): Promise<QueryResult> {
   const url = `${DISCOGS_API_URL}/database/search?catno=${encodeURIComponent(catalogNumber)}&type=release&token=${token}`
+  logger.debug('queries.discogs', 'search API request', { catalogNumber })
 
   const response = await throttledFetch('api.discogs.com', url, undefined, API_THROTTLE)
 
@@ -135,6 +144,12 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
     community?: { have: number; want: number }
   }>
 
+  logger.debug('queries.discogs', 'search API results', {
+    catalogNumber,
+    resultCount: results?.length ?? 0,
+    candidates: results?.slice(0, 5).map(r => ({ id: r.id, catno: r.catno, title: r.title }))
+  })
+
   if (!results || results.length === 0) {
     return notFound('discogs')
   }
@@ -147,6 +162,12 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
     r.catno && compactCatalog(r.catno) === normalizedCatalog
   )
   const first = exactMatch || results[0]
+  logger.debug('queries.discogs', 'release selected', {
+    catalogNumber,
+    releaseId: first.id,
+    title: first.title,
+    exactCatalogMatch: !!exactMatch
+  })
   const titleParts = first.title.split(' - ')
   const artist = titleParts[0] || null
   const name = titleParts.slice(1).join(' - ') || first.title
@@ -230,11 +251,13 @@ async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise
 }
 
 export async function queryDiscogs(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.discogs', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('discogs', catalogNumber)
   if (cached) return cached
 
   const token = getSetting('discogsToken')
   const cookies = getSetting('cookies')?.discogs
+  logger.debug('queries.discogs', 'query mode', { catalogNumber, hasApiToken: !!token, hasCookies: !!cookies })
 
   let result: QueryResult
 
@@ -242,7 +265,7 @@ export async function queryDiscogs(catalogNumber: string): Promise<QueryResult> 
     try {
       result = await queryDiscogsApi(catalogNumber, token)
     } catch (err) {
-      console.warn('Discogs API failed, falling back to web scraping:', err)
+      logger.warn('queries.discogs', 'API failed, falling back to web scraping', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
       try {
         result = await queryDiscogsWeb(catalogNumber, cookies)
       } catch (webErr) {

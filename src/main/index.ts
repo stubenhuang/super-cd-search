@@ -6,6 +6,8 @@ import { registerImageIpc } from './ipc/image'
 import { registerCurrencyIpc } from './ipc/currency'
 import { registerCloudflareIpc } from './ipc/cloudflare'
 import { registerEnrichmentIpc } from './ipc/enrich'
+import { registerLoggingIpc } from './ipc/log'
+import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
 import { initCloudflareChrome, closeCloudflareChrome } from './cloudflare'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
@@ -15,6 +17,7 @@ import { prewarmExchangeRates } from './currency'
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
 function createWindow() {
+  logger.debug('main', 'creating main window')
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -60,13 +63,29 @@ function createWindow() {
   }
 }
 
+function cliLogLevel(): string | undefined {
+  const withEquals = process.argv.find(arg => arg.startsWith('--log-level='))
+  if (withEquals) return withEquals.split('=')[1]
+  const index = process.argv.indexOf('--log-level')
+  return index >= 0 ? process.argv[index + 1] : undefined
+}
+
 app.whenReady().then(() => {
+  const defaultLevel: LogLevel = VITE_DEV_SERVER_URL ? 'debug' : 'info'
+  initLogger({
+    dir: join(app.getPath('userData'), 'logs'),
+    level: cliLogLevel(),
+    defaultLevel
+  })
+  logger.info('main', 'application ready', { logLevel: getLogLevel() })
+
   initCachePersistence(app.getPath('userData'))
   initCloudflareChrome(app.getPath('userData'))
   prewarmExchangeRates()
   registerSettingsIpc()
   registerOrchestratorIpc()
   registerEnrichmentIpc()
+  registerLoggingIpc()
   registerImageIpc()
   registerThrottleIpc()
   registerCurrencyIpc()
@@ -74,7 +93,7 @@ app.whenReady().then(() => {
 
   // Register shell.openExternal handler
   ipcMain.handle('openExternal', async (_event, url: string) => {
-    console.log('openExternal called with:', url)
+    logger.debug('main', 'openExternal called', { url })
     await shell.openExternal(url)
   })
 
@@ -88,6 +107,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  logger.debug('main', 'all windows closed, tearing down browser/session resources')
   browserPool.closeAll()
   destroyProxyAgents()
   void closeCloudflareChrome()
@@ -97,5 +117,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  logger.debug('main', 'before-quit: flushing cache')
   flushCacheToDisk()
 })

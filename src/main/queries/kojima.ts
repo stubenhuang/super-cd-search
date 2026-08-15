@@ -6,6 +6,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
+import { logger } from '../logger'
 
 const KOJIMA_WEB_URL = 'https://kojimarokuon.com'
 
@@ -107,7 +108,7 @@ async function tryGetKojimaProductDataFromJson(link: string): Promise<KojimaProd
     cacheProductData('kojima', link, result)
     return result
   } catch (err) {
-    console.warn('Kojima: Shopify JSON lookup failed, falling back to rendering:', err)
+    logger.warn('queries.kojima', 'Shopify JSON lookup failed, falling back to rendering', { link, error: err instanceof Error ? err.message : String(err) })
     return null
   }
 }
@@ -222,7 +223,7 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
     cacheProductData('kojima', link, result)
     return result
   } catch (err) {
-    console.warn('Kojima: failed to get details from product page:', err)
+    logger.warn('queries.kojima', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
     return { price: null, details }
   }
 }
@@ -245,11 +246,13 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
     })
 
     const searchUrl = `${KOJIMA_WEB_URL}/search/?q=${encodeURIComponent(catalogNumber)}`
+    logger.debug('queries.kojima', 'open search page', { catalogNumber, searchUrl })
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     // Wait for the Shopify standard card structure.
     await waitForResultOrNoResult(page, { resultSelector: '.card', timeoutMs: 4000 })
     const firstItem = await page.$('.card')
+    logger.debug('queries.kojima', 'search result resolution', { catalogNumber, foundFirstItem: !!firstItem })
     if (!firstItem) {
       return notFound('kojima')
     }
@@ -269,6 +272,8 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
       link = `${KOJIMA_WEB_URL}${link}`
     }
 
+    logger.debug('queries.kojima', 'search card extracted', { catalogNumber, hasName: !!name, link, coverUrl: !!coverUrl })
+
     if (!name) {
       return notFound('kojima')
     }
@@ -279,6 +284,7 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
     let details: CDDetails | undefined
 
     if (link) {
+      logger.debug('queries.kojima', 'fetch product data', { catalogNumber, link })
       // Prefer the lightweight JSON endpoint; fall back to rendering only when
       // it is unavailable, so the common case avoids a second full page load.
       const productData = await tryGetKojimaProductDataFromJson(link)
@@ -309,6 +315,7 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
 }
 
 export async function queryKojima(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.kojima', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('kojima', catalogNumber)
   if (cached) return cached
 
@@ -319,6 +326,7 @@ export async function queryKojima(catalogNumber: string): Promise<QueryResult> {
   try {
     result = await queryKojimaWeb(catalogNumber, cookies)
   } catch (err) {
+    logger.warn('queries.kojima', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('kojima', err instanceof Error ? err.message : 'Unknown error')
   }
 

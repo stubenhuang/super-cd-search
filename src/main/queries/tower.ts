@@ -5,6 +5,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
+import { logger } from '../logger'
 
 const TOWER_WEB_URL = 'https://tower.jp'
 
@@ -30,6 +31,7 @@ async function queryTowerWeb(catalogNumber: string, cookies?: string): Promise<Q
     })
 
     const searchUrl = `${TOWER_WEB_URL}/search/item/${encodeURIComponent(catalogNumber)}`
+    logger.debug('queries.tower', 'open search page', { catalogNumber, searchUrl })
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     // Wait briefly for the server-rendered result list to settle.
@@ -74,6 +76,15 @@ async function queryTowerWeb(catalogNumber: string, cookies?: string): Promise<Q
       const country = countryTag === '国内' ? 'Japan' : null
 
       return { name, artist, cover, link, priceText, format, released, label, country }
+    })
+
+    logger.debug('queries.tower', 'DOM extraction done', {
+      catalogNumber,
+      hasCard: !!extracted,
+      hasName: !!extracted?.name,
+      priceText: extracted?.priceText,
+      format: extracted?.format,
+      released: extracted?.released
     })
 
     if (!extracted) {
@@ -131,6 +142,7 @@ async function queryTowerWeb(catalogNumber: string, cookies?: string): Promise<Q
 }
 
 export async function queryTower(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.tower', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('tower', catalogNumber)
   if (cached) return cached
 
@@ -141,6 +153,7 @@ export async function queryTower(catalogNumber: string): Promise<QueryResult> {
   try {
     result = await queryTowerWeb(catalogNumber, cookies)
   } catch (err) {
+    logger.warn('queries.tower', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('tower', err instanceof Error ? err.message : 'Unknown error')
   }
 

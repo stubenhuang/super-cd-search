@@ -3,6 +3,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, cloudflareChallenge, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
+import { logger } from '../logger'
 
 const SURUGAYA_WEB_URL = 'https://www.suruga-ya.jp'
 
@@ -15,6 +16,7 @@ const SURUGAYA_WEB_URL = 'https://www.suruga-ya.jp'
 async function querySurugayaWeb(catalogNumber: string): Promise<QueryResult> {
   const acquired = await acquireCloudflarePage()
   if (!acquired) {
+    logger.debug('queries.surugaya', 'real-Chrome session unavailable', { catalogNumber })
     return cloudflareChallenge('surugaya')
   }
 
@@ -25,9 +27,11 @@ async function querySurugayaWeb(catalogNumber: string): Promise<QueryResult> {
     })
 
     const searchUrl = `${SURUGAYA_WEB_URL}/search?search_word=${encodeURIComponent(catalogNumber)}`
+    logger.debug('queries.surugaya', 'open search page', { catalogNumber, searchUrl })
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     if (await isCloudflareChallenge(page)) {
+      logger.debug('queries.surugaya', 'Cloudflare challenge detected', { catalogNumber })
       return cloudflareChallenge('surugaya')
     }
 
@@ -64,6 +68,13 @@ async function querySurugayaWeb(catalogNumber: string): Promise<QueryResult> {
       const link = anchor.getAttribute('href')
 
       return { name, cover, priceText, link }
+    })
+
+    logger.debug('queries.surugaya', 'search extraction done', {
+      catalogNumber,
+      hasResult: !!extracted,
+      hasName: !!extracted?.name,
+      priceText: extracted?.priceText
     })
 
     if (!extracted) {
@@ -116,6 +127,7 @@ async function querySurugayaWeb(catalogNumber: string): Promise<QueryResult> {
 }
 
 export async function querySurugaya(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.surugaya', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('surugaya', catalogNumber)
   if (cached) return cached
 
@@ -123,6 +135,7 @@ export async function querySurugaya(catalogNumber: string): Promise<QueryResult>
   try {
     result = await querySurugayaWeb(catalogNumber)
   } catch (err) {
+    logger.warn('queries.surugaya', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('surugaya', err instanceof Error ? err.message : 'Unknown error')
   }
 

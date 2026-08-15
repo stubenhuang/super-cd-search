@@ -88,6 +88,19 @@ npm run dist:win
 
 凭证使用加密方式本地存储。
 
+## 调试日志
+
+- 开发模式（`npm run dev`）默认输出 **DEBUG** 级别日志到控制台
+- 打包后的应用默认输出 **INFO** 级别，并写入日志文件：
+  - macOS: `~/Library/Application Support/super-cd-search/logs/super-cd-YYYYMMDD.log`
+  - Windows: `%APPDATA%/super-cd-search/logs/super-cd-YYYYMMDD.log`
+- 手动开启 DEBUG：
+  - 启动参数：`super-cd --log-level=debug`
+  - 环境变量：`SUPER_CD_LOG_LEVEL=debug`
+- 日志每天轮转，单文件超过 5 MB 自动轮转，最多保留 10 个文件
+- 日志会自动脱敏 API Key、Token、Cookie 等敏感信息，长内容自动截断
+- 渲染进程的关键操作（搜索、深挖、智能生成、设置保存）也会转发到主进程日志
+
 ## 技术栈
 
 - **Electron** - 桌面应用框架

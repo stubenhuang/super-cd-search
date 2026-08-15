@@ -13,8 +13,10 @@ import type {
   CDDetails
 } from '../shared/types'
 
-const validSendChannels = ['toMain'] as const
+const validSendChannels = ['toMain', 'renderer:log'] as const
 const validReceiveChannels = ['fromMain', 'query:progress', 'detail:enrich-progress'] as const
+
+const validLogLevels = new Set(['debug', 'info', 'warn', 'error'])
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
@@ -27,6 +29,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     if (validReceiveChannels.includes(channel as typeof validReceiveChannels[number])) {
       ipcRenderer.on(channel, (_event, ...args) => func(...args))
     }
+  },
+  log: (level: string, tag: string, message: string, meta?: Record<string, unknown>) => {
+    const safeLevel = validLogLevels.has(level) ? level : 'info'
+    ipcRenderer.send('renderer:log', safeLevel, tag, message, meta)
   },
   getSettings: (): Promise<Settings> => ipcRenderer.invoke('getSettings'),
   getSetting: <K extends keyof Settings>(key: K): Promise<Settings[K] | undefined> =>

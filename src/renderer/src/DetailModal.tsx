@@ -158,6 +158,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
     setGenError(null)
     setGenDone(false)
     setGenProgress(null)
+    window.electronAPI.log('debug', 'detail.smartGenerate', 'smart generate clicked', { catalogNumber, missingFields })
 
     try {
       // First check whether an LLM is configured at all.
@@ -170,12 +171,18 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
         llm.model
       )
       if (!configured) {
+        window.electronAPI.log('warn', 'detail.smartGenerate', 'LLM not configured', { catalogNumber })
         setGenError(t('detail.smartNoLlm'))
         return
       }
 
       setGenerating(true)
       const result = await window.electronAPI.enrichDetails(catalogNumber, results, mergedDetails)
+      window.electronAPI.log('debug', 'detail.smartGenerate', 'enrichment returned', {
+        catalogNumber,
+        status: result.status,
+        analyzedPlatforms: result.analyzedPlatforms
+      })
 
       if (!result.llmConfigured) {
         setGenError(t('detail.smartNoLlm'))
@@ -191,6 +198,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
       }
     } catch (err) {
       console.warn('smart generate failed:', err)
+      window.electronAPI.log('warn', 'detail.smartGenerate', 'smart generate failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
       setGenError(t('detail.smartFailed'))
     } finally {
       setGenerating(false)

@@ -4,6 +4,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
+import { logger } from '../logger'
 
 const HMV_WEB_URL = 'https://www.hmv.co.jp'
 
@@ -122,7 +123,7 @@ async function getHmvProductDetails(page: import('puppeteer').Page, link: string
     cacheProductData('hmv', link, result)
     return result
   } catch (err) {
-    console.warn('HMV: failed to get details from product page:', err)
+    logger.warn('queries.hmv', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
     return { price: null, details }
   }
 }
@@ -145,11 +146,13 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
     })
 
     const searchUrl = `${HMV_WEB_URL}/en/search/keyword_${encodeURIComponent(catalogNumber)}/target_ALL/type_sr/`
+    logger.debug('queries.hmv', 'open search page', { catalogNumber, searchUrl })
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     // Wait for the product list; .clearfix identifies actual products.
     await waitForResultOrNoResult(page, { resultSelector: '.resultList > li.list.clearfix, li.list.clearfix', timeoutMs: 4000 })
     const firstItem = await page.$('.resultList > li.list.clearfix, li.list.clearfix')
+    logger.debug('queries.hmv', 'search result resolution', { catalogNumber, foundFirstItem: !!firstItem })
     if (!firstItem) {
       return notFound('hmv')
     }
@@ -202,6 +205,7 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
     if (link && !link.startsWith('http')) {
       link = `${HMV_WEB_URL}${link}`
     }
+    logger.debug('queries.hmv', 'search card extracted', { catalogNumber, hasName: !!name, artist, link, coverUrl: !!coverUrl })
 
     if (!name) {
       return notFound('hmv')
@@ -223,6 +227,7 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
     // Navigate to product page for price (if not found) and details. In fast
     // mode we skip this second navigation to keep traffic and latency low.
     if (link && !getSetting('fastMode')) {
+      logger.debug('queries.hmv', 'fetch product detail page', { catalogNumber, link })
       const productData = await getHmvProductDetails(page, link)
       if (priceMin === null && productData.price !== null) {
         priceMin = productData.price
@@ -251,6 +256,7 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
 }
 
 export async function queryHmv(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.hmv', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('hmv', catalogNumber)
   if (cached) return cached
 
@@ -261,6 +267,7 @@ export async function queryHmv(catalogNumber: string): Promise<QueryResult> {
   try {
     result = await queryHmvWeb(catalogNumber, cookies)
   } catch (err) {
+    logger.warn('queries.hmv', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('hmv', err instanceof Error ? err.message : 'Unknown error')
   }
 

@@ -6,6 +6,7 @@ import { SocksProxyAgent } from 'socks-proxy-agent'
 import { request } from 'http'
 import { request as httpsRequest } from 'https'
 import { getSetting } from '../settings'
+import { logger } from '../logger'
 
 const DEFAULT_SIZE = 160
 const JPEG_QUALITY = 80
@@ -118,7 +119,7 @@ function writeDiskCache(url: string, buffer: Buffer, mimeType: string): void {
     const file = join(dir, `${urlHash(url)}.${extForMimeType(mimeType)}`)
     writeFileSync(file, buffer)
   } catch (err) {
-    console.warn('Failed to write image cache:', err)
+    logger.warn('image', 'failed to write image cache', { error: err instanceof Error ? err.message : String(err) })
   }
 }
 
@@ -137,7 +138,7 @@ function processImage(buffer: Buffer, mimeType: string, size: number): DownloadI
       }
     }
   } catch (err) {
-    console.warn('Failed to resize image, using raw buffer:', err)
+    logger.warn('image', 'failed to resize image, using raw buffer', { error: err instanceof Error ? err.message : String(err) })
   }
 
   return { base64: buffer.toString('base64'), mimeType }
@@ -195,7 +196,7 @@ function fetchBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string } 
 
     req.on('error', (err) => {
       clearTimeout(timeout)
-      console.warn('Failed to download image:', url, err)
+      logger.warn('image', 'failed to download image', { url, error: err instanceof Error ? err.message : String(err) })
       resolve(null)
     })
 
@@ -213,10 +214,12 @@ function fetchBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string } 
  */
 export function downloadImage(url: string, size: number = DEFAULT_SIZE): Promise<DownloadImageResult | null> {
   const key = cacheKey(url, size)
+  logger.debug('image', 'downloadImage start', { url, size, key })
 
   const cached = lruCache.get(key)
   if (cached) {
     if (Date.now() - cached.fetchedAt < DISK_TTL) {
+      logger.debug('image', 'memory cache hit', { url, size })
       touchCache(key, cached)
       return Promise.resolve({ base64: cached.base64, mimeType: cached.mimeType })
     }
@@ -224,14 +227,19 @@ export function downloadImage(url: string, size: number = DEFAULT_SIZE): Promise
   }
 
   const existing = inflight.get(key)
-  if (existing) return existing
+  if (existing) {
+    logger.debug('image', 'joining in-flight request', { url, size })
+    return existing
+  }
 
   const promise = (async () => {
     const disk = readDiskCache(url)
     if (disk) {
+      logger.debug('image', 'disk cache hit', { url, size })
       return processImage(disk.buffer, disk.mimeType, size)
     }
 
+    logger.debug('image', 'network fetch required', { url, size })
     const fetched = await fetchBuffer(url)
     if (!fetched) return null
     writeDiskCache(url, fetched.buffer, fetched.mimeType)

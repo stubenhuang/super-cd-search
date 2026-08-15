@@ -11,6 +11,7 @@ import { queryZenmarket } from '../queries/zenmarket'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
+import { logger } from '../logger'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult, Platform } from '../../shared/types'
 
 const MAX_CONCURRENT_CATALOGS = 3
@@ -28,10 +29,13 @@ function emitProgress(event: string, data: BatchQueryProgress): void {
 }
 
 async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, enabledPlatforms: Platform[]): Promise<QueryResult[]> {
+  const catalogStartedAt = Date.now()
   if (signal.aborted) {
+    logger.debug('orchestrator', 'query aborted before start', { catalogNumber })
     throw new Error('Aborted')
   }
 
+  logger.debug('orchestrator', 'query all platforms start', { catalogNumber, platforms: enabledPlatforms })
   emitProgress(QueryEvents.START, { catalogNumber, platform: 'all', status: 'loading' })
 
   // Full registry in canonical order; filter down to the user's selection.
@@ -53,18 +57,30 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
   // act as natural concurrency limits.
   const settled = await Promise.allSettled(
     platforms.map(async ({ name, query }) => {
+      const platformStartedAt = Date.now()
       if (signal.aborted) {
+        logger.debug('orchestrator', 'platform query aborted', { catalogNumber, platform: name })
         emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
         throw new Error('Aborted')
       }
 
+      logger.debug('orchestrator', 'platform query start', { catalogNumber, platform: name })
       emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: 'loading' })
       try {
         const result = await query()
         if (signal.aborted) {
+          logger.debug('orchestrator', 'platform query aborted after completion', { catalogNumber, platform: name })
           emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
           throw new Error('Aborted')
         }
+        logger.debug('orchestrator', 'platform query done', {
+          catalogNumber,
+          platform: name,
+          status: result.status,
+          durationMs: Date.now() - platformStartedAt,
+          hasName: !!result.name,
+          hasPrice: result.priceMin !== null
+        })
         emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
         emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: result.status, results: [result] })
         return result
@@ -74,6 +90,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
           throw new Error('Aborted')
         }
         const message = err instanceof Error ? err.message : 'Unknown error'
+        logger.warn('orchestrator', 'platform query threw', { catalogNumber, platform: name, error: message, durationMs: Date.now() - platformStartedAt })
         emitProgress(QueryEvents.ERROR, { catalogNumber, platform: name, status: 'error' })
         const errorResult: QueryResult = { platform: name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
         emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: 'error', results: [errorResult] })
@@ -83,6 +100,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
   )
 
   if (signal.aborted) {
+    logger.debug('orchestrator', 'query all platforms aborted', { catalogNumber, durationMs: Date.now() - catalogStartedAt })
     throw new Error('Aborted')
   }
 
@@ -98,6 +116,11 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     return { platform: platform.name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
   })
 
+  logger.debug('orchestrator', 'query all platforms complete', {
+    catalogNumber,
+    durationMs: Date.now() - catalogStartedAt,
+    statuses: results.map(r => `${r.platform}:${r.status}`)
+  })
   emitProgress(QueryEvents.COMPLETE, { catalogNumber, platform: 'all', status: 'complete' })
 
   return results
@@ -105,13 +128,17 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
 
 export function cancelBatchQuery(): void {
   if (abortController) {
+    logger.debug('orchestrator', 'cancel batch query requested')
     abortController.abort()
     abortController = null
   }
 }
 
 export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = PLATFORMS): Promise<BatchQueryResult[]> {
+  const batchStartedAt = Date.now()
+  logger.debug('orchestrator', 'execute batch query start', { requestedCatalogNumbers: catalogNumbers, platforms })
   if (abortController) {
+    logger.debug('orchestrator', 'aborting previous batch query before starting a new one')
     abortController.abort()
   }
   abortController = new AbortController()
@@ -165,8 +192,15 @@ export async function executeBatchQuery(catalogNumbers: string[], platforms: Pla
   }
 
   if (signal.aborted) {
+    logger.debug('orchestrator', 'batch query cancelled', { durationMs: Date.now() - batchStartedAt })
     emitProgress(QueryEvents.BATCH_CANCELLED, { catalogNumber: '', platform: 'all', status: 'error' })
   }
 
-  return results.filter(r => r !== undefined)
+  const completed = results.filter(r => r !== undefined)
+  logger.debug('orchestrator', 'execute batch query complete', {
+    catalogCount: completed.length,
+    durationMs: Date.now() - batchStartedAt,
+    cancelled: signal.aborted
+  })
+  return completed
 }

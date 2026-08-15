@@ -295,9 +295,11 @@ function App() {
     setIsCancelling(false)
     cancelledRef.current = false
     setActivePlatforms(platforms)
+    window.electronAPI.log('debug', 'app.search', 'search started', { catalogNumbers, platforms, mode: searchMode })
 
     try {
       const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, platforms)
+      window.electronAPI.log('debug', 'app.search', 'search finished', { resultCount: batchResults.length })
       setResults(prev => {
         const merged = new Map(prev)
         for (const batch of batchResults) {
@@ -308,6 +310,7 @@ function App() {
       })
     } catch (err) {
       if (!cancelledRef.current) {
+        window.electronAPI.log('warn', 'app.search', 'search failed', { error: err instanceof Error ? err.message : String(err) })
         setError(err instanceof Error ? err.message : t('error.queryFailed'))
       }
     } finally {
@@ -317,6 +320,7 @@ function App() {
   }, [input, parseCatalogNumbers, searchMode, t])
 
   const handleCancel = useCallback(async () => {
+    window.electronAPI.log('debug', 'app.search', 'cancel requested')
     cancelledRef.current = true
     setIsCancelling(true)
     await window.electronAPI.cancelBatchQuery()
@@ -460,8 +464,10 @@ function App() {
     setDeepSearchTargets(targets)
     setDeepSearchPlatforms(deepPlatforms)
     setIsDeepSearching(true)
+    window.electronAPI.log('debug', 'app.deepSearch', 'deep search started', { targets, platforms: deepPlatforms })
     try {
       const batchResults = await window.electronAPI.executeBatchQuery(targets, deepPlatforms)
+      window.electronAPI.log('debug', 'app.deepSearch', 'deep search finished', { resultCount: batchResults.length })
       setResults((prev) => {
         const merged = new Map(prev)
         for (const batch of batchResults) {
@@ -472,6 +478,7 @@ function App() {
       })
       deepSearchSucceededRef.current = true
     } catch (err) {
+      window.electronAPI.log('warn', 'app.deepSearch', 'deep search failed', { error: err instanceof Error ? err.message : String(err) })
       setError(err instanceof Error ? err.message : t('error.queryFailed'))
     } finally {
       setIsDeepSearching(false)
@@ -481,11 +488,13 @@ function App() {
   }, [emptyCatalogs, isDeepSearching, t])
 
   const handleTitleClick = useCallback((catalogNumber: string) => {
+    window.electronAPI.log('debug', 'app.detail', 'detail modal opened', { catalogNumber })
     setSelectedCatalog(catalogNumber)
     setShowDetailModal(true)
   }, [])
 
   const handleDetailsEnriched = useCallback((catalogNumber: string, details: CDDetails) => {
+    window.electronAPI.log('info', 'app.detail', 'detail fields enriched', { catalogNumber })
     setEnrichedDetails(prev => {
       const next = new Map(prev)
       next.set(catalogNumber, details)

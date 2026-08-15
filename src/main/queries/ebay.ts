@@ -6,6 +6,7 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
 import { type Page, type ElementHandle } from 'puppeteer'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { logger } from '../logger'
 
 const EBAY_API_URL = 'https://api.ebay.com'
 const EBAY_WEB_URL = 'https://www.ebay.com'
@@ -186,7 +187,7 @@ async function getEbayItemDetails(itemWebUrl: string, token: string): Promise<CD
       if (oldest !== undefined) itemDetailsCache.delete(oldest)
     }
   } catch (err) {
-    console.warn('eBay: failed to get item details:', err)
+    logger.warn('queries.ebay', 'failed to get item details', { itemWebUrl, error: err instanceof Error ? err.message : String(err) })
   }
 
   return details
@@ -209,7 +210,7 @@ async function isPageBlocked(page: Page): Promise<boolean> {
 
 async function queryEbayDomain(page: Page, domain: string, catalogNumber: string): Promise<{ success: boolean; result?: QueryResult }> {
   try {
-    console.log(`eBay: trying domain ${domain}`)
+    logger.debug('queries.ebay', 'trying domain', { catalogNumber, domain })
 
     // Use direct URL navigation (more reliable than search box interaction)
     const searchUrl = `${domain}/sch/i.html?_nkw=${encodeURIComponent(catalogNumber)}`
@@ -220,7 +221,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
 
     // Check if blocked
     if (await isPageBlocked(page)) {
-      console.warn(`eBay: ${domain} blocked`)
+      logger.warn('queries.ebay', 'domain blocked', { catalogNumber, domain })
       return { success: false }
     }
 
@@ -250,7 +251,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
       const items = await page.$$(selector)
       if (items.length > 0) {
         firstItem = items[0]
-        console.log(`eBay: found ${items.length} items with selector: ${selector}`)
+        logger.debug('queries.ebay', 'found result items', { catalogNumber, domain, selector, itemCount: items.length })
         break
       }
     }
@@ -269,12 +270,12 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
         })
         // Cast the JSHandle to ElementHandle
         firstItem = handle as ElementHandle<Element>
-        console.log('eBay: found item via link traversal')
+        logger.debug('queries.ebay', 'found item via link traversal', { catalogNumber, domain })
       }
     }
 
     if (!firstItem) {
-      console.warn('eBay: no items found on page')
+      logger.warn('queries.ebay', 'no items found on page', { catalogNumber, domain })
       return { success: true, result: notFound('ebay') }
     }
 
@@ -329,7 +330,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
       }
     }
   } catch (err) {
-    console.warn(`eBay: ${domain} error:`, err)
+    logger.warn('queries.ebay', 'domain query error', { catalogNumber, domain, error: err instanceof Error ? err.message : String(err) })
     return { success: false }
   }
 }
@@ -390,17 +391,19 @@ async function queryEbayWeb(catalogNumber: string, cookies?: string): Promise<Qu
 }
 
 export async function queryEbay(catalogNumber: string): Promise<QueryResult> {
+  logger.debug('queries.ebay', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('ebay', catalogNumber)
   if (cached) return cached
 
   const cookies = getSetting('cookies')?.ebay
+  logger.debug('queries.ebay', 'query mode', { catalogNumber, hasApiToken: !!getSetting('ebayClientId') && !!getSetting('ebayClientSecret'), hasCookies: !!cookies })
 
   let result: QueryResult
 
   try {
     result = await queryEbayApi(catalogNumber)
   } catch (err) {
-    console.warn('eBay API failed, falling back to web scraping:', err)
+    logger.warn('queries.ebay', 'API failed, falling back to web scraping', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     try {
       result = await queryEbayWeb(catalogNumber, cookies)
     } catch (webErr) {

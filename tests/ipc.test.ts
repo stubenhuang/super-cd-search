@@ -32,6 +32,10 @@ const { mockEnrichDetails } = vi.hoisted(() => ({
   mockEnrichDetails: vi.fn()
 }))
 
+const { mockLogFromRenderer } = vi.hoisted(() => ({
+  mockLogFromRenderer: vi.fn()
+}))
+
 vi.mock('../src/main/settings', () => ({
   getSettings: mockGetSettings,
   getSetting: mockGetSetting,
@@ -63,16 +67,33 @@ vi.mock('../src/main/llm/enrich', () => ({
   enrichDetails: mockEnrichDetails
 }))
 
+vi.mock('../src/main/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn()
+  },
+  logFromRenderer: mockLogFromRenderer
+}))
+
 import { registerSettingsIpc } from '../src/main/ipc/settings'
 import { registerOrchestratorIpc } from '../src/main/ipc/orchestrator'
 import { registerImageIpc } from '../src/main/ipc/image'
 import { registerCurrencyIpc } from '../src/main/ipc/currency'
 import { registerCloudflareIpc } from '../src/main/ipc/cloudflare'
 import { registerEnrichmentIpc } from '../src/main/ipc/enrich'
+import { registerLoggingIpc } from '../src/main/ipc/log'
 
 function handler(channel: string) {
   const call = vi.mocked(ipcMain.handle).mock.calls.find(([ch]) => ch === channel)
   if (!call) throw new Error(`No handler registered for ${channel}`)
+  return call[1]
+}
+
+function onHandler(channel: string) {
+  const call = vi.mocked(ipcMain.on).mock.calls.find(([ch]) => ch === channel)
+  if (!call) throw new Error(`No listener registered for ${channel}`)
   return call[1]
 }
 
@@ -182,5 +203,17 @@ describe('registerEnrichmentIpc', () => {
 
     expect(await handler('detail:enrich')(null, 'X-1', [], undefined)).toEqual(enriched)
     expect(mockEnrichDetails).toHaveBeenCalledWith('X-1', [], undefined)
+  })
+})
+
+describe('registerLoggingIpc', () => {
+  it('forwards renderer:log messages to the logger', () => {
+    registerLoggingIpc()
+
+    onHandler('renderer:log')(null, 'debug', 'app.search', 'search started', { catalogNumber: 'X-1' })
+    expect(mockLogFromRenderer).toHaveBeenCalledWith('debug', 'app.search', 'search started', { catalogNumber: 'X-1' })
+
+    onHandler('renderer:log')(null, 'info', 'app.search', 'no meta')
+    expect(mockLogFromRenderer).toHaveBeenCalledWith('info', 'app.search', 'no meta', undefined)
   })
 })

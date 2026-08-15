@@ -15,6 +15,7 @@ import { acquireCloudflarePage, isCloudflareChallenge } from '../cloudflare'
 import { compressHtml } from '../parser/readability'
 import { LLMClient } from './client'
 import { buildDetailFillPrompt } from './prompt'
+import { logger } from '../logger'
 import { queryKojima } from '../queries/kojima'
 import { queryHmv } from '../queries/hmv'
 import { queryYahoo } from '../queries/yahoo'
@@ -110,7 +111,7 @@ async function fetchProductHtml(platform: SmartFillPlatform, url: string): Promi
       if (await isCloudflareChallenge(page)) return null
       return await page.content()
     } catch (err) {
-      console.warn(`Smart fill: failed to fetch ${platform} page:`, err)
+      logger.warn('llm.enrich', 'failed to fetch Cloudflare page', { platform, url, error: err instanceof Error ? err.message : String(err) })
       return null
     } finally {
       release()
@@ -133,7 +134,7 @@ async function fetchProductHtml(platform: SmartFillPlatform, url: string): Promi
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
     return await page.content()
   } catch (err) {
-    console.warn(`Smart fill: failed to fetch ${platform} page:`, err)
+    logger.warn('llm.enrich', 'failed to fetch product page', { platform, url, error: err instanceof Error ? err.message : String(err) })
     return null
   } finally {
     await browserPool.release(browser, page)
@@ -198,12 +199,14 @@ export async function enrichDetails(
 ): Promise<DetailEnrichmentResult> {
   const normalizedCatalog = normalizeCatalogNumber(catalogNumber)
   const safeResults = Array.isArray(existingResults) ? existingResults : []
+  logger.debug('llm.enrich', 'enrichment start', { catalogNumber: normalizedCatalog, existingSourceCount: safeResults.length })
 
   const baseAggregation = aggregateDetails([
     { details: knownDetails ?? null },
     ...safeResults
   ])
   const working = { ...baseAggregation.details }
+  logger.debug('llm.enrich', 'initial aggregate details', { catalogNumber: normalizedCatalog, missingFields: missingDetailKeys(working) })
 
   const notConfiguredResult = (): DetailEnrichmentResult => ({
     status: 'not_configured',
@@ -216,10 +219,12 @@ export async function enrichDetails(
   })
 
   if (!isLLMConfigured()) {
+    logger.debug('llm.enrich', 'LLM not configured, returning existing details', { catalogNumber: normalizedCatalog })
     return notConfiguredResult()
   }
 
   const llmSettings = getSetting('llm')!
+  logger.debug('llm.enrich', 'LLM configured', { catalogNumber: normalizedCatalog, model: llmSettings.model })
   const client = new LLMClient(llmSettings)
   const existingByPlatform = new Map(safeResults.map(result => [result.platform, result]))
   const attemptedPlatforms: SmartFillPlatform[] = []
@@ -234,7 +239,10 @@ export async function enrichDetails(
   for (const platform of SMART_FILL_PLATFORM_PRIORITY) {
     if (hasAllDetailFields(working)) break
 
+    logger.debug('llm.enrich', 'source iteration start', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
+
     if (!isPlatformEnabledForLLM(platform)) {
+      logger.debug('llm.enrich', 'source disabled in LLM settings', { catalogNumber: normalizedCatalog, platform })
       skip(platform, 'platform_disabled')
       continue
     }
@@ -252,13 +260,19 @@ export async function enrichDetails(
       try {
         result = await QUERY_FUNCTIONS[platform](normalizedCatalog)
       } catch (err) {
-        console.warn(`Smart fill: ${platform} search failed:`, err)
+        logger.warn('llm.enrich', 'source search failed', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
         skip(platform, 'not_found')
         continue
       }
     }
 
     attemptedPlatforms.push(platform)
+    logger.debug('llm.enrich', 'source search resolved', {
+      catalogNumber: normalizedCatalog,
+      platform,
+      status: result?.status ?? 'missing',
+      hasLink: !!result?.link
+    })
 
     if (!result || result.status !== 'found') {
       skip(platform, result?.status === 'challenge' ? 'cloudflare_challenge' : 'not_found')
@@ -271,7 +285,9 @@ export async function enrichDetails(
 
     // 2. Reuse whatever deterministic scraper fields this source already has.
     mergeMissingDetails(working, result.details)
+    logger.debug('llm.enrich', 'scraper fields merged', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
     if (hasAllDetailFields(working)) {
+      logger.debug('llm.enrich', 'all fields complete from scraper data, stopping early', { catalogNumber: normalizedCatalog, platform })
       emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'complete' })
       break
     }
@@ -282,7 +298,7 @@ export async function enrichDetails(
     try {
       html = await fetchProductHtml(platform, result.link)
     } catch (err) {
-      console.warn(`Smart fill: ${platform} page fetch threw:`, err)
+      logger.warn('llm.enrich', 'page fetch threw', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
       html = null
     }
     if (!html) {
@@ -298,20 +314,35 @@ export async function enrichDetails(
     try {
       const response = await client.chat([{ role: 'user', content: prompt }])
       const parsed = parseLLMDetailResponse(response.content)
+      logger.debug('llm.enrich', 'LLM detail response parsed', {
+        catalogNumber: normalizedCatalog,
+        platform,
+        parsedFieldCount: Object.values(parsed ?? {}).filter(Boolean).length
+      })
       mergeMissingDetails(working, parsed)
       analyzedPlatforms.push(platform)
+      logger.debug('llm.enrich', 'LLM fields merged', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
 
       if (hasAllDetailFields(working)) {
+        logger.debug('llm.enrich', 'all fields complete, stopping', { catalogNumber: normalizedCatalog, platform })
         emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'complete' })
         break
       }
     } catch (err) {
-      console.warn(`Smart fill: LLM analysis failed for ${platform}:`, err)
+      logger.warn('llm.enrich', 'LLM analysis failed', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
       skip(platform, 'llm_failed')
     }
   }
 
   const missingFields = missingDetailKeys(working)
+  logger.debug('llm.enrich', 'enrichment complete', {
+    catalogNumber: normalizedCatalog,
+    status: missingFields.length === 0 ? 'complete' : 'partial',
+    missingFields,
+    analyzedPlatforms,
+    attemptedPlatforms,
+    skippedPlatforms
+  })
 
   return {
     status: missingFields.length === 0 ? 'complete' : 'partial',
