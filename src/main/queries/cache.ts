@@ -1,18 +1,20 @@
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import type { QueryResult, Platform } from '../../shared/types'
+import type { QueryResult, Platform, CDDetails } from '../../shared/types'
 import { logger } from '../logger'
 
 /**
  * Shared in-memory caches for scraper resources.
  *
- * Two layers:
+ * Three layers:
  * 1. Query-result cache – a finished platform lookup for a catalog number is
- *    reused for an hour, so re-running the same search never hits the network
+ *    reused for a day, so re-running the same search never hits the network
  *    (or the browser pool) again.
  * 2. Product-detail cache – detail pages (Kojima/HMV/Yahoo) are keyed by their
  *    product URL so the same product referenced from different searches is
  *    scraped only once.
+ * 3. LLM enrichment cache – smart-generated detail fields are keyed by catalog
+ *    number so repeated enrichment never re-invokes the LLM.
  */
 
 interface CacheEntry<V> {
@@ -94,6 +96,7 @@ export function createTtlCache<K, V>(ttlMs: number, maxSize = 500): TtlCache<K, 
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 1 day
 const QUERY_CACHE_MAX = 1000
 const DETAIL_CACHE_MAX = 1000
+const ENRICHMENT_CACHE_MAX = 500
 
 /**
  * Bump this whenever a query's extracted shape changes in a way that makes
@@ -105,9 +108,14 @@ const QUERY_CACHE_KEY_PREFIX = `v${QUERY_CACHE_VERSION}:`
 
 const queryResultCache = createTtlCache<string, QueryResult>(CACHE_TTL, QUERY_CACHE_MAX)
 const productDetailCache = createTtlCache<string, unknown>(CACHE_TTL, DETAIL_CACHE_MAX)
+const enrichmentCache = createTtlCache<string, CDDetails>(CACHE_TTL, ENRICHMENT_CACHE_MAX)
 
 function queryCacheKey(platform: Platform, catalogNumber: string): string {
   return `${QUERY_CACHE_KEY_PREFIX}${platform}:${catalogNumber.toUpperCase()}`
+}
+
+function enrichmentCacheKey(catalogNumber: string): string {
+  return `enrichment:${catalogNumber.toUpperCase()}`
 }
 
 /**
@@ -148,10 +156,26 @@ export function cacheProductData(platform: Platform, productUrl: string, value: 
   schedulePersist()
 }
 
+/** Return cached LLM smart-generation details for a catalog number, or null. */
+export function getCachedEnrichment(catalogNumber: string): CDDetails | null {
+  const key = enrichmentCacheKey(catalogNumber)
+  const cached = enrichmentCache.get(key) ?? null
+  logger.debug('cache', cached ? 'LLM enrichment cache hit' : 'LLM enrichment cache miss', { catalogNumber: catalogNumber.toUpperCase(), key })
+  return cached
+}
+
+/** Store LLM smart-generation details keyed by catalog number. */
+export function cacheEnrichment(catalogNumber: string, details: CDDetails): void {
+  enrichmentCache.set(enrichmentCacheKey(catalogNumber), { ...details })
+  logger.debug('cache', 'LLM enrichment cached', { catalogNumber: catalogNumber.toUpperCase() })
+  schedulePersist()
+}
+
 /** Clear every cache; mainly used by tests. */
 export function clearAllCaches(): void {
   queryResultCache.clear()
   productDetailCache.clear()
+  enrichmentCache.clear()
 }
 
 /**
@@ -161,6 +185,7 @@ export function clearAllCaches(): void {
 export function clearSearchCache(): void {
   queryResultCache.clear()
   productDetailCache.clear()
+  enrichmentCache.clear()
 
   // Drop any pending debounced write so it can't resurrect stale entries.
   if (persistTimer) {
@@ -193,6 +218,7 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null
 interface PersistedCacheEntry {
   queryResults: Record<string, { value: QueryResult; fetchedAt: number }>
   productDetails: Record<string, { value: unknown; fetchedAt: number }>
+  enrichments: Record<string, { value: CDDetails; fetchedAt: number }>
 }
 
 function cacheFilePath(): string | null {
@@ -218,6 +244,7 @@ function loadCacheFromDisk(): void {
     const data = JSON.parse(readFileSync(file, 'utf-8')) as PersistedCacheEntry
     let queryResultsLoaded = 0
     let productDetailsLoaded = 0
+    let enrichmentsLoaded = 0
     let staleSkipped = 0
     let legacySkipped = 0
 
@@ -239,7 +266,13 @@ function loadCacheFromDisk(): void {
         productDetailsLoaded++
       }
     }
-    logger.debug('cache', 'loaded cache from disk', { file, queryResultsLoaded, productDetailsLoaded, staleSkipped, legacySkipped })
+    for (const [key, entry] of Object.entries(data.enrichments ?? {})) {
+      if (Date.now() - entry.fetchedAt <= CACHE_TTL) {
+        enrichmentCache.seed(key, entry.value, entry.fetchedAt)
+        enrichmentsLoaded++
+      }
+    }
+    logger.debug('cache', 'loaded cache from disk', { file, queryResultsLoaded, productDetailsLoaded, enrichmentsLoaded, staleSkipped, legacySkipped })
   } catch {
     logger.debug('cache', 'missing or corrupt cache file, starting empty', { file })
   }
@@ -271,13 +304,15 @@ function writeCacheToDisk(): void {
     mkdirSync(dir, { recursive: true })
     const data: PersistedCacheEntry = {
       queryResults: Object.fromEntries(queryResultCache.entries()),
-      productDetails: Object.fromEntries(productDetailCache.entries())
+      productDetails: Object.fromEntries(productDetailCache.entries()),
+      enrichments: Object.fromEntries(enrichmentCache.entries())
     }
     writeFileSync(join(dir, CACHE_FILE_NAME), JSON.stringify(data))
     logger.debug('cache', 'cache persisted to disk', {
       file: join(dir, CACHE_FILE_NAME),
       queryResultCount: Object.keys(data.queryResults).length,
       productDetailCount: Object.keys(data.productDetails).length,
+      enrichmentCount: Object.keys(data.enrichments).length,
       durationMs: Date.now() - startedAt
     })
   } catch (err) {

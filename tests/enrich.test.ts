@@ -16,7 +16,9 @@ const {
   mockQueryKojima,
   mockQueryYahoo,
   mockQuerySurugaya,
-  mockQueryZenmarket
+  mockQueryZenmarket,
+  mockGetCachedEnrichment,
+  mockCacheEnrichment
 } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockAcquireBrowser: vi.fn(),
@@ -31,7 +33,9 @@ const {
   mockQueryKojima: vi.fn(),
   mockQueryYahoo: vi.fn(),
   mockQuerySurugaya: vi.fn(),
-  mockQueryZenmarket: vi.fn()
+  mockQueryZenmarket: vi.fn(),
+  mockGetCachedEnrichment: vi.fn(),
+  mockCacheEnrichment: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
@@ -57,6 +61,10 @@ vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mockQueryKojima }))
 vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
 vi.mock('../src/main/queries/surugaya', () => ({ querySurugaya: mockQuerySurugaya }))
 vi.mock('../src/main/queries/zenmarket', () => ({ queryZenmarket: mockQueryZenmarket }))
+vi.mock('../src/main/queries/cache', () => ({
+  getCachedEnrichment: mockGetCachedEnrichment,
+  cacheEnrichment: mockCacheEnrichment
+}))
 
 import { enrichDetails, SMART_FILL_PLATFORM_PRIORITY } from '../src/main/llm/enrich'
 
@@ -132,6 +140,8 @@ beforeEach(() => {
   mockQueryYahoo.mockResolvedValue(foundResult('yahoo'))
   mockQuerySurugaya.mockResolvedValue(foundResult('surugaya'))
   mockQueryZenmarket.mockResolvedValue(foundResult('zenmarket'))
+  mockGetCachedEnrichment.mockReturnValue(null)
+  mockCacheEnrichment.mockReturnValue(undefined)
 })
 
 describe('enrichDetails', () => {
@@ -142,6 +152,59 @@ describe('enrichDetails', () => {
     expect(result.llmConfigured).toBe(false)
     expect(result.status).toBe('not_configured')
     expect(mockQueryTower).not.toHaveBeenCalled()
+  })
+
+  it('serves a complete cached enrichment without invoking the LLM', async () => {
+    mockGetCachedEnrichment.mockReturnValue({
+      label: 'Cached Label',
+      format: 'CD',
+      country: 'Japan',
+      released: '2024-01-01',
+      genre: 'Jazz'
+    })
+
+    const result = await enrichDetails('X-1', [])
+    expect(result.status).toBe('complete')
+    expect(result.usedCache).toBe(true)
+    expect(result.details.label).toBe('Cached Label')
+    expect(mockQueryTower).not.toHaveBeenCalled()
+    expect(mockChat).not.toHaveBeenCalled()
+    expect(mockCacheEnrichment).not.toHaveBeenCalled()
+  })
+
+  it('merges cached fields and still asks the LLM for the rest', async () => {
+    mockGetCachedEnrichment.mockReturnValue({
+      label: 'Cached Label',
+      format: 'CD',
+      country: 'Japan',
+      released: '2024-01-01',
+      genre: null
+    })
+
+    const result = await enrichDetails('X-1', [])
+    expect(result.status).toBe('complete')
+    expect(result.usedCache).toBe(true)
+    expect(result.details.label).toBe('Cached Label')
+    expect(result.details.genre).toBe('Jazz')
+    expect(mockChat).toHaveBeenCalledTimes(1)
+    expect(mockCacheEnrichment).toHaveBeenCalledWith('X-1', expect.objectContaining({ genre: 'Jazz' }))
+  })
+
+  it('returns cached details even when LLM is not configured', async () => {
+    setupLlm(undefined)
+    mockGetCachedEnrichment.mockReturnValue({
+      label: 'Cached Label',
+      format: 'CD',
+      country: 'Japan',
+      released: null,
+      genre: null
+    })
+
+    const result = await enrichDetails('X-1', [])
+    expect(result.status).toBe('not_configured')
+    expect(result.usedCache).toBe(true)
+    expect(result.details.label).toBe('Cached Label')
+    expect(result.missingFields).toEqual(['released', 'genre'])
   })
 
   it('walks sources in the configured priority order and stops as soon as all fields are complete', async () => {

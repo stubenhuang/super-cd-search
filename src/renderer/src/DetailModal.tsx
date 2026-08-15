@@ -161,38 +161,26 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
     window.electronAPI.log('debug', 'detail.smartGenerate', 'smart generate clicked', { catalogNumber, missingFields })
 
     try {
-      // First check whether an LLM is configured at all.
-      const settings = await window.electronAPI.getSettings()
-      const llm = settings?.llm
-      const configured = !!(
-        llm?.enabled &&
-        llm.apiKey &&
-        llm.apiBaseUrl &&
-        llm.model
-      )
-      if (!configured) {
-        window.electronAPI.log('warn', 'detail.smartGenerate', 'LLM not configured', { catalogNumber })
-        setGenError(t('detail.smartNoLlm'))
-        return
-      }
-
       setGenerating(true)
+      // The main process checks LLM configuration itself; it also serves
+      // previously generated details from cache without needing the LLM.
       const result = await window.electronAPI.enrichDetails(catalogNumber, results, mergedDetails)
       window.electronAPI.log('debug', 'detail.smartGenerate', 'enrichment returned', {
         catalogNumber,
         status: result.status,
+        usedCache: result.usedCache,
         analyzedPlatforms: result.analyzedPlatforms
       })
 
-      if (!result.llmConfigured) {
-        setGenError(t('detail.smartNoLlm'))
-        return
-      }
-
+      // Cached/partial details are still useful even when the LLM is not
+      // configured, so apply them before deciding which message to show.
       onDetailsEnriched(catalogNumber, result.details)
 
       if (result.status === 'complete') {
         setGenDone(true)
+      } else if (!result.llmConfigured) {
+        window.electronAPI.log('warn', 'detail.smartGenerate', 'LLM not configured and fields still missing', { catalogNumber })
+        setGenError(t('detail.smartNoLlm'))
       } else {
         setGenError(t('detail.smartPartial', { count: result.analyzedPlatforms.length }))
       }

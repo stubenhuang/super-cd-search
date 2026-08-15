@@ -8,13 +8,15 @@ import {
   cacheQueryResult,
   getCachedProductData,
   cacheProductData,
+  getCachedEnrichment,
+  cacheEnrichment,
   clearAllCaches,
   clearSearchCache,
   initCachePersistence,
   flushCacheToDisk,
   QUERY_CACHE_VERSION
 } from '../src/main/queries/cache'
-import type { QueryResult } from '../src/shared/types'
+import type { QueryResult, CDDetails } from '../src/shared/types'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -158,10 +160,36 @@ describe('product detail cache', () => {
   it('clearAllCaches clears every cache', () => {
     cacheProductData('yahoo', 'https://shopping.yahoo.co.jp/p/1', { format: 'CD' })
     cacheQueryResult('X-1', found('yahoo', 'Album X'))
+    cacheEnrichment('X-1', { label: 'L', format: 'CD', country: null, released: null, genre: null })
     clearAllCaches()
 
     expect(getCachedProductData('yahoo', 'https://shopping.yahoo.co.jp/p/1')).toBeNull()
     expect(getCachedQueryResult('yahoo', 'X-1')).toBeNull()
+    expect(getCachedEnrichment('X-1')).toBeNull()
+  })
+})
+
+describe('LLM enrichment cache', () => {
+  afterEach(() => clearAllCaches())
+
+  const details: CDDetails = { label: 'L', format: 'CD', country: 'Japan', released: '2024', genre: 'Jazz' }
+
+  it('round-trips details keyed by catalog number', () => {
+    expect(getCachedEnrichment('X-1')).toBeNull()
+    cacheEnrichment('X-1', details)
+    expect(getCachedEnrichment('x-1')).toEqual(details)
+  })
+
+  it('stores a copy of the generated details', () => {
+    cacheEnrichment('X-1', details)
+    details.genre = 'Rock'
+    expect(getCachedEnrichment('X-1')?.genre).toBe('Jazz')
+  })
+
+  it('clearSearchCache also clears enrichment entries', () => {
+    cacheEnrichment('X-1', details)
+    clearSearchCache()
+    expect(getCachedEnrichment('X-1')).toBeNull()
   })
 })
 
@@ -200,6 +228,19 @@ describe('disk persistence', () => {
     clearAllCaches()
     initCachePersistence(dir)
     expect(getCachedProductData<{ format: string }>('hmv', 'https://www.hmv.co.jp/product/9')).toEqual({ format: 'CD' })
+  })
+
+  it('persists LLM enrichment details and restores them', () => {
+    const details: CDDetails = { label: 'L', format: 'CD', country: 'Japan', released: '2024', genre: 'Jazz' }
+    initCachePersistence(dir)
+    cacheEnrichment('X-1', details)
+    flushCacheToDisk()
+
+    clearAllCaches()
+    expect(getCachedEnrichment('X-1')).toBeNull()
+
+    initCachePersistence(dir)
+    expect(getCachedEnrichment('X-1')).toEqual(details)
   })
 
   it('skips expired entries when loading from disk', () => {

@@ -191,6 +191,7 @@ describe('registerEnrichmentIpc', () => {
     const enriched = {
       status: 'partial',
       llmConfigured: true,
+      usedCache: false,
       details: { label: 'L', format: 'CD', country: null, released: null, genre: null },
       missingFields: ['country', 'released', 'genre'],
       analyzedPlatforms: ['tower'],

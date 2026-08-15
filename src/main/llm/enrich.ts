@@ -23,6 +23,7 @@ import { queryCdjapan } from '../queries/cdjapan'
 import { queryTower } from '../queries/tower'
 import { querySurugaya } from '../queries/surugaya'
 import { queryZenmarket } from '../queries/zenmarket'
+import { getCachedEnrichment, cacheEnrichment } from '../queries/cache'
 
 export type SmartFillPlatform = Exclude<Platform, 'discogs' | 'ebay'>
 
@@ -208,9 +209,18 @@ export async function enrichDetails(
   const working = { ...baseAggregation.details }
   logger.debug('llm.enrich', 'initial aggregate details', { catalogNumber: normalizedCatalog, missingFields: missingDetailKeys(working) })
 
+  // Reuse previously generated LLM details first. Cached fields never override
+  // existing scraper values — they only fill what is still missing.
+  const cached = getCachedEnrichment(normalizedCatalog)
+  if (cached) {
+    mergeMissingDetails(working, cached)
+    logger.debug('llm.enrich', 'cached enrichment merged', { catalogNumber: normalizedCatalog, missingFields: missingDetailKeys(working) })
+  }
+
   const notConfiguredResult = (): DetailEnrichmentResult => ({
-    status: 'not_configured',
+    status: hasAllDetailFields(working) ? 'complete' : 'not_configured',
     llmConfigured: false,
+    usedCache: !!cached,
     details: { ...working },
     missingFields: missingDetailKeys(working),
     analyzedPlatforms: [],
@@ -219,8 +229,22 @@ export async function enrichDetails(
   })
 
   if (!isLLMConfigured()) {
-    logger.debug('llm.enrich', 'LLM not configured, returning existing details', { catalogNumber: normalizedCatalog })
+    logger.debug('llm.enrich', 'LLM not configured, returning cached/existing details', { catalogNumber: normalizedCatalog, missingFields: missingDetailKeys(working), cacheHit: !!cached })
     return notConfiguredResult()
+  }
+
+  if (hasAllDetailFields(working)) {
+    logger.debug('llm.enrich', 'all fields already complete from cache, skipping LLM', { catalogNumber: normalizedCatalog })
+    return {
+      status: 'complete',
+      llmConfigured: true,
+      usedCache: true,
+      details: { ...working },
+      missingFields: [],
+      analyzedPlatforms: [],
+      attemptedPlatforms: [],
+      skippedPlatforms: []
+    }
   }
 
   const llmSettings = getSetting('llm')!
@@ -335,18 +359,27 @@ export async function enrichDetails(
   }
 
   const missingFields = missingDetailKeys(working)
+
+  // Persist whatever the LLM produced — even a partial result is valuable on
+  // the next run because it will skip those fields.
+  if (analyzedPlatforms.length > 0) {
+    cacheEnrichment(normalizedCatalog, working)
+  }
+
   logger.debug('llm.enrich', 'enrichment complete', {
     catalogNumber: normalizedCatalog,
     status: missingFields.length === 0 ? 'complete' : 'partial',
     missingFields,
     analyzedPlatforms,
     attemptedPlatforms,
-    skippedPlatforms
+    skippedPlatforms,
+    cacheHit: !!cached
   })
 
   return {
     status: missingFields.length === 0 ? 'complete' : 'partial',
     llmConfigured: true,
+    usedCache: !!cached,
     details: working,
     missingFields,
     analyzedPlatforms,

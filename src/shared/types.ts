@@ -147,6 +147,8 @@ export interface DetailEnrichmentResult {
   status: DetailEnrichmentStatus
   /** False when LLM settings are disabled/incomplete; renderer shows a hint. */
   llmConfigured: boolean
+  /** True when previously generated LLM detail fields were reused from cache. */
+  usedCache: boolean
   /** Final aggregated details (existing fields are never overwritten). */
   details: CDDetails
   /** Detail keys that are still missing after enrichment. */
