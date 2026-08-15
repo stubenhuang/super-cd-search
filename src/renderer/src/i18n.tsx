@@ -101,6 +101,7 @@ const zh = {
   'nav.api': 'API 令牌',
   'nav.proxy': '代理',
   'nav.lan': '局域网连接',
+  'nav.barcodeProviders': '条码解析供应商',
   'nav.sources': '搜索源',
   'nav.llm': 'LLM 配置',
   'nav.cloudflare': 'Cloudflare 验证',
@@ -133,6 +134,7 @@ const zh = {
   'proxy.port': '端口',
 
   // LAN connection
+  'lan.buttonTitle': '局域网连接',
   'lan.desc': '在本机启动一个只监听局域网地址的 HTTP 服务。手机与电脑连接同一 Wi-Fi 后，扫描二维码即可访问。服务绝不会绑定公网地址。',
   'lan.enable': '启用局域网连接',
   'lan.enableDesc': '允许同一局域网内的手机扫码连接到本机',
@@ -333,6 +335,7 @@ const en: Record<keyof typeof zh, string> = {
   'nav.api': 'API Tokens',
   'nav.proxy': 'Proxy',
   'nav.lan': 'LAN Connection',
+  'nav.barcodeProviders': 'Barcode Providers',
   'nav.sources': 'Search Sources',
   'nav.llm': 'LLM Config',
   'nav.cloudflare': 'Cloudflare Verification',
@@ -361,6 +364,7 @@ const en: Record<keyof typeof zh, string> = {
   'proxy.host': 'Host',
   'proxy.port': 'Port',
 
+  'lan.buttonTitle': 'LAN Connection',
   'lan.desc': 'Starts an HTTP server on this computer that listens on a LAN address only. With the phone on the same Wi-Fi, scan the QR code to connect. It never binds to a public address.',
   'lan.enable': 'Enable LAN Connection',
   'lan.enableDesc': 'Let phones on the same LAN scan the QR code and connect to this computer',

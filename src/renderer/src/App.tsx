@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, ExportProgress, LanCatalogAddedEvent } from './electron-api'
 import { SettingsPanel } from './Settings'
+import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
 import { ExportModal, type ExportConfirmOptions } from './ExportModal'
 import { aggregateDetails, missingDetailKeys } from '../../shared/details'
@@ -263,6 +264,7 @@ function App() {
   const [progressStatus, setProgressStatus] = useState<Map<string, string>>(new Map())
   const [completedCatalogs, setCompletedCatalogs] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
+  const [showLanPanel, setShowLanPanel] = useState(false)
   const cancelledRef = useRef(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [searchMode, setSearchMode] = useState<SearchMode>('standard')
@@ -833,6 +835,16 @@ function App() {
             </button>
           </div>
           <button
+            className="lan-button"
+            onClick={() => setShowLanPanel(true)}
+            title={t('lan.buttonTitle')}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="7" y="2" width="10" height="20" rx="2.5"/>
+              <line x1="11" y1="18" x2="13" y2="18"/>
+            </svg>
+          </button>
+          <button
             className="settings-button"
             onClick={() => setShowSettings(true)}
             title={t('settings.buttonTitle')}
@@ -1044,6 +1056,7 @@ function App() {
           </div>
         </section>
       </main>
+      <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <ExportModal
         isOpen={showExportModal}

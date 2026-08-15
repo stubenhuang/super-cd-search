@@ -180,7 +180,8 @@ body {
   margin: 0;
 }
 
-.settings-button {
+.settings-button,
+.lan-button {
   background: transparent;
   border: 1px solid var(--border-medium);
   color: var(--text-secondary);
@@ -194,11 +195,16 @@ body {
   justify-content: center;
 }
 
-.settings-button:hover {
+.settings-button:hover,
+.lan-button:hover {
   background: var(--bg-card);
   color: var(--text-primary);
   border-color: var(--accent-primary);
   box-shadow: var(--shadow-sm);
+}
+
+.lan-button {
+  color: var(--accent-primary);
 }
 
 .app-header-actions {

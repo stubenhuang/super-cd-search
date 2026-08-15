@@ -114,6 +114,17 @@
 }
 
 /* === Main Panel === */
+.settings-panel.lan-settings-panel {
+  width: 560px;
+  height: auto;
+  min-height: 420px;
+  max-height: 88vh;
+}
+
+.settings-panel.lan-settings-panel .settings-scroll {
+  min-height: 300px;
+}
+
 .settings-panel {
   position: relative;
   width: 720px;
