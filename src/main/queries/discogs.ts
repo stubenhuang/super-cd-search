@@ -5,7 +5,6 @@ import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult } from './types'
 import type { CDDetails } from '../../shared/types'
 import { notFound, queryError } from './types'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 
@@ -84,7 +83,11 @@ async function getReleaseDetails(releaseId: number, token: string): Promise<CDDe
       labels?: Array<{ name?: string }>
       formats?: Array<{ name?: string; descriptions?: string[] }>
       country?: string
-      year?: string
+      /** Full release date, e.g. "2022-09-16". */
+      released?: string
+      /** Human-readable release date, e.g. "16 Sep 2022". */
+      released_formatted?: string
+      year?: string | number
       genres?: string[]
       styles?: string[]
     }
@@ -103,7 +106,7 @@ async function getReleaseDetails(releaseId: number, token: string): Promise<CDDe
       label: data.labels?.[0]?.name || null,
       format: formatParts.length > 0 ? formatParts.join(', ') : null,
       country: data.country || null,
-      released: data.year || null,
+      released: data.released || data.released_formatted || (data.year != null ? String(data.year) : null),
       genre: genreParts.length > 0 ? genreParts.join(', ') : null
     }
   } catch (err) {
@@ -136,9 +139,12 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
     return notFound('discogs')
   }
 
-  // Prioritize exact catalog number match
+  // Prioritize exact catalog number match. Discogs writes "SICP 6480" while the
+  // app normalizes input to "SICP-6480", so compare ignoring spaces and dashes.
+  const compactCatalog = (value: string): string => value.replace(/[\s-]+/g, '').toUpperCase()
+  const normalizedCatalog = compactCatalog(catalogNumber)
   const exactMatch = results.find(r =>
-    r.catno && r.catno.toUpperCase() === catalogNumber.toUpperCase()
+    r.catno && compactCatalog(r.catno) === normalizedCatalog
   )
   const first = exactMatch || results[0]
   const titleParts = first.title.split(' - ')
@@ -204,11 +210,8 @@ async function queryDiscogsWeb(catalogNumber: string, cookies?: string): Promise
     const coverUrl = await firstResult.$eval('img', el => el.getAttribute('src')).catch(() => null)
     let link = await firstResult.$eval('a[href*="/release/"]', el => el.getAttribute('href')).catch(() => null)
 
-    // DOM extraction first; only fall back to LLM when the key field is missing.
     if (!name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('discogs', catalogNumber, html, searchUrl)
-      if (llmResult) return llmResult
+      return notFound('discogs')
     }
 
     return {

@@ -1,7 +1,6 @@
 import { acquireCloudflarePage, isCloudflareChallenge } from '../cloudflare'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, cloudflareChallenge, parseJPYPrice } from './types'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 
@@ -71,11 +70,7 @@ async function querySurugayaWeb(catalogNumber: string): Promise<QueryResult> {
       return notFound('surugaya')
     }
 
-    // DOM extraction first; only fall back to LLM when the key field is missing.
     if (!extracted.name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('surugaya', catalogNumber, html, searchUrl)
-      if (llmResult) return llmResult
       return notFound('surugaya')
     }
 

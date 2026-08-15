@@ -6,7 +6,6 @@ const baseSettings = {
   apiBaseUrl: 'https://llm.example.com/v1',
   apiKey: 'secret-key',
   model: 'test-model',
-  temperature: 0.3,
   platformEnabled: {
     discogs: true,
     ebay: true,
@@ -14,7 +13,9 @@ const baseSettings = {
     hmv: true,
     yahoo: true,
     cdjapan: true,
-    tower: true
+    tower: true,
+    surugaya: true,
+    zenmarket: true
   }
 }
 
@@ -64,15 +65,59 @@ describe('LLMClient', () => {
     expect(result.usage).toEqual({ promptTokens: 10, completionTokens: 5, totalTokens: 15 })
   })
 
-  it('defaults temperature from settings and omits max_tokens', async () => {
+  it('uses a fixed temperature of 0 and omits max_tokens by default', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 })
     )
     const client = new LLMClient(baseSettings)
     await client.chat([{ role: 'system', content: 'be nice' }])
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body.temperature).toBe(0.3)
+    expect(body.temperature).toBe(0)
     expect(body.max_tokens).toBeUndefined()
+  })
+
+  it('accepts an already-complete /chat/completions base URL without doubling it', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 })
+    )
+    const client = new LLMClient({ ...baseSettings, apiBaseUrl: 'https://api.deepseek.com/chat/completions/' })
+    await client.chat([{ role: 'user', content: 'x' }])
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.deepseek.com/chat/completions')
+  })
+
+  it('falls back to reasoning_content when DeepSeek leaves content empty', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '', reasoning_content: '{"details":{"label":"L"}}' } }]
+        }),
+        { status: 200 }
+      )
+    )
+    const client = new LLMClient(baseSettings)
+    const result = await client.chat([{ role: 'user', content: 'x' }])
+    expect(result.content).toBe('{"details":{"label":"L"}}')
+  })
+
+  it('retries without max_tokens once when reasoning exhausts the token budget', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: '' }, finish_reason: 'length' }] }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }), { status: 200 })
+      )
+
+    const client = new LLMClient(baseSettings)
+    const result = await client.chat([{ role: 'user', content: 'x' }], { maxTokens: 100 })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).max_tokens).toBe(100)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).max_tokens).toBeUndefined()
+    expect(result.content).toBe('{"ok":true}')
   })
 
   it('reports usage as undefined when the API omits it', async () => {

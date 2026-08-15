@@ -42,7 +42,6 @@ const schema = {
       apiBaseUrl: { type: 'string' as const, default: 'https://api.openai.com/v1' },
       apiKey: { type: 'string' as const, default: '' },
       model: { type: 'string' as const, default: 'gpt-4o-mini' },
-      temperature: { type: 'number' as const, default: 0 },
       platformEnabled: {
         type: 'object' as const,
         properties: {

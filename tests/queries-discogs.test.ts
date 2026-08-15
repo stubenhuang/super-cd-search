@@ -14,7 +14,7 @@ vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }))
 vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
-import { queryDiscogs } from '../src/main/queries/discogs'
+import { queryDiscogs, clearReleaseCache } from '../src/main/queries/discogs'
 import { clearAllCaches } from '../src/main/queries/cache'
 
 function okJson(data: unknown) {
@@ -58,6 +58,10 @@ beforeEach(() => {
 })
 
 describe('queryDiscogs', () => {
+  it('clears the release-detail cache', () => {
+    clearReleaseCache()
+  })
+
   describe('API path', () => {
     it('finds an exact catalog match and enriches with prices and details', async () => {
       mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
@@ -81,6 +85,8 @@ describe('queryDiscogs', () => {
             labels: [{ name: 'Test Label' }],
             formats: [{ name: 'CD', descriptions: ['Album', 'Reissue'] }],
             country: 'Japan',
+            released: '2024-03-01',
+            released_formatted: '01 Mar 2024',
             year: '2024',
             genres: ['Jazz'],
             styles: ['Hard Bop']
@@ -104,11 +110,96 @@ describe('queryDiscogs', () => {
           label: 'Test Label',
           format: 'CD, Album, Reissue',
           country: 'Japan',
-          released: '2024',
+          released: '2024-03-01',
           genre: 'Jazz, Hard Bop'
         }
       })
       expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
+    })
+
+    it('falls back to released_formatted and then year', async () => {
+      mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
+        if (url.includes('/database/search')) {
+          return okJson({
+            results: [{ id: 9, title: 'Artist - FALL-1', catno: 'FALL-1', uri: '/release/9' }]
+          })
+        }
+        if (url.includes('/marketplace/stats')) return okJson({})
+        if (url.includes('/releases/9')) {
+          return okJson({
+            labels: [],
+            formats: [{ name: 'CD' }],
+            country: 'Japan',
+            released_formatted: '16 Sep 2022',
+            year: '2022',
+            genres: ['Rock'],
+            styles: []
+          })
+        }
+        return { ok: false, status: 404 }
+      })
+
+      const formatted = await queryDiscogs('FALL-1')
+      expect(formatted.details?.released).toBe('16 Sep 2022')
+
+      mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
+        if (url.includes('/database/search')) {
+          return okJson({
+            results: [{ id: 10, title: 'Artist - FALL-2', catno: 'FALL-2', uri: '/release/10' }]
+          })
+        }
+        if (url.includes('/marketplace/stats')) return okJson({})
+        if (url.includes('/releases/10')) {
+          return okJson({
+            labels: [],
+            formats: [{ name: 'CD' }],
+            country: 'Japan',
+            year: '2021',
+            genres: [],
+            styles: []
+          })
+        }
+        return { ok: false, status: 404 }
+      })
+
+      const yearOnly = await queryDiscogs('FALL-2')
+      expect(yearOnly.details?.released).toBe('2021')
+    })
+
+    it('matches Discogs catalog numbers that use spaces instead of dashes', async () => {
+      mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
+        if (url.includes('/database/search')) {
+          return okJson({
+            results: [
+              { id: 21, title: 'Pink Floyd - Animals', catno: 'SICP 6480', uri: '/release/21' },
+              { id: 22, title: 'Other - Album', catno: 'SICP-6481', uri: '/release/22' }
+            ]
+          })
+        }
+        if (url.includes('/marketplace/stats')) return okJson({})
+        if (url.includes('/releases/')) {
+          return okJson({
+            labels: [{ name: 'Pink Floyd Records' }],
+            formats: [{ name: 'CD', descriptions: ['Album'] }],
+            country: 'Japan',
+            released: '2022-09-16',
+            year: '2022',
+            genres: ['Rock'],
+            styles: ['Prog Rock']
+          })
+        }
+        return { ok: false, status: 404 }
+      })
+
+      const result = await queryDiscogs('SICP-6480')
+      expect(result.name).toBe('Animals')
+      expect(result.link).toBe('https://www.discogs.com/release/21')
+      expect(mockThrottledFetch).toHaveBeenCalledWith(
+        'api.discogs.com',
+        expect.stringContaining('/releases/21'),
+        undefined,
+        expect.anything()
+      )
     })
 
     it('returns not_found when the API has no results', async () => {
@@ -198,25 +289,15 @@ describe('queryDiscogs', () => {
       expect(mockTryLLMParse).not.toHaveBeenCalled()
     })
 
-    it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+    it('returns not_found when DOM extraction misses the name and never invokes LLM', async () => {
       mockGetSetting.mockImplementation((key: string) => (key === 'discogsToken' ? undefined : undefined))
       const { page, browser, firstResult } = createDiscogsPage()
       firstResult.$eval.mockResolvedValue(null)
       mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-      mockTryLLMParse.mockResolvedValue({
-        platform: 'discogs',
-        name: 'LLM Album',
-        artist: null,
-        priceMin: 5,
-        priceMax: 5,
-        coverUrl: null,
-        link: null,
-        status: 'found'
-      })
 
       const result = await queryDiscogs('UCCG-90530')
-      expect(result.name).toBe('LLM Album')
-      expect(mockTryLLMParse).toHaveBeenCalledWith('discogs', 'UCCG-90530', '<html></html>', expect.stringContaining('/search/'))
+      expect(result.status).toBe('not_found')
+      expect(mockTryLLMParse).not.toHaveBeenCalled()
     })
 
     it('returns a query error when both API and web fail', async () => {

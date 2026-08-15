@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { DetailModal } from './DetailModal'
 import { normalizeCatalogNumber } from '../../shared/utils'
@@ -222,6 +222,7 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState<Map<string, QueryResult[]>>(new Map())
+  const [enrichedDetails, setEnrichedDetails] = useState<Map<string, CDDetails>>(new Map())
   const [catalogOrder, setCatalogOrder] = useState<string[]>([])
   const [progressStatus, setProgressStatus] = useState<Map<string, string>>(new Map())
   const [completedCatalogs, setCompletedCatalogs] = useState<Set<string>>(new Set())
@@ -235,6 +236,8 @@ function App() {
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null)
   const prevIsLoadingRef = useRef(false)
+  const prevIsDeepSearchingRef = useRef(false)
+  const deepSearchSucceededRef = useRef(false)
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('USD')
   const [usdToCnyRate, setUsdToCnyRate] = useState<number | null>(null)
 
@@ -287,6 +290,7 @@ function App() {
     setProgressStatus(new Map())
     setCompletedCatalogs(new Set())
     setResults(new Map())
+    setEnrichedDetails(new Map())
     setCatalogOrder(catalogNumbers)
     setIsCancelling(false)
     cancelledRef.current = false
@@ -363,6 +367,20 @@ function App() {
     prevIsLoadingRef.current = isLoading
   }, [isLoading, results.size])
 
+  // Deep-search runs use `isDeepSearching` rather than `isLoading`, so it needs
+  // its own completion edge detector.
+  useEffect(() => {
+    if (
+      prevIsDeepSearchingRef.current &&
+      !isDeepSearching &&
+      !cancelledRef.current &&
+      deepSearchSucceededRef.current
+    ) {
+      playCompletionSound()
+    }
+    prevIsDeepSearchingRef.current = isDeepSearching
+  }, [isDeepSearching])
+
   const hasProgress = completedCatalogs.size > 0 || progressStatus.size > 0
   const catalogNumbers = useMemo(() => parseCatalogNumbers(input), [input, parseCatalogNumbers])
 
@@ -437,6 +455,8 @@ function App() {
     }
 
     setError(null)
+    cancelledRef.current = false
+    deepSearchSucceededRef.current = false
     setDeepSearchTargets(targets)
     setDeepSearchPlatforms(deepPlatforms)
     setIsDeepSearching(true)
@@ -450,6 +470,7 @@ function App() {
         }
         return merged
       })
+      deepSearchSucceededRef.current = true
     } catch (err) {
       setError(err instanceof Error ? err.message : t('error.queryFailed'))
     } finally {
@@ -462,6 +483,14 @@ function App() {
   const handleTitleClick = useCallback((catalogNumber: string) => {
     setSelectedCatalog(catalogNumber)
     setShowDetailModal(true)
+  }, [])
+
+  const handleDetailsEnriched = useCallback((catalogNumber: string, details: CDDetails) => {
+    setEnrichedDetails(prev => {
+      const next = new Map(prev)
+      next.set(catalogNumber, details)
+      return next
+    })
   }, [])
 
   const handleCurrencyChange = useCallback((currency: DisplayCurrency) => {
@@ -755,6 +784,8 @@ function App() {
           onClose={() => setShowDetailModal(false)}
           catalogNumber={selectedCatalog}
           results={results.get(selectedCatalog) || []}
+          enrichedDetails={enrichedDetails.get(selectedCatalog)}
+          onDetailsEnriched={handleDetailsEnriched}
         />
       )}
     </div>

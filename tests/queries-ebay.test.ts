@@ -93,6 +93,11 @@ beforeEach(() => {
 })
 
 describe('queryEbay', () => {
+  it('clears the item-details cache', async () => {
+    const { clearItemDetailsCache } = await loadEbay()
+    clearItemDetailsCache()
+  })
+
   it('returns not_found without API credentials (web no results)', async () => {
     mockGetSetting.mockImplementation((key: string) => {
       if (key === 'ebayClientId') return undefined
@@ -272,26 +277,16 @@ describe('queryEbay', () => {
     expect(itemLink.evaluateHandle).toHaveBeenCalled()
   })
 
-  it('prefers LLM results on the web', async () => {
+  it('returns not_found when the web card has no title and never invokes LLM', async () => {
     const { queryEbay } = await loadEbay()
     mockThrottledFetch.mockRejectedValue(new Error('api down'))
     const { page, browser, state, firstItem } = createEbayPage()
     state.dollarDollarResults['.srp-results .s-item'] = [firstItem]
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-    mockTryLLMParse.mockResolvedValue({
-      platform: 'ebay',
-      name: 'LLM Item',
-      artist: null,
-      priceMin: 3,
-      priceMax: 3,
-      coverUrl: null,
-      link: null,
-      status: 'found'
-    })
 
     const result = await runWithFakeTimers(() => queryEbay('ABC-123'))
-    expect(result.name).toBe('LLM Item')
-    expect(mockTryLLMParse).toHaveBeenCalled()
+    expect(result.status).toBe('not_found')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('tries alternative domains when the main domain blocks', async () => {

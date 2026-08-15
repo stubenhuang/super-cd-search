@@ -2,7 +2,6 @@ import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
 
@@ -137,17 +136,8 @@ async function queryYahooWeb(catalogNumber: string, cookies?: string): Promise<Q
       }
     }
 
-    // DOM extraction first; only fall back to LLM when the key field is missing.
     if (!name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('yahoo', catalogNumber, html, searchUrl)
-      if (llmResult) {
-        // Use our extracted coverUrl if LLM didn't find one
-        if (!llmResult.coverUrl && coverUrl) {
-          llmResult.coverUrl = coverUrl
-        }
-        return llmResult
-      }
+      return notFound('yahoo')
     }
 
     // Try to get details from product page. In fast mode we skip this second

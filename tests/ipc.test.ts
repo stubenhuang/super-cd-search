@@ -28,6 +28,10 @@ const { mockGetUsdToDisplayRate } = vi.hoisted(() => ({
   mockGetUsdToDisplayRate: vi.fn()
 }))
 
+const { mockEnrichDetails } = vi.hoisted(() => ({
+  mockEnrichDetails: vi.fn()
+}))
+
 vi.mock('../src/main/settings', () => ({
   getSettings: mockGetSettings,
   getSetting: mockGetSetting,
@@ -55,11 +59,16 @@ vi.mock('../src/main/currency', () => ({
   getUsdToDisplayRate: mockGetUsdToDisplayRate
 }))
 
+vi.mock('../src/main/llm/enrich', () => ({
+  enrichDetails: mockEnrichDetails
+}))
+
 import { registerSettingsIpc } from '../src/main/ipc/settings'
 import { registerOrchestratorIpc } from '../src/main/ipc/orchestrator'
 import { registerImageIpc } from '../src/main/ipc/image'
 import { registerCurrencyIpc } from '../src/main/ipc/currency'
 import { registerCloudflareIpc } from '../src/main/ipc/cloudflare'
+import { registerEnrichmentIpc } from '../src/main/ipc/enrich'
 
 function handler(channel: string) {
   const call = vi.mocked(ipcMain.handle).mock.calls.find(([ch]) => ch === channel)
@@ -153,5 +162,25 @@ describe('registerCloudflareIpc', () => {
 
     await handler('cloudflare:cancelChallenge')()
     expect(mockCancelChallenge).toHaveBeenCalled()
+  })
+})
+
+describe('registerEnrichmentIpc', () => {
+  it('registers the detail:enrich handler', async () => {
+    const enriched = {
+      status: 'partial',
+      llmConfigured: true,
+      details: { label: 'L', format: 'CD', country: null, released: null, genre: null },
+      missingFields: ['country', 'released', 'genre'],
+      analyzedPlatforms: ['tower'],
+      attemptedPlatforms: ['tower'],
+      skippedPlatforms: []
+    }
+    mockEnrichDetails.mockResolvedValue(enriched)
+
+    registerEnrichmentIpc()
+
+    expect(await handler('detail:enrich')(null, 'X-1', [], undefined)).toEqual(enriched)
+    expect(mockEnrichDetails).toHaveBeenCalledWith('X-1', [], undefined)
   })
 })

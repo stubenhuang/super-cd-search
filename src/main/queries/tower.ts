@@ -3,7 +3,6 @@ import { browserPool } from '../browser'
 import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 
@@ -54,18 +53,34 @@ async function queryTowerWeb(catalogNumber: string, cookies?: string): Promise<Q
         || null
       const priceText = card.querySelector('.tr-item-block-info-price .is-text-amount')?.textContent?.trim() || null
       const format = card.querySelector('.result-display-contents-category-text')?.textContent?.trim() || null
-      return { name, artist, cover, link, priceText, format }
+
+      // The info tag carries the release metadata the same way the item page's
+      // spec table does: "発売日：2015年06月17日 | 規格品番：PROC-1721 |
+      // レーベル：TOWER RECORDS UNIVERSAL VINTAGE COLLECTION +plus".
+      const infoText = card.querySelector('.TOL-item-search-result-PC-result-display-contents-info')
+        ?.textContent?.replace(/<!HS>|<!HE>/g, '') || ''
+      const releasedMatch = infoText.match(/発売日[:：]\s*([0-9０-９]{4})[年.\/-]([0-9０-９]{1,2})[月.\/-]([0-9０-９]{1,2})日?/)
+      const labelMatch = infoText.match(/レーベル[:：]\s*([^|]+)/)
+      const released = releasedMatch
+        ? `${releasedMatch[1]}-${releasedMatch[2].padStart(2, '0')}-${releasedMatch[3].padStart(2, '0')}`
+        : null
+      const label = labelMatch?.[1]?.trim() || null
+
+      // The tag next to the info shows the domestic/import flag ("国内" =
+      // domestic Japanese release). The same convention Discogs reports as the
+      // release country, so map 国内 to "Japan"; imports stay unknown here.
+      const countryTag = card.querySelector('.TOL-item-search-result-PC-result-display-contents-info-tag .common-tag')
+        ?.textContent?.trim() || null
+      const country = countryTag === '国内' ? 'Japan' : null
+
+      return { name, artist, cover, link, priceText, format, released, label, country }
     })
 
     if (!extracted) {
       return notFound('tower')
     }
 
-    // DOM extraction first; only fall back to LLM when the key field is missing.
     if (!extracted.name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('tower', catalogNumber, html, searchUrl)
-      if (llmResult) return llmResult
       return notFound('tower')
     }
 
@@ -90,12 +105,14 @@ async function queryTowerWeb(catalogNumber: string, cookies?: string): Promise<Q
     }
 
     const details: CDDetails = {
-      label: null,
+      label: extracted.label,
       format: extracted.format,
-      country: null,
-      released: null,
+      country: extracted.country,
+      released: extracted.released,
       genre: null
     }
+
+    const hasDetails = details.label || details.format || details.country || details.released
 
     return {
       platform: 'tower',
@@ -106,7 +123,7 @@ async function queryTowerWeb(catalogNumber: string, cookies?: string): Promise<Q
       coverUrl,
       link,
       status: 'found',
-      details: details.format ? details : undefined
+      details: hasDetails ? details : undefined
     }
   } finally {
     await browserPool.release(browser, page)

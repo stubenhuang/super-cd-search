@@ -13,7 +13,9 @@ import type {
   Language,
   CloudflarePlatform,
   CloudflareChallengeResult,
-  CloudflareSessionStatus
+  CloudflareSessionStatus,
+  DetailEnrichProgress,
+  DetailEnrichmentResult
 } from '../../shared/types'
 
 export type {
@@ -30,7 +32,9 @@ export type {
   Language,
   CloudflarePlatform,
   CloudflareChallengeResult,
-  CloudflareSessionStatus
+  CloudflareSessionStatus,
+  DetailEnrichProgress,
+  DetailEnrichmentResult
 }
 
 // Extended progress type for received messages (includes event)
@@ -53,6 +57,11 @@ export interface IElectronAPI {
   getThrottleStatus: () => Promise<ThrottleStatus>
   getUsdToDisplayRate: (target: DisplayCurrency) => Promise<number>
   executeBatchQuery: (catalogNumbers: string[], platforms?: Platform[]) => Promise<BatchQueryResult[]>
+  enrichDetails: (
+    catalogNumber: string,
+    existingResults: QueryResult[],
+    knownDetails?: CDDetails | null
+  ) => Promise<DetailEnrichmentResult>
   cancelBatchQuery: () => Promise<void>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>

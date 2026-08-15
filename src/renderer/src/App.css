@@ -1388,6 +1388,102 @@ body.is-resizing {
   line-height: 1.4;
 }
 
+.detail-modal-field-value.missing {
+  color: var(--text-muted);
+}
+
+/* Smart generation */
+.detail-modal-smart {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px dashed var(--accent-primary);
+  border-radius: 12px;
+  background: var(--accent-bg, var(--bg-secondary));
+}
+
+.detail-modal-smart-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--accent-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.detail-modal-smart-btn:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md), 0 4px 12px var(--accent-glow);
+}
+
+.detail-modal-smart-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.detail-modal-smart-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.detail-modal-smart-missing {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.detail-modal-smart-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.detail-modal-smart-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border-medium);
+  border-top-color: var(--accent-primary);
+  animation: spin 0.8s linear infinite;
+}
+
+.detail-modal-smart-done,
+.detail-modal-smart-error {
+  margin-top: 14px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.detail-modal-smart-done {
+  color: var(--success);
+}
+
+.detail-modal-smart-error {
+  color: var(--error, #c0392b);
+}
+
 /* Actions */
 .detail-modal-actions {
   display: flex;

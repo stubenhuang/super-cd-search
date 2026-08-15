@@ -5,6 +5,7 @@ import { registerOrchestratorIpc } from './ipc/orchestrator'
 import { registerImageIpc } from './ipc/image'
 import { registerCurrencyIpc } from './ipc/currency'
 import { registerCloudflareIpc } from './ipc/cloudflare'
+import { registerEnrichmentIpc } from './ipc/enrich'
 import { initCloudflareChrome, closeCloudflareChrome } from './cloudflare'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
@@ -65,6 +66,7 @@ app.whenReady().then(() => {
   prewarmExchangeRates()
   registerSettingsIpc()
   registerOrchestratorIpc()
+  registerEnrichmentIpc()
   registerImageIpc()
   registerThrottleIpc()
   registerCurrencyIpc()

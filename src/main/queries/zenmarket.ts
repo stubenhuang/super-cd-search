@@ -1,7 +1,6 @@
 import { acquireCloudflarePage, isCloudflareChallenge } from '../cloudflare'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, cloudflareChallenge, parseJPYPrice } from './types'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 
@@ -66,9 +65,6 @@ async function queryZenmarketWeb(catalogNumber: string): Promise<QueryResult> {
     }
 
     if (!extracted.name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('zenmarket', catalogNumber, html, searchUrl)
-      if (llmResult) return llmResult
       return notFound('zenmarket')
     }
 

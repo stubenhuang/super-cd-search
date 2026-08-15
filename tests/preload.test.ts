@@ -36,8 +36,9 @@ describe('preload API', () => {
     const fn = vi.fn()
     api.receive('query:progress', fn)
     api.receive('fromMain', fn)
+    api.receive('detail:enrich-progress', fn)
     api.receive('danger', fn)
-    expect(ipcRenderer.on).toHaveBeenCalledTimes(2)
+    expect(ipcRenderer.on).toHaveBeenCalledTimes(3)
   })
 
   it('forwards settings calls to ipcRenderer.invoke', async () => {
@@ -69,6 +70,9 @@ describe('preload API', () => {
 
     await api.executeBatchQuery(['X-1'], ['discogs', 'ebay'])
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('executeBatchQuery', ['X-1'], ['discogs', 'ebay'])
+
+    await api.enrichDetails('X-1', [], null)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('detail:enrich', 'X-1', [], null)
 
     await api.cancelBatchQuery()
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('cancelBatchQuery')

@@ -391,6 +391,14 @@
   margin-bottom: 0;
 }
 
+.st-field-hint {
+  margin-top: 6px;
+  font-family: var(--st-font-body);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--st-text-muted, #8a8178);
+}
+
 .st-label {
   display: flex;
   align-items: center;

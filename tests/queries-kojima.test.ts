@@ -182,7 +182,7 @@ describe('queryKojima', () => {
     expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
-  it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+  it('returns not_found when DOM extraction misses the name and never invokes LLM', async () => {
     const { page, browser, firstItem } = createKojimaPage()
     firstItem.$eval.mockImplementation(async (selector: string) => {
       if (selector === '.card__media img') return '//cdn.kojima.example/cover.jpg'
@@ -190,22 +190,11 @@ describe('queryKojima', () => {
     })
     page.evaluate = createDomEvaluate(['<body>normal search page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-    mockTryLLMParse.mockResolvedValue({
-      platform: 'kojima',
-      name: 'LLM Album',
-      artist: null,
-      priceMin: null,
-      priceMax: null,
-      coverUrl: null,
-      link: null,
-      status: 'found'
-    })
 
     const result = await runWithFakeTimers(() => queryKojima('ABC-123'))
 
-    expect(result.name).toBe('LLM Album')
-    expect(result.coverUrl).toBe('https://cdn.kojima.example/cover.jpg')
-    expect(mockTryLLMParse).toHaveBeenCalled()
+    expect(result.status).toBe('not_found')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('returns a query error when the browser fails', async () => {

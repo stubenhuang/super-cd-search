@@ -32,7 +32,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [llmApiBaseUrl, setLlmApiBaseUrl] = useState('https://api.openai.com/v1')
   const [llmApiKey, setLlmApiKey] = useState('')
   const [llmModel, setLlmModel] = useState('gpt-4o-mini')
-  const [llmTemperature, setLlmTemperature] = useState(0)
   const [llmPlatformDiscogs, setLlmPlatformDiscogs] = useState(true)
   const [llmPlatformEbay, setLlmPlatformEbay] = useState(true)
   const [llmPlatformKojima, setLlmPlatformKojima] = useState(true)
@@ -123,7 +122,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setLlmApiBaseUrl(llm?.apiBaseUrl || 'https://api.openai.com/v1')
     setLlmApiKey(llm?.apiKey || '')
     setLlmModel(llm?.model || 'gpt-4o-mini')
-    setLlmTemperature(llm?.temperature ?? 0)
     setLlmPlatformDiscogs(llm?.platformEnabled?.discogs ?? true)
     setLlmPlatformEbay(llm?.platformEnabled?.ebay ?? true)
     setLlmPlatformKojima(llm?.platformEnabled?.kojima ?? true)
@@ -166,7 +164,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         apiBaseUrl: llmApiBaseUrl,
         apiKey: llmApiKey,
         model: llmModel,
-        temperature: llmTemperature,
         platformEnabled: {
           discogs: llmPlatformDiscogs,
           ebay: llmPlatformEbay,
@@ -525,6 +522,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   placeholder="https://api.openai.com/v1"
                   disabled={!llmEnabled}
                 />
+                <div className="st-field-hint">{t('llm.apiBaseUrlHint')}</div>
               </div>
               <div className="st-field">
                 <label className="st-label">
@@ -552,24 +550,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   disabled={!llmEnabled}
                 />
               </div>
-              <div className="st-field">
-                <label className="st-label">
-                  <span className="st-label-icon">◈</span> {t('llm.temperature')}
-                </label>
-                <div className="st-range-wrap">
-                  <input
-                    type="range"
-                    className="st-range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={llmTemperature}
-                    onChange={e => setLlmTemperature(parseFloat(e.target.value))}
-                    disabled={!llmEnabled}
-                  />
-                  <span className="st-range-value">{llmTemperature.toFixed(1)}</span>
-                </div>
-              </div>
               <div className="st-deco-divider">
                 <div className="st-deco-line"></div>
                 <div className="st-deco-diamond"></div>
@@ -578,27 +558,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               <label className="st-label" style={{ marginBottom: '12px' }}>
                 <span className="st-label-icon">◈</span> {t('llm.platformSelection')}
               </label>
+              <div className="st-section-desc" style={{ marginBottom: '12px' }}>
+                {t('llm.smartSourcesHint')}
+              </div>
               <div className="st-platform-grid">
-                <label className={`st-check-item ${llmPlatformDiscogs ? 'checked' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={llmPlatformDiscogs}
-                    onChange={e => setLlmPlatformDiscogs(e.target.checked)}
-                    disabled={!llmEnabled}
-                  />
-                  <span className="st-check-box"></span>
-                  <span className="st-check-name">Discogs</span>
-                </label>
-                <label className={`st-check-item ${llmPlatformEbay ? 'checked' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={llmPlatformEbay}
-                    onChange={e => setLlmPlatformEbay(e.target.checked)}
-                    disabled={!llmEnabled}
-                  />
-                  <span className="st-check-box"></span>
-                  <span className="st-check-name">eBay</span>
-                </label>
                 <label className={`st-check-item ${llmPlatformKojima ? 'checked' : ''}`}>
                   <input
                     type="checkbox"

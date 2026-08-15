@@ -2,7 +2,6 @@ import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
 
@@ -204,16 +203,8 @@ async function queryHmvWeb(catalogNumber: string, cookies?: string): Promise<Que
       link = `${HMV_WEB_URL}${link}`
     }
 
-    // DOM extraction first; only fall back to LLM when the key field is missing.
     if (!name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('hmv', catalogNumber, html, searchUrl)
-      if (llmResult) {
-        if (!llmResult.coverUrl && coverUrl) {
-          llmResult.coverUrl = coverUrl
-        }
-        return llmResult
-      }
+      return notFound('hmv')
     }
 
     let priceMin: number | null = null

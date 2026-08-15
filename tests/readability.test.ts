@@ -79,4 +79,82 @@ describe('compressHtml', () => {
     expect(result.text).not.toContain('color: red')
     expect(result.text).toContain('visible text')
   })
+
+  it('surfaces JSON-LD Product structured data next to the article text', () => {
+    const html = `
+      <html>
+        <head><title>Great Album</title></head>
+        <body>
+          <article><p>Some descriptive text about the album.</p></article>
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org/",
+            "@type": "Product",
+            "name": "ベートーヴェン: チェロ・ソナタ全曲",
+            "byArtist": { "@type": "Person", "name": "ピエール・フルニエ" },
+            "genre": "クラシック",
+            "itemVariant": "CD",
+            "releaseDate": "2015-06-17",
+            "brand": { "@type": "Organization", "name": "TOWER RECORDS UNIVERSAL VINTAGE COLLECTION +plus" }
+          }
+          </script>
+        </body>
+      </html>`
+
+    const result = compressHtml(html, 'https://tower.jp/item/3895788')
+    expect(result.text).toContain('[STRUCTURED DATA]')
+    expect(result.text).toContain('genre: クラシック')
+    expect(result.text).toContain('label: TOWER RECORDS UNIVERSAL VINTAGE COLLECTION +plus')
+    expect(result.text).toContain('format: CD')
+    expect(result.text).toContain('released: 2015-06-17')
+    expect(result.text).toContain('artist: ピエール・フルニエ')
+    expect(result.text).toContain('name: ベートーヴェン: チェロ・ソナタ全曲')
+  })
+
+  it('handles JSON-LD with @graph and array genres', () => {
+    const html = `
+      <html>
+        <body>
+          <p>body text</p>
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@graph": [
+              { "@type": "WebSite", "name": "Shop" },
+              {
+                "@type": "Product",
+                "name": "Some Album",
+                "genre": ["Rock", "Prog Rock"],
+                "itemVariant": "CD",
+                "brand": "Sony Music Labels"
+              }
+            ]
+          }
+          </script>
+        </body>
+      </html>`
+
+    const result = compressHtml(html)
+    expect(result.text).toContain('genre: Rock, Prog Rock')
+    expect(result.text).toContain('label: Sony Music Labels')
+  })
+
+  it('skips structured data when the page has no JSON-LD', () => {
+    const html = '<html><body><article><p>No schema here.</p></article></body></html>'
+    const result = compressHtml(html)
+    expect(result.text).not.toContain('[STRUCTURED DATA]')
+  })
+
+  it('ignores malformed JSON-LD blocks', () => {
+    const html = `
+      <html>
+        <body>
+          <p>valid text</p>
+          <script type="application/ld+json">{ not valid json </script>
+        </body>
+      </html>`
+    const result = compressHtml(html)
+    expect(result.text).toContain('valid text')
+    expect(result.text).not.toContain('[STRUCTURED DATA]')
+  })
 })

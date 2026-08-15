@@ -11,7 +11,8 @@ import {
   clearAllCaches,
   clearSearchCache,
   initCachePersistence,
-  flushCacheToDisk
+  flushCacheToDisk,
+  QUERY_CACHE_VERSION
 } from '../src/main/queries/cache'
 import type { QueryResult } from '../src/shared/types'
 
@@ -120,6 +121,22 @@ describe('query result cache', () => {
     cacheQueryResult('X-1', errorResult)
     expect(getCachedQueryResult('ebay', 'X-1')).toBeNull()
   })
+
+  it('never caches Cloudflare challenge results', () => {
+    const challengeResult: QueryResult = {
+      platform: 'zenmarket',
+      name: null,
+      artist: null,
+      priceMin: null,
+      priceMax: null,
+      coverUrl: null,
+      link: null,
+      status: 'challenge',
+      error: 'Cloudflare 验证未完成'
+    }
+    cacheQueryResult('X-1', challengeResult)
+    expect(getCachedQueryResult('zenmarket', 'X-1')).toBeNull()
+  })
 })
 
 describe('product detail cache', () => {
@@ -189,7 +206,23 @@ describe('disk persistence', () => {
     const file = join(dir, 'search-cache.json')
     writeFileSync(file, JSON.stringify({
       queryResults: {
-        'discogs:X-1': { value: found('discogs', 'Stale'), fetchedAt: Date.now() - 2 * 24 * 60 * 60 * 1000 }
+        [`v${QUERY_CACHE_VERSION}:discogs:X-1`]: {
+          value: found('discogs', 'Stale'),
+          fetchedAt: Date.now() - 2 * 24 * 60 * 60 * 1000
+        }
+      },
+      productDetails: {}
+    }))
+
+    initCachePersistence(dir)
+    expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
+  })
+
+  it('ignores query results written by an older cache version', () => {
+    const file = join(dir, 'search-cache.json')
+    writeFileSync(file, JSON.stringify({
+      queryResults: {
+        'discogs:X-1': { value: found('discogs', 'Legacy'), fetchedAt: Date.now() }
       },
       productDetails: {}
     }))
@@ -214,5 +247,10 @@ describe('disk persistence', () => {
     writeFileSync(join(dir, 'search-cache.json'), '{not json')
     expect(() => initCachePersistence(dir)).not.toThrow()
     expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
+  })
+
+  it('clearSearchCache tolerates a missing cache file', () => {
+    initCachePersistence(dir)
+    expect(() => clearSearchCache()).not.toThrow()
   })
 })

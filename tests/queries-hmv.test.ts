@@ -144,6 +144,49 @@ describe('queryHmv', () => {
     })
   })
 
+  it('falls back to a direct img tag when the item image selector misses', async () => {
+    const { page, browser, firstItem } = createHmvPage()
+    firstItem.$eval.mockImplementation(async (selector: string) => {
+      if (selector === '.itemText h3 a, .itemText .title a') return 'Fallback Album'
+      if (selector === '.itemStates .name a, .itemStates .name') return 'Fallback Artist'
+      if (selector === '.itemImg img') return null
+      if (selector === 'img') return '//cdn.hmv.example/direct.jpg'
+      if (selector === '.itemImg a, h3 a') return null
+      if (selector === '.itemStates .price .right') return '¥2,200'
+      return null
+    })
+    page.evaluate = createDomEvaluate(['<body>normal search page</body>'])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const result = await runWithFakeTimers(() => queryHmv('ABC-123'))
+
+    expect(result.name).toBe('Fallback Album')
+    expect(result.coverUrl).toBe('https://cdn.hmv.example/direct.jpg')
+    expect(result.link).toBeNull()
+  })
+
+  it('falls back to a picture/source tag when both image selectors miss', async () => {
+    const { page, browser, firstItem } = createHmvPage()
+    firstItem.$eval.mockImplementation(async (selector: string) => {
+      if (selector === '.itemText h3 a, .itemText .title a') return 'Picture Album'
+      if (selector === '.itemStates .name a, .itemStates .name') return 'Picture Artist'
+      if (selector === '.itemImg img') return null
+      if (selector === 'img') return null
+      if (selector === 'picture source, source') return '//cdn.hmv.example/picture.jpg'
+      if (selector === '.itemImg a, h3 a') return null
+      if (selector === '.itemStates .price .right') return '¥1,000'
+      return null
+    })
+    page.evaluate = createDomEvaluate(['<body>normal search page</body>'])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const result = await runWithFakeTimers(() => queryHmv('ABC-123'))
+
+    expect(result.name).toBe('Picture Album')
+    expect(result.coverUrl).toBe('https://cdn.hmv.example/picture.jpg')
+    expect(result.link).toBeNull()
+  })
+
   it('prefers DOM extraction and skips LLM when the name is found', async () => {
     const { page, browser } = createHmvPage()
     page.evaluate = createDomEvaluate([
@@ -168,7 +211,7 @@ describe('queryHmv', () => {
     expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
-  it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+  it('returns not_found when DOM extraction misses the name and never invokes LLM', async () => {
     const { page, browser, firstItem } = createHmvPage()
     firstItem.$eval.mockImplementation(async (selector: string) => {
       if (selector === '.itemText h3 a, .itemText .title a') return null
@@ -179,22 +222,11 @@ describe('queryHmv', () => {
     })
     page.evaluate = createDomEvaluate(['<body>normal search page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-    mockTryLLMParse.mockResolvedValue({
-      platform: 'hmv',
-      name: 'LLM Album',
-      artist: null,
-      priceMin: null,
-      priceMax: null,
-      coverUrl: null,
-      link: null,
-      status: 'found'
-    })
 
     const result = await runWithFakeTimers(() => queryHmv('ABC-123'))
 
-    expect(result.name).toBe('LLM Album')
-    expect(result.coverUrl).toBe('https://cdn.hmv.example/cover.jpg')
-    expect(mockTryLLMParse).toHaveBeenCalled()
+    expect(result.status).toBe('not_found')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('returns a query error when the browser fails', async () => {

@@ -7,11 +7,14 @@ import type {
   DisplayCurrency,
   CloudflarePlatform,
   CloudflareChallengeResult,
-  CloudflareSessionStatus
+  CloudflareSessionStatus,
+  DetailEnrichmentResult,
+  QueryResult,
+  CDDetails
 } from '../shared/types'
 
 const validSendChannels = ['toMain'] as const
-const validReceiveChannels = ['fromMain', 'query:progress'] as const
+const validReceiveChannels = ['fromMain', 'query:progress', 'detail:enrich-progress'] as const
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
@@ -38,6 +41,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('getUsdToDisplayRate', target),
   executeBatchQuery: (catalogNumbers: string[], platforms?: Platform[]): Promise<BatchQueryResult[]> =>
     ipcRenderer.invoke('executeBatchQuery', catalogNumbers, platforms),
+  enrichDetails: (
+    catalogNumber: string,
+    existingResults: QueryResult[],
+    knownDetails?: CDDetails | null
+  ): Promise<DetailEnrichmentResult> =>
+    ipcRenderer.invoke('detail:enrich', catalogNumber, existingResults, knownDetails),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),

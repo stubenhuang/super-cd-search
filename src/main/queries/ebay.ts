@@ -5,7 +5,6 @@ import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
 import { type Page, type ElementHandle } from 'puppeteer'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 
 const EBAY_API_URL = 'https://api.ebay.com'
@@ -279,13 +278,10 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
       return { success: true, result: notFound('ebay') }
     }
 
-    // DOM extraction first; only fall back to LLM when the key field is missing.
     const name = await firstItem.$eval('.s-item__title, h3, [class*="title"]', (el: Element) => el.textContent?.trim() || null).catch(() => null)
 
     if (!name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('ebay', catalogNumber, html, searchUrl)
-      if (llmResult) return { success: true, result: llmResult }
+      return { success: true, result: notFound('ebay') }
     }
 
     // Extract image

@@ -94,11 +94,19 @@ const CACHE_TTL = 24 * 60 * 60 * 1000 // 1 day
 const QUERY_CACHE_MAX = 1000
 const DETAIL_CACHE_MAX = 1000
 
+/**
+ * Bump this whenever a query's extracted shape changes in a way that makes
+ * previously cached results incomplete. Old entries are ignored and get
+ * dropped on the next disk write.
+ */
+export const QUERY_CACHE_VERSION = 3
+const QUERY_CACHE_KEY_PREFIX = `v${QUERY_CACHE_VERSION}:`
+
 const queryResultCache = createTtlCache<string, QueryResult>(CACHE_TTL, QUERY_CACHE_MAX)
 const productDetailCache = createTtlCache<string, unknown>(CACHE_TTL, DETAIL_CACHE_MAX)
 
 function queryCacheKey(platform: Platform, catalogNumber: string): string {
-  return `${platform}:${catalogNumber.toUpperCase()}`
+  return `${QUERY_CACHE_KEY_PREFIX}${platform}:${catalogNumber.toUpperCase()}`
 }
 
 /**
@@ -197,6 +205,7 @@ function loadCacheFromDisk(): void {
   try {
     const data = JSON.parse(readFileSync(file, 'utf-8')) as PersistedCacheEntry
     for (const [key, entry] of Object.entries(data.queryResults ?? {})) {
+      if (!key.startsWith(QUERY_CACHE_KEY_PREFIX)) continue
       if (Date.now() - entry.fetchedAt <= CACHE_TTL) {
         queryResultCache.seed(key, entry.value, entry.fetchedAt)
       }

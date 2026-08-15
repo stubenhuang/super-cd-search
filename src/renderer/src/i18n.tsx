@@ -121,14 +121,15 @@ const zh = {
   'cache.clearFailed': '清空缓存失败',
 
   // LLM
-  'llm.desc': '配置 OpenAI 兼容 API，用于智能内容解析与元数据提取。',
-  'llm.enable': '启用 LLM 解析',
-  'llm.enableDesc': '使用 AI 从网页提取结构化数据',
+  'llm.desc': '配置 OpenAI 兼容 API。启用后，详情页字段缺失时可点击「智能生成」逐源补齐，搜索过程本身不会自动调用 LLM。',
+  'llm.enable': '启用 LLM 智能生成',
+  'llm.enableDesc': '允许在详情页使用 AI 补齐缺失字段（按需调用）',
   'llm.apiBaseUrl': 'API Base URL',
+  'llm.apiBaseUrlHint': '可填服务商根地址或 /v1 地址（如 https://api.deepseek.com）；也可直接填完整的 .../chat/completions 地址',
   'llm.apiKey': 'API Key',
   'llm.model': 'Model',
-  'llm.temperature': 'Temperature',
-  'llm.platformSelection': '平台选择',
+  'llm.platformSelection': '智能生成数据源',
+  'llm.smartSourcesHint': '智能生成固定排除 Discogs 与 eBay；只会逐个分析能搜索到商品的来源。',
 
   // Cloudflare
   'cloudflare.desc': 'Suruga-ya 与 ZenMarket 使用 Cloudflare 反爬。点击「验证」会启动一个真实 Chrome 窗口，请在里面手动完成验证；验证通过后，搜索会直接在这个 Chrome 里进行。',
@@ -162,7 +163,26 @@ const zh = {
   'detail.genre': '类型',
   'detail.copy': '复制信息',
   'detail.copied': '已复制',
-  'detail.close': '关闭'
+  'detail.close': '关闭',
+  'detail.smartGenerate': '智能生成',
+  'detail.smartGenerateTitle': '逐源获取详情页，用 LLM 补齐缺失字段',
+  'detail.smartGenerating': '智能生成中…',
+  'detail.smartMissing': '缺失: {fields}',
+  'detail.smartNoLlm': '尚未配置 LLM，请先到「设置 → LLM 配置」启用并填写 API 信息',
+  'detail.smartComplete': '详情字段已全部补齐',
+  'detail.smartPartial': '已分析 {count} 个来源，仍有个别字段缺失',
+  'detail.smartFailed': '智能生成失败，请稍后重试',
+  'detail.smartSearching': '正在查找 {platform}…',
+  'detail.smartFetching': '正在打开 {platform} 详情页…',
+  'detail.smartAnalyzing': '正在用 LLM 分析 {platform}…',
+  'detail.smartSkipped': '跳过 {platform}：{reason}',
+  'detail.smartSkipDisabled': '已在 LLM 平台选择中禁用',
+  'detail.smartSkipNotFound': '未搜索到商品',
+  'detail.smartSkipNoLink': '没有商品链接',
+  'detail.smartSkipCloudflare': 'Cloudflare 验证未完成',
+  'detail.smartSkipFetch': '详情页获取失败',
+  'detail.smartSkipLlm': 'LLM 分析失败',
+  'detail.smartSkipUnknown': '跳过'
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -270,14 +290,15 @@ const en: Record<keyof typeof zh, string> = {
   'cache.cleared': 'Search cache cleared',
   'cache.clearFailed': 'Failed to clear cache',
 
-  'llm.desc': 'Configure an OpenAI-compatible API for intelligent content parsing and metadata extraction.',
-  'llm.enable': 'Enable LLM Parsing',
-  'llm.enableDesc': 'Use AI to extract structured data from web pages',
+  'llm.desc': 'Configure an OpenAI-compatible API. When enabled, missing detail fields can be filled on demand with "Smart Generate" — searches never call the LLM automatically.',
+  'llm.enable': 'Enable LLM Smart Generate',
+  'llm.enableDesc': 'Allow AI to fill missing detail fields on demand',
   'llm.apiBaseUrl': 'API Base URL',
+  'llm.apiBaseUrlHint': 'Use the provider root or /v1 URL (e.g. https://api.deepseek.com), or the full .../chat/completions endpoint',
   'llm.apiKey': 'API Key',
   'llm.model': 'Model',
-  'llm.temperature': 'Temperature',
-  'llm.platformSelection': 'Platform Selection',
+  'llm.platformSelection': 'Smart-fill Sources',
+  'llm.smartSourcesHint': 'Smart generation always excludes Discogs and eBay; it only analyzes sources where a product was found.',
 
   'cloudflare.desc': 'Suruga-ya and ZenMarket use Cloudflare anti-bot protection. Clicking "Verify" opens a real Chrome window — complete the verification there manually; once verified, searches run inside that Chrome.',
   'cloudflare.status': 'Platform Status',
@@ -309,7 +330,26 @@ const en: Record<keyof typeof zh, string> = {
   'detail.genre': 'Genre',
   'detail.copy': 'Copy Info',
   'detail.copied': 'Copied',
-  'detail.close': 'Close'
+  'detail.close': 'Close',
+  'detail.smartGenerate': 'Smart Generate',
+  'detail.smartGenerateTitle': 'Fetch detail pages source by source and fill missing fields with LLM',
+  'detail.smartGenerating': 'Generating…',
+  'detail.smartMissing': 'Missing: {fields}',
+  'detail.smartNoLlm': 'LLM is not configured. Enable it and fill in the API settings under Settings → LLM Config.',
+  'detail.smartComplete': 'All detail fields are complete',
+  'detail.smartPartial': 'Analyzed {count} sources, some fields are still missing',
+  'detail.smartFailed': 'Smart generation failed, please retry',
+  'detail.smartSearching': 'Searching {platform}…',
+  'detail.smartFetching': 'Opening {platform} detail page…',
+  'detail.smartAnalyzing': 'Analyzing {platform} with LLM…',
+  'detail.smartSkipped': 'Skipped {platform}: {reason}',
+  'detail.smartSkipDisabled': 'Disabled in LLM platform selection',
+  'detail.smartSkipNotFound': 'No product found',
+  'detail.smartSkipNoLink': 'No product link',
+  'detail.smartSkipCloudflare': 'Cloudflare verification incomplete',
+  'detail.smartSkipFetch': 'Failed to fetch detail page',
+  'detail.smartSkipLlm': 'LLM analysis failed',
+  'detail.smartSkipUnknown': 'Skipped'
 }
 
 const dictionaries: Record<Language, Record<TranslationKey, string>> = { zh, en }

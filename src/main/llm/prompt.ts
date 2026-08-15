@@ -1,58 +1,90 @@
-import type { Platform } from '../../shared/types'
+import type { Platform, CDDetails } from '../../shared/types'
+import { DETAIL_KEYS, isValidDetailValue } from '../../shared/details'
 import type { CompressedContent } from '../parser/readability'
 
-export function buildParsePrompt(
+const PLATFORM_NAMES: Record<Platform, string> = {
+  discogs: 'Discogs',
+  ebay: 'eBay',
+  kojima: 'Kojima Rokuon',
+  hmv: 'HMV Japan',
+  yahoo: 'Yahoo Shopping Japan',
+  cdjapan: 'CDJapan',
+  tower: 'Tower Records Japan',
+  surugaya: 'Suruga-ya',
+  zenmarket: 'ZenMarket'
+}
+
+const DETAIL_FIELD_NAMES: Record<keyof CDDetails, string> = {
+  label: 'label (record label)',
+  format: 'format (CD, SACD, LP, Blu-spec CD, etc.)',
+  country: 'country of release',
+  released: 'release date',
+  genre: 'genre / style'
+}
+
+/**
+ * Build the prompt used by the on-demand "smart generate" flow. Unlike the old
+ * whole-page parser, the LLM is only asked for the fields that are currently
+ * missing and is explicitly told not to touch existing values.
+ *
+ * The webpage content passed in already includes the page's JSON-LD
+ * structured data (see compressHtml), which Japanese retailers embed as the
+ * authoritative source for genre/label/format/release date. The prompt tells
+ * the model to prefer that section, then normalizes values to the same
+ * conventions Discogs produces (English genre/country names, "CD, Album"
+ * style formats, ISO dates) so the detail modal shows consistent output
+ * regardless of source platform.
+ */
+export function buildDetailFillPrompt(
   platform: Platform,
   catalogNumber: string,
-  content: CompressedContent
+  content: CompressedContent,
+  missingFields: (keyof CDDetails)[],
+  knownDetails: CDDetails
 ): string {
-  const platformNames: Record<Platform, string> = {
-    discogs: 'Discogs',
-    ebay: 'eBay',
-    kojima: 'Kojima Rokuon',
-    hmv: 'HMV Japan',
-    yahoo: 'Yahoo Shopping Japan',
-    cdjapan: 'CDJapan',
-    tower: 'Tower Records Japan',
-    surugaya: 'Suruga-ya',
-    zenmarket: 'ZenMarket'
-  }
+  const requestedFields = missingFields.length > 0 ? missingFields : [...DETAIL_KEYS]
+  const knownLines = DETAIL_KEYS
+    .filter(key => isValidDetailValue(knownDetails[key]))
+    .map(key => `- ${DETAIL_FIELD_NAMES[key]}: ${knownDetails[key]}`)
+    .join('\n')
 
-  return `You are a CD/vinyl product information extractor. Extract product details from the following webpage content.
+  const missingLines = requestedFields
+    .map(key => `    "${key}": "extracted value or null"`)
+    .join(',\n')
 
-Platform: ${platformNames[platform]}
+  return `You are a CD/vinyl metadata extractor specialized in Japanese music retail pages.
+
+Platform: ${PLATFORM_NAMES[platform]}
 Catalog Number: ${catalogNumber}
 Page URL: ${content.pageUrl}
 
 Webpage Content:
 ${content.text}
 
-Extract the following fields and return them as a JSON object. If a field cannot be found, set it to null.
+Known details (already collected from other sources — do NOT change or return these):
+${knownLines || '(none)'}
 
-Required JSON format:
+Missing fields to find on this page:
+${requestedFields.map(key => `- ${DETAIL_FIELD_NAMES[key]}`).join('\n')}
+
+Extract ONLY the missing fields from the webpage content above and return a JSON object in exactly this shape:
+
 {
-  "name": "Product title/name",
-  "artist": "Artist/performer name",
-  "priceMin": Minimum price as number (in original currency),
-  "priceMax": Maximum price as number (in original currency, same as priceMin if single price),
-  "priceCurrency": "Currency code (JPY, USD, EUR, GBP, etc.)",
-  "coverUrl": "Cover image URL - use one from [IMAGE URLs] section above, or construct from the page URL if obvious",
-  "link": "Product page URL - use the Page URL above if it points to a product, otherwise pick the best matching URL from [LINK URLs] section",
   "details": {
-    "label": "Record label name",
-    "format": "Format (CD, SACD, LP, Vinyl, etc.)",
-    "country": "Country of release",
-    "released": "Release date",
-    "genre": "Music genre/style"
+${missingLines}
   }
 }
 
-Important:
-1. Extract prices exactly as shown on the page with the original currency
-2. If there's a price range, set priceMin and priceMax accordingly; if single price, set both to the same value
-3. For Japanese platforms (HMV, Kojima, Yahoo), prices are usually in JPY
-4. For coverUrl: pick the most likely product cover image from the [IMAGE URLs] section. Prefer larger images over thumbnails.
-5. For link: use the Page URL if it's a product page, otherwise find the best product link from the [LINK URLs] section
-6. Return ONLY the JSON object, no other text or explanation
-7. Ensure the JSON is valid and parseable`
+Rules:
+1. If the page contains a "[STRUCTURED DATA]" section, trust it first — it is machine-readable metadata embedded by the shop and is more reliable than prose. Use its values for the matching fields (genre, label, format, released).
+2. Normalize values to standard Discogs-style conventions so results look consistent across platforms:
+   - country: use the English country name ("Japan", "US", "UK", ...). The Japanese "国内" means "Japan" (domestic release); "輸入盤"/"輸入" means an import (leave as the stated country, e.g. "UK", "US", or null when unspecified).
+   - format: use the Discogs style, e.g. "CD, Album", "CD, Album, Stereo", "SACD", "LP, Reissue". The Japanese "CDアルバム" → "CD, Album", "SHM-CD" stays "SHM-CD", "Blu-spec CD" stays as-is.
+   - released: prefer an ISO date "YYYY-MM-DD" (e.g. "2015年06月17日" → "2015-06-17"); fall back to the year alone when only a year is given.
+   - genre: translate Japanese genre names to English ("クラシック" → "Classical", "ジャズ" → "Jazz", "ロック" → "Rock", "ポップス" → "Pop", "アニメ" → "Anime", "サウンドトラック" → "Soundtrack"), and combine multiple genres with ", ".
+   - label: keep the label name exactly as written (proper noun, no translation).
+3. Set a field to null when it cannot be found clearly on the page — never invent or guess values.
+4. Do not return fields that were listed as already known.
+5. If the page shows multiple releases/formats, prefer the one matching the catalog number above.
+6. Return ONLY the JSON object, no markdown fences, no explanations.`
 }

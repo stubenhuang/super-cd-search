@@ -48,7 +48,7 @@ describe('queryCdjapan', () => {
         '<h1><span itemprop="name">CDJapan Album</span></h1>' +
         '<h3 class="person"><a>Some Artist</a></h3>' +
         '<span class="label media">CD Maxi</span>' +
-        '<span itemprop="price" content="2182">2182yen</span>' +
+        '<span itemprop="price" content="18.83">3000yen</span>' +
         '<span itemprop="releaseDate">June 03, 2026</span>' +
         '</body></html>'
     ])
@@ -60,16 +60,31 @@ describe('queryCdjapan', () => {
       platform: 'cdjapan',
       name: 'CDJapan Album',
       artist: 'Some Artist',
-      priceMin: 2182,
-      priceMax: 2182,
+      priceMin: 3000,
+      priceMax: 3000,
       coverUrl: 'https://st.cdjapan.co.jp/pictures/l/15/19/X-1.jpg',
       link: 'https://www.cdjapan.co.jp/product/X-1',
       status: 'found',
       details: { format: 'CD Maxi', released: 'June 03, 2026' }
     })
     expect(page.goto).toHaveBeenCalledWith('https://www.cdjapan.co.jp/product/X-1', expect.anything())
-    expect(mockConvert).toHaveBeenCalledWith(2182, 'JPY')
+    expect(mockConvert).toHaveBeenCalledWith(3000, 'JPY')
     expect(mockBrowserPool.release).toHaveBeenCalledWith(browser, page)
+  })
+
+  it('uses the priceCurrency meta when the visible label is not in yen', async () => {
+    const { page, browser } = createCdjapanPage()
+    page.evaluate = createDomEvaluate([
+      '<html><head><meta itemprop="priceCurrency" content="USD"></head><body>' +
+        '<h1><span itemprop="name">Localized Album</span></h1>' +
+        '<span itemprop="price" content="18.83">US$18.83</span>' +
+        '</body></html>'
+    ])
+    mockBrowserPool.acquire.mockResolvedValue({ browser, page })
+
+    const result = await queryCdjapan('X-2')
+    expect(result.priceMin).toBe(18.83)
+    expect(mockConvert).toHaveBeenCalledWith(18.83, 'USD')
   })
 
   it('returns not_found when the page has no product name', async () => {
@@ -82,24 +97,14 @@ describe('queryCdjapan', () => {
     expect(mockBrowserPool.release).toHaveBeenCalledWith(browser, page)
   })
 
-  it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+  it('returns not_found when DOM extraction misses the name and never invokes LLM', async () => {
     const { page, browser } = createCdjapanPage()
     page.evaluate = createDomEvaluate(['<html><body>some page</body></html>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-    mockTryLLMParse.mockResolvedValue({
-      platform: 'cdjapan',
-      name: 'LLM Album',
-      artist: null,
-      priceMin: 5,
-      priceMax: 5,
-      coverUrl: null,
-      link: null,
-      status: 'found'
-    })
 
     const result = await queryCdjapan('X-1')
-    expect(result.name).toBe('LLM Album')
-    expect(mockTryLLMParse).toHaveBeenCalledWith('cdjapan', 'X-1', '<html></html>', expect.stringContaining('/product/'))
+    expect(result.status).toBe('not_found')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('serves a repeated lookup from the query cache', async () => {

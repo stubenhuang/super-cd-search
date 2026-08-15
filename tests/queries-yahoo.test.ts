@@ -160,7 +160,7 @@ describe('queryYahoo', () => {
     expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
-  it('falls back to LLM parsing when DOM extraction misses the name', async () => {
+  it('returns not_found when DOM extraction misses the name and never invokes LLM', async () => {
     const { page, browser, firstItem } = createYahooPage()
     firstItem.evaluate.mockImplementation(async () => ({
       name: null,
@@ -171,22 +171,11 @@ describe('queryYahoo', () => {
     }))
     page.evaluate = createDomEvaluate(['<body>normal search page</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-    mockTryLLMParse.mockResolvedValue({
-      platform: 'yahoo',
-      name: 'LLM Album',
-      artist: null,
-      priceMin: null,
-      priceMax: null,
-      coverUrl: null,
-      link: null,
-      status: 'found'
-    })
 
     const result = await runWithFakeTimers(() => queryYahoo('ABC-123'))
 
-    expect(result.name).toBe('LLM Album')
-    expect(result.coverUrl).toBe('https://cdn.example.com/cover.jpg')
-    expect(mockTryLLMParse).toHaveBeenCalled()
+    expect(result.status).toBe('not_found')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('returns a query error when the browser fails', async () => {

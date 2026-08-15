@@ -1,12 +1,13 @@
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
-import { convertToUSDWithFallback } from '../currency'
+import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 
 const CDJAPAN_WEB_URL = 'https://www.cdjapan.co.jp'
+
+const PRICE_CURRENCIES: Currency[] = ['JPY', 'USD', 'EUR', 'GBP', 'CNY']
 
 /**
  * CDJapan exposes product pages at /product/{catalogNumber}, so no search step
@@ -35,17 +36,21 @@ async function queryCdjapanWeb(catalogNumber: string, cookies?: string): Promise
       const cover = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || null
       const released = document.querySelector('span[itemprop="releaseDate"]')?.textContent?.trim() || null
       const priceEl = document.querySelector('span[itemprop="price"]')
-      const priceText = priceEl?.getAttribute('content') || priceEl?.textContent?.trim() || null
+      const visiblePrice = priceEl?.textContent?.trim() || null
+      const priceContent = priceEl?.getAttribute('content') || null
+      const priceCurrency = document.querySelector('meta[itemprop="priceCurrency"]')?.getAttribute('content') || null
+      // CDJapan puts the customer-localized conversion in the `content`
+      // attribute (e.g. 18.83 USD) while the visible label still shows the
+      // original yen amount (e.g. 3000yen). Always trust a visible yen label.
+      const priceText = visiblePrice && /yen|円/i.test(visiblePrice)
+        ? visiblePrice
+        : (priceContent || visiblePrice)
       const formatEl = document.querySelector('.label.media') || document.querySelector('.product_info .label')
       const format = formatEl?.textContent?.trim() || null
-      return { name, artist, cover, released, priceText, format }
+      return { name, artist, cover, released, priceText, priceCurrency, format }
     })
 
-    // DOM extraction first; only fall back to LLM when the key field is missing.
     if (!extracted.name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('cdjapan', catalogNumber, html, productUrl)
-      if (llmResult) return llmResult
       return notFound('cdjapan')
     }
 
@@ -55,8 +60,15 @@ async function queryCdjapanWeb(catalogNumber: string, cookies?: string): Promise
       const priceMatch = extracted.priceText.match(/\d[\d,.]*/)
       if (priceMatch) {
         const amount = parseFloat(priceMatch[0].replace(/,/g, ''))
+        const currencyCode = extracted.priceCurrency?.toUpperCase() ?? ''
+        const currency: Currency =
+          /yen|円/i.test(extracted.priceText)
+            ? 'JPY'
+            : PRICE_CURRENCIES.includes(currencyCode as Currency)
+              ? (currencyCode as Currency)
+              : 'JPY'
         if (!isNaN(amount)) {
-          const usd = await convertToUSDWithFallback(amount, 'JPY')
+          const usd = await convertToUSDWithFallback(amount, currency)
           priceMin = usd
           priceMax = usd
         }

@@ -24,6 +24,13 @@ const TOWER_CARD = '<div class="TOL-item-search-result-PC-result-list-display-it
   '<span class="artist-link"><a href="/artist/1">Some Artist</a></span>' +
   '</h3></div>' +
   '<div class="tr-item-block-info-price"><span class="is-text-amount">¥1,885</span></div>' +
+  '<div class="TOL-item-search-result-PC-result-display-contents-info-tag">' +
+  '<div class="common-tag is-gray is-light"><span class="text-size-12 is-text-gray">国内</span></div>' +
+  '<div class="TOL-item-search-result-PC-result-display-contents-info">' +
+  '<span class="text-size-12 is-text-gray">発売日：2015年06月17日 | 規格品番：' +
+  '<!HS>X-1<!HE> | レーベル：TOWER RECORDS UNIVERSAL VINTAGE COLLECTION +plus</span>' +
+  '</div>' +
+  '</div>' +
   '</div>'
 
 function createTowerPage() {
@@ -69,7 +76,12 @@ describe('queryTower', () => {
       coverUrl: 'https://cdn.tower.jp/za/l/cover.jpg',
       link: 'https://tower.jp/item/588401',
       status: 'found',
-      details: { format: 'CD' }
+      details: {
+        format: 'CD',
+        label: 'TOWER RECORDS UNIVERSAL VINTAGE COLLECTION +plus',
+        country: 'Japan',
+        released: '2015-06-17'
+      }
     })
     expect(page.goto).toHaveBeenCalledWith('https://tower.jp/search/item/X-1', expect.anything())
     expect(mockConvert).toHaveBeenCalledWith(1885, 'JPY')
@@ -86,26 +98,16 @@ describe('queryTower', () => {
     expect(mockBrowserPool.release).toHaveBeenCalledWith(browser, page)
   })
 
-  it('falls back to LLM parsing when the card has no name', async () => {
+  it('returns not_found when the card has no name and never invokes LLM', async () => {
     const { page, browser } = createTowerPage()
     page.evaluate = createDomEvaluate([
       `<html><body><div class="TOL-item-search-result-PC-result-list-display-item"><div class="tr-item-block-info-item-name"><h3><a href="https://tower.jp/item/1"></a></h3></div></div></body></html>`
     ])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-    mockTryLLMParse.mockResolvedValue({
-      platform: 'tower',
-      name: 'LLM Album',
-      artist: null,
-      priceMin: 3,
-      priceMax: 3,
-      coverUrl: null,
-      link: null,
-      status: 'found'
-    })
 
     const result = await queryTower('X-1')
-    expect(result.name).toBe('LLM Album')
-    expect(mockTryLLMParse).toHaveBeenCalledWith('tower', 'X-1', '<html></html>', expect.stringContaining('/search/item/'))
+    expect(result.status).toBe('not_found')
+    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('serves a repeated lookup from the query cache', async () => {

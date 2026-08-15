@@ -4,7 +4,6 @@ import { throttledFetch } from '../throttle'
 import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
-import { tryLLMParse } from '../llm/parser'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
 
@@ -270,17 +269,8 @@ async function queryKojimaWeb(catalogNumber: string, cookies?: string): Promise<
       link = `${KOJIMA_WEB_URL}${link}`
     }
 
-    // DOM extraction first; only fall back to LLM when the key field is missing.
     if (!name) {
-      const html = await page.content()
-      const llmResult = await tryLLMParse('kojima', catalogNumber, html, searchUrl)
-      if (llmResult) {
-        // Use our extracted coverUrl if LLM didn't find one
-        if (!llmResult.coverUrl && coverUrl) {
-          llmResult.coverUrl = coverUrl
-        }
-        return llmResult
-      }
+      return notFound('kojima')
     }
 
     // Navigate to product page for price and details

@@ -73,7 +73,6 @@ export interface LLMSettings {
   apiBaseUrl: string
   apiKey: string
   model: string
-  temperature: number
   platformEnabled: {
     discogs: boolean
     ebay: boolean
@@ -115,6 +114,48 @@ export interface BatchQueryProgress {
   platform: string
   status: 'loading' | 'complete' | 'error' | 'not_found' | 'found' | 'challenge'
   results?: QueryResult[]
+}
+
+/** Reasons a source can be skipped by the on-demand LLM detail enrichment. */
+export type DetailEnrichSkipReason =
+  | 'platform_disabled'
+  | 'not_found'
+  | 'no_product_link'
+  | 'cloudflare_challenge'
+  | 'fetch_failed'
+  | 'llm_failed'
+
+export type DetailEnrichProgressStatus =
+  | 'searching'
+  | 'fetching'
+  | 'analyzing'
+  | 'skipped'
+  | 'complete'
+  | 'error'
+
+/** Live progress emitted while the detail modal enriches missing fields. */
+export interface DetailEnrichProgress {
+  catalogNumber: string
+  platform: Platform
+  status: DetailEnrichProgressStatus
+  reason?: DetailEnrichSkipReason
+}
+
+export type DetailEnrichmentStatus = 'complete' | 'partial' | 'not_configured' | 'error'
+
+export interface DetailEnrichmentResult {
+  status: DetailEnrichmentStatus
+  /** False when LLM settings are disabled/incomplete; renderer shows a hint. */
+  llmConfigured: boolean
+  /** Final aggregated details (existing fields are never overwritten). */
+  details: CDDetails
+  /** Detail keys that are still missing after enrichment. */
+  missingFields: (keyof CDDetails)[]
+  /** Platforms whose product page was actually sent to the LLM. */
+  analyzedPlatforms: Platform[]
+  /** Platforms that were searched or had their product page fetched. */
+  attemptedPlatforms: Platform[]
+  skippedPlatforms: Array<{ platform: Platform; reason: DetailEnrichSkipReason }>
 }
 
 export interface BatchQueryResult {

@@ -75,7 +75,6 @@ describe('settings', () => {
       apiBaseUrl: 'https://api.example.com/v1',
       apiKey: 'k',
       model: 'm',
-      temperature: 0.2,
       platformEnabled: {
         discogs: true,
         ebay: false,
