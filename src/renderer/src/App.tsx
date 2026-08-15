@@ -285,11 +285,6 @@ function App() {
   const [exportError, setExportError] = useState<string | null>(null)
   const exportResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Left panel resizable width (persisted locally).
-  const [leftPanelWidth, setLeftPanelWidth] = useState(340)
-  const leftPanelWidthRef = useRef(340)
-  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null)
-
   // Platforms queried by the currently running search. Resolved from the
   // latest settings each time a search starts (see handleSearch).
   const [activePlatforms, setActivePlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
@@ -763,54 +758,6 @@ function App() {
     }
   }, [])
 
-  // Restore the saved left-panel width on mount.
-  useEffect(() => {
-    try {
-      const saved = Number(localStorage.getItem('super-cd-search:left-width'))
-      if (Number.isFinite(saved) && saved >= 280 && saved <= 460) {
-        setLeftPanelWidth(saved)
-        leftPanelWidthRef.current = saved
-      }
-    } catch {
-      // localStorage may be unavailable; keep the default width.
-    }
-  }, [])
-
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    resizeStateRef.current = { startX: e.clientX, startWidth: leftPanelWidthRef.current }
-    document.body.classList.add('is-resizing')
-  }, [])
-
-  const resetPanelWidth = useCallback(() => {
-    setLeftPanelWidth(340)
-    leftPanelWidthRef.current = 340
-    try { localStorage.setItem('super-cd-search:left-width', '340') } catch {}
-  }, [])
-
-  // Drag-to-resize the left panel.
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      const state = resizeStateRef.current
-      if (!state) return
-      const next = Math.min(460, Math.max(280, state.startWidth + (e.clientX - state.startX)))
-      leftPanelWidthRef.current = next
-      setLeftPanelWidth(next)
-    }
-    const onUp = () => {
-      if (!resizeStateRef.current) return
-      resizeStateRef.current = null
-      document.body.classList.remove('is-resizing')
-      try { localStorage.setItem('super-cd-search:left-width', String(leftPanelWidthRef.current)) } catch {}
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [])
-
   return (
     <div className="app-container">
       <header className="app-header">
@@ -857,7 +804,7 @@ function App() {
         </div>
       </header>
       <main className="app-main">
-        <aside className="left-panel" style={{ width: leftPanelWidth }}>
+        <aside className="left-panel">
           <div className="panel-header">
             <h2>{t('panel.input')}</h2>
           </div>
@@ -974,12 +921,6 @@ function App() {
             )}
           </div>
         </aside>
-        <div
-          className="panel-resizer"
-          onMouseDown={handleResizeStart}
-          onDoubleClick={resetPanelWidth}
-          title={t('panel.resizerTitle')}
-        />
         <section className="right-panel">
           <div className="panel-header">
             <h2>{t('panel.results')}</h2>
