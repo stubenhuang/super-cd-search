@@ -97,6 +97,7 @@ export interface IElectronAPI {
   applyLanServer: () => Promise<LanServerStatus>
   regenerateLanToken: () => Promise<LanServerStatus>
   setLanSearchAvailability: (available: boolean) => Promise<void>
+  setLanSearchCatalogCount: (count: number) => Promise<void>
 }
 
 declare global {

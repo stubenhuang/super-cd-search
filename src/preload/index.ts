@@ -84,5 +84,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   regenerateLanToken: (): Promise<LanServerStatus> =>
     ipcRenderer.invoke('lan:regenerateToken'),
   setLanSearchAvailability: (available: boolean): Promise<void> =>
-    ipcRenderer.invoke('lan:setAvailability', available)
+    ipcRenderer.invoke('lan:setAvailability', available),
+  setLanSearchCatalogCount: (count: number): Promise<void> =>
+    ipcRenderer.invoke('lan:setCatalogCount', count)
 })

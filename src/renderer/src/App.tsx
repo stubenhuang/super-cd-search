@@ -297,6 +297,18 @@ function App() {
     return lines.map(normalizeCatalogNumber)
   }, [])
 
+  const MAX_SEARCH_INPUT_CATALOGS = 10
+
+  const handleInputChange = useCallback((nextInput: string) => {
+    const nextCount = parseCatalogNumbers(nextInput).length
+    if (nextCount > MAX_SEARCH_INPUT_CATALOGS) {
+      setError(t('error.maxCatalog'))
+      return
+    }
+    setInput(nextInput)
+    if (error === t('error.maxCatalog')) setError(null)
+  }, [error, parseCatalogNumbers, t])
+
   const handleSearch = useCallback(async () => {
     const catalogNumbers = parseCatalogNumbers(input)
 
@@ -397,6 +409,7 @@ function App() {
       setInput(prev => {
         const existing = parseCatalogNumbers(prev)
         if (existing.includes(catalogNumber)) return prev
+        if (existing.length >= MAX_SEARCH_INPUT_CATALOGS) return prev
         const base = prev.trimEnd()
         return base ? `${base}\n${catalogNumber}` : catalogNumber
       })
@@ -479,6 +492,12 @@ function App() {
 
   const hasProgress = completedCatalogs.size > 0 || progressStatus.size > 0
   const catalogNumbers = useMemo(() => parseCatalogNumbers(input), [input, parseCatalogNumbers])
+
+  // Keep the LAN barcode service aware of how many numbers are already in the
+  // input so phone scans are rejected when the 10-number limit is reached.
+  useEffect(() => {
+    void window.electronAPI.setLanSearchCatalogCount(catalogNumbers.length).catch(() => {})
+  }, [catalogNumbers.length])
 
   // During a deep-search pass, the progress panel switches to show the deep
   // targets and their deep platform set instead of the main search context.
@@ -835,7 +854,7 @@ function App() {
               className="catalog-input"
               placeholder={t('input.placeholder')}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => handleInputChange(e.target.value)}
               disabled={isLoading || isCancelling || isDeepSearching}
               rows={10}
             />

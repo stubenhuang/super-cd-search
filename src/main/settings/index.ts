@@ -41,6 +41,7 @@ const schema = {
   /** Internal only: randomized access token embedded in the LAN QR URL. */
   lanToken: { type: 'string' as const, default: '' },
   barcodeProviders: { type: 'array' as const, default: DEFAULT_BARCODE_PROVIDERS },
+  lastExportDirectory: { type: 'string' as const, default: '' },
   llm: {
     type: 'object' as const,
     properties: {
@@ -244,7 +245,8 @@ export function getSettings(): Settings {
     lanEnabled: store.get('lanEnabled') as boolean || undefined,
     lanHost: store.get('lanHost') as string || undefined,
     lanPort: store.get('lanPort') as number || undefined,
-    barcodeProviders: store.get('barcodeProviders') as BarcodeProvider[] || DEFAULT_BARCODE_PROVIDERS
+    barcodeProviders: store.get('barcodeProviders') as BarcodeProvider[] || DEFAULT_BARCODE_PROVIDERS,
+    lastExportDirectory: store.get('lastExportDirectory') as string || undefined
   }
 }
 

@@ -30,17 +30,34 @@ let lastStart: { host: string; port: number; token: string } | null = null
 /** Whether the desktop renderer reported its search controls as idle. */
 let rendererSearchAvailable = false
 
+/** How many catalog numbers are currently in the desktop search input. */
+let rendererCatalogCount = 0
+
 export function setLanSearchAvailability(available: boolean): void {
   rendererSearchAvailable = available
 }
+
+export function setLanSearchCatalogCount(count: number): void {
+  rendererCatalogCount = count
+}
+
+const MAX_SEARCH_INPUT_CATALOGS = 10
 
 function canAcceptLanBarcodeLookup(): boolean {
   return (
     httpServer.running &&
     BrowserWindow.getAllWindows().length > 0 &&
     !isBatchQueryRunning() &&
-    rendererSearchAvailable
+    rendererSearchAvailable &&
+    rendererCatalogCount < MAX_SEARCH_INPUT_CATALOGS
   )
+}
+
+function barcodeUnavailableMessage(): string {
+  if (rendererCatalogCount >= MAX_SEARCH_INPUT_CATALOGS) {
+    return '桌面搜索框已达到 10 个编号上限，请先移除一些编号'
+  }
+  return '桌面端正在搜索，请稍后再试'
 }
 
 function emitCatalogAdded(event: LanCatalogAddedEvent): void {
@@ -79,7 +96,7 @@ function providerNames(providers: BarcodeCatalogCandidate['source'][]): string {
  */
 export async function handleLanBarcodeLookup(rawBarcode: string): Promise<LanBarcodeLookupResponse> {
   if (!canAcceptLanBarcodeLookup()) {
-    return { status: 'unavailable', barcode: rawBarcode.slice(0, 32), message: '桌面端正在搜索，请稍后再试' }
+    return { status: 'unavailable', barcode: rawBarcode.slice(0, 32), message: barcodeUnavailableMessage() }
   }
 
   const barcode = normalizeDiscogsBarcode(rawBarcode)
@@ -91,7 +108,7 @@ export async function handleLanBarcodeLookup(rawBarcode: string): Promise<LanBar
 
   if (resolution.status === 'found') {
     if (!canAcceptLanBarcodeLookup()) {
-      return { status: 'unavailable', barcode, message: '桌面端已开始搜索，请稍后再试' }
+      return { status: 'unavailable', barcode, message: barcodeUnavailableMessage() }
     }
 
     const event: LanCatalogAddedEvent = {
@@ -152,7 +169,7 @@ export async function handleLanBarcodeSelection(
   rawCatalogNumber: string
 ): Promise<LanBarcodeLookupResponse> {
   if (!canAcceptLanBarcodeLookup()) {
-    return { status: 'unavailable', barcode: rawBarcode.slice(0, 32), message: '桌面端正在搜索，请稍后再试' }
+    return { status: 'unavailable', barcode: rawBarcode.slice(0, 32), message: barcodeUnavailableMessage() }
   }
 
   const barcode = normalizeDiscogsBarcode(rawBarcode)

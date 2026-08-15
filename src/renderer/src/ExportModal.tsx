@@ -24,11 +24,22 @@ export function ExportModal({ isOpen, busy, statusText, error, onClose, onConfir
   const [pickingDirectory, setPickingDirectory] = useState(false)
 
   useEffect(() => {
-    if (isOpen) {
-      setDirectory('')
-      setDeepSearch(false)
-      setSmartGenerate(false)
-      setPickingDirectory(false)
+    if (!isOpen) return
+
+    setDirectory('')
+    setDeepSearch(false)
+    setSmartGenerate(false)
+    setPickingDirectory(false)
+
+    let cancelled = false
+    void window.electronAPI
+      .getSetting('lastExportDirectory')
+      .then(saved => {
+        if (!cancelled && saved) setDirectory(saved)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
     }
   }, [isOpen])
 

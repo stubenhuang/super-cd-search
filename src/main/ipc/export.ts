@@ -1,8 +1,9 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
-import { mkdirSync } from 'fs'
-import { join } from 'path'
+import { existsSync, mkdirSync } from 'fs'
+import { dirname, join } from 'path'
 import type { DirectorySelectResult, ExcelExportPayload, ExportFileResult, ExportProgress } from '../../shared/types'
 import { writeExcelFile } from '../excel/exporter'
+import { getSetting, setSetting } from '../settings'
 import { logger } from '../logger'
 
 function emitExportProgress(progress: ExportProgress): void {
@@ -15,10 +16,16 @@ export function registerExportIpc(): void {
   ipcMain.handle('export:select-directory', async (): Promise<DirectorySelectResult> => {
     logger.debug('ipc.export', 'export:select-directory invoked')
     try {
-      const result = await dialog.showOpenDialog({
+      const lastDirectory = getSetting('lastExportDirectory')
+      const options: Electron.OpenDialogOptions = {
         title: '选择导出目录',
         properties: ['openDirectory', 'createDirectory']
-      })
+      }
+      if (lastDirectory && existsSync(lastDirectory)) {
+        options.defaultPath = lastDirectory
+      }
+
+      const result = await dialog.showOpenDialog(options)
 
       const path = result.filePaths?.[0]
       if (result.canceled || !path) {
@@ -26,6 +33,7 @@ export function registerExportIpc(): void {
         return { status: 'cancelled' }
       }
 
+      setSetting('lastExportDirectory', path)
       logger.debug('ipc.export', 'export directory selected', { path })
       return { status: 'selected', path }
     } catch (err) {
@@ -66,6 +74,7 @@ export function registerExportIpc(): void {
         await writeExcelFile(payload, filePath, undefined, (current, total) => {
           emitExportProgress({ phase: 'images', current, total })
         })
+        setSetting('lastExportDirectory', targetDirectory || dirname(filePath))
         logger.info('ipc.export', 'Excel exported', { filePath, rowCount: payload.rows.length })
         return { status: 'saved', filePath }
       } catch (err) {

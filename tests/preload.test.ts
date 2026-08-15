@@ -122,5 +122,8 @@ describe('preload API', () => {
 
     await api.setLanSearchAvailability(true)
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:setAvailability', true)
+
+    await api.setLanSearchCatalogCount(10)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:setCatalogCount', 10)
   })
 })

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ipcMain, dialog } from 'electron'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { dirname, join } from 'path'
 
 const { mockGetSettings, mockGetSetting, mockSetSetting, mockDeleteSetting } = vi.hoisted(() => ({
   mockGetSettings: vi.fn(),
@@ -42,12 +42,13 @@ const { mockWriteExcelFile } = vi.hoisted(() => ({
   mockWriteExcelFile: vi.fn()
 }))
 
-const { mockGetLanStatus, mockGetLanCandidates, mockApplyLanServer, mockRegenerateLanToken, mockSetLanSearchAvailability } = vi.hoisted(() => ({
+const { mockGetLanStatus, mockGetLanCandidates, mockApplyLanServer, mockRegenerateLanToken, mockSetLanSearchAvailability, mockSetLanSearchCatalogCount } = vi.hoisted(() => ({
   mockGetLanStatus: vi.fn(),
   mockGetLanCandidates: vi.fn(),
   mockApplyLanServer: vi.fn(),
   mockRegenerateLanToken: vi.fn(),
-  mockSetLanSearchAvailability: vi.fn()
+  mockSetLanSearchAvailability: vi.fn(),
+  mockSetLanSearchCatalogCount: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({
@@ -90,7 +91,8 @@ vi.mock('../src/main/lan', () => ({
   getLanServerStatus: mockGetLanStatus,
   listLanCandidates: mockGetLanCandidates,
   regenerateLanToken: mockRegenerateLanToken,
-  setLanSearchAvailability: mockSetLanSearchAvailability
+  setLanSearchAvailability: mockSetLanSearchAvailability,
+  setLanSearchCatalogCount: mockSetLanSearchCatalogCount
 }))
 
 vi.mock('../src/main/logger', () => ({
@@ -165,6 +167,9 @@ describe('registerLanIpc', () => {
     expect(mockSetLanSearchAvailability).toHaveBeenCalledWith(true)
     await handler('lan:setAvailability')(null, false)
     expect(mockSetLanSearchAvailability).toHaveBeenCalledWith(false)
+
+    await handler('lan:setCatalogCount')(null, 10)
+    expect(mockSetLanSearchCatalogCount).toHaveBeenCalledWith(10)
   })
 })
 
@@ -284,6 +289,7 @@ describe('registerExportIpc', () => {
 
     expect(result).toEqual({ status: 'saved', filePath })
     expect(mockWriteExcelFile).toHaveBeenCalledWith(payload, filePath, undefined, expect.any(Function))
+    expect(mockSetSetting).toHaveBeenCalledWith('lastExportDirectory', dirname(filePath))
   })
 
   it('writes directly to the target directory without a save dialog', async () => {
@@ -294,6 +300,7 @@ describe('registerExportIpc', () => {
 
     expect(result).toEqual({ status: 'saved', filePath: join(dir, 'result.xlsx') })
     expect(mockWriteExcelFile).toHaveBeenCalledWith(payload, join(dir, 'result.xlsx'), undefined, expect.any(Function))
+    expect(mockSetSetting).toHaveBeenCalledWith('lastExportDirectory', dir)
   })
 
   it('selects an export directory', async () => {
@@ -302,6 +309,7 @@ describe('registerExportIpc', () => {
 
     registerExportIpc()
     expect(await handler('export:select-directory')(null)).toEqual({ status: 'selected', path: dir })
+    expect(mockSetSetting).toHaveBeenCalledWith('lastExportDirectory', dir)
   })
 
   it('returns cancelled when the save dialog is dismissed', async () => {

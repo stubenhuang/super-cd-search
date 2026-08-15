@@ -28,6 +28,7 @@ beforeEach(() => {
   deleteSetting('lanHost')
   deleteSetting('lanPort')
   deleteSetting('barcodeProviders')
+  deleteSetting('lastExportDirectory')
   setLanToken('')
 })
 
@@ -51,7 +52,8 @@ describe('settings', () => {
       lanEnabled: undefined,
       lanHost: undefined,
       lanPort: undefined,
-      barcodeProviders: DEFAULT_BARCODE_PROVIDERS
+      barcodeProviders: DEFAULT_BARCODE_PROVIDERS,
+      lastExportDirectory: undefined
     })
     expect(getSetting('discogsToken')).toBeUndefined()
   })
@@ -91,6 +93,12 @@ describe('settings', () => {
     expect(getSettings()).toMatchObject({ lanEnabled: true, lanHost: '192.168.1.5', lanPort: 9000 })
     expect('lanToken' in getSettings()).toBe(false)
     expect(getLanToken()).toBe('secret-token')
+  })
+
+  it('round-trips the last export directory', () => {
+    setSetting('lastExportDirectory', '/Users/me/Exports')
+    expect(getSetting('lastExportDirectory')).toBe('/Users/me/Exports')
+    expect(getSettings().lastExportDirectory).toBe('/Users/me/Exports')
   })
 
   it('round-trips the barcode provider order', () => {

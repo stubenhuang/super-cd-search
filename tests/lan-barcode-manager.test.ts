@@ -26,7 +26,8 @@ import {
   closeLanServer,
   handleLanBarcodeLookup,
   handleLanBarcodeSelection,
-  setLanSearchAvailability
+  setLanSearchAvailability,
+  setLanSearchCatalogCount
 } from '../src/main/lan'
 import { deleteSetting, setLanToken, setSetting } from '../src/main/settings'
 
@@ -49,6 +50,7 @@ beforeEach(() => {
   mockIsBatchQueryRunning.mockReturnValue(false)
   mockNormalizeBarcode.mockImplementation((barcode: string) => barcode)
   setLanSearchAvailability(false)
+  setLanSearchCatalogCount(0)
   setSetting('lanEnabled', true)
   setSetting('lanHost', '127.0.0.1')
   deleteSetting('lanPort')
@@ -57,6 +59,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   setLanSearchAvailability(false)
+  setLanSearchCatalogCount(0)
   setSetting('lanEnabled', false)
   await closeLanServer()
   vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
@@ -70,6 +73,19 @@ describe('handleLanBarcodeLookup', () => {
     expect(await handleLanBarcodeLookup('4988006812345')).toMatchObject({
       status: 'unavailable',
       message: expect.stringContaining('搜索')
+    })
+    expect(mockResolveBarcodeCatalogCached).not.toHaveBeenCalled()
+  })
+
+  it('rejects phone scans when the desktop input already has 10 numbers', async () => {
+    await applyLanServer()
+    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([mockDesktopWindow() as never])
+    setLanSearchAvailability(true)
+    setLanSearchCatalogCount(10)
+
+    expect(await handleLanBarcodeLookup('4988006812345')).toMatchObject({
+      status: 'unavailable',
+      message: expect.stringContaining('10')
     })
     expect(mockResolveBarcodeCatalogCached).not.toHaveBeenCalled()
   })

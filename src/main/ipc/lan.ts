@@ -4,7 +4,8 @@ import {
   getLanServerStatus,
   listLanCandidates,
   regenerateLanToken,
-  setLanSearchAvailability
+  setLanSearchAvailability,
+  setLanSearchCatalogCount
 } from '../lan'
 
 export function registerLanIpc(): void {
@@ -18,5 +19,9 @@ export function registerLanIpc(): void {
 
   ipcMain.handle('lan:setAvailability', (_event, available: boolean) => {
     setLanSearchAvailability(available === true)
+  })
+
+  ipcMain.handle('lan:setCatalogCount', (_event, count: number) => {
+    setLanSearchCatalogCount(Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0)
   })
 }

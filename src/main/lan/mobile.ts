@@ -40,15 +40,32 @@ export const MOBILE_PAGE_HTML = `<!doctype html>
     font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity .15s ease;
   }
   button:disabled { opacity: .5; cursor: wait; }
-  .primary { background: #b8860b; color: #2c2520; }
-  .secondary { margin-top: 10px; background: transparent; border-color: rgba(44,37,32,.2); color: inherit; }
+  .primary {
+    background: #b8860b; color: #2c2520; padding: 20px 18px;
+    font-size: 20px; border-radius: 16px;
+    box-shadow: 0 8px 22px rgba(184,134,11,.28);
+  }
+  .primary:active { transform: scale(.98); }
+  .scan-hint { margin: 12px 4px 18px; font-size: 12px; line-height: 1.6; opacity: .6; }
+  .manual-panel {
+    margin-top: 4px; border: 1px solid rgba(44,37,32,.15); border-radius: 12px;
+    background: transparent; text-align: left;
+  }
+  @media (prefers-color-scheme: dark) {
+    .manual-panel { border-color: rgba(245,238,227,.18); }
+  }
+  .manual-panel summary {
+    list-style: none; cursor: pointer; padding: 12px 14px;
+    font-size: 14px; font-weight: 600; opacity: .78;
+  }
+  .manual-panel summary::-webkit-details-marker { display: none; }
+  .manual-panel summary .chevron { float: right; transition: transform .15s ease; }
+  .manual-panel[open] summary .chevron { transform: rotate(180deg); }
+  .manual-body { padding: 0 14px 14px; }
+  .secondary { width: 100%; margin-top: 10px; background: transparent; border-color: rgba(44,37,32,.2); color: inherit; }
   @media (prefers-color-scheme: dark) {
     .secondary { border-color: rgba(245,238,227,.25); }
   }
-  .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: rgba(44,37,32,.45); font-size: 12px; }
-  @media (prefers-color-scheme: dark) { .divider { color: rgba(245,238,227,.45); } }
-  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(44,37,32,.15); }
-  @media (prefers-color-scheme: dark) { .divider::before, .divider::after { background: rgba(245,238,227,.15); } }
   input[type="text"] {
     width: 100%; padding: 13px 14px; border: 1px solid rgba(44,37,32,.25); border-radius: 12px;
     font: inherit; font-size: 16px; text-align: center; background: #f5f0e8; color: inherit;
@@ -90,12 +107,17 @@ export const MOBILE_PAGE_HTML = `<!doctype html>
 <main class="card">
   <span class="badge"><span class="dot"></span>LAN Connected · 已连接</span>
   <h1>快速添加 CD 编号</h1>
-  <p class="intro">拍摄 CD 盒上的条形码，或手动输入条码数字。<br>识别后会自动添加到电脑搜索框。</p>
-  <button id="scan-btn" class="primary" type="button">📷 拍照扫描条码</button>
+  <p class="intro">拍摄 CD 盒上的条形码，识别后会自动添加到电脑搜索框。</p>
+  <button id="scan-btn" class="primary" type="button">📷 扫描 CD 条码</button>
   <input id="file-input" type="file" accept="image/*" capture="environment" hidden>
-  <div class="divider">或</div>
-  <input id="barcode-input" type="text" inputmode="numeric" autocomplete="off" placeholder="输入 8–14 位条码数字">
-  <button id="submit-btn" class="secondary" type="button">添加编号</button>
+  <div class="scan-hint">点击按钮调起相机，对条码拍照即可自动识别</div>
+  <details class="manual-panel">
+    <summary>⌨️ 手动输入条码<span class="chevron">▾</span></summary>
+    <div class="manual-body">
+      <input id="barcode-input" type="text" inputmode="numeric" autocomplete="off" placeholder="输入 8–14 位条码数字">
+      <button id="submit-btn" class="secondary" type="button">添加编号</button>
+    </div>
+  </details>
   <div id="status" class="status" hidden></div>
 </main>
 <script src="/zxing.js"></script>

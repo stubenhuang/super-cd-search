@@ -184,6 +184,8 @@ export interface Settings {
    * Disabled providers are simply absent from this list.
    */
   barcodeProviders?: BarcodeProvider[]
+  /** Directory last used for Excel export; preselected next time. */
+  lastExportDirectory?: string
 }
 
 export interface BatchQueryProgress {
