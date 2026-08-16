@@ -103,15 +103,15 @@ const ENRICHMENT_CACHE_MAX = 500
  * previously cached results incomplete. Old entries are ignored and get
  * dropped on the next disk write.
  */
-export const QUERY_CACHE_VERSION = 3
+export const QUERY_CACHE_VERSION = 4
 const QUERY_CACHE_KEY_PREFIX = `v${QUERY_CACHE_VERSION}:`
 
 const queryResultCache = createTtlCache<string, QueryResult>(CACHE_TTL, QUERY_CACHE_MAX)
 const productDetailCache = createTtlCache<string, unknown>(CACHE_TTL, DETAIL_CACHE_MAX)
 const enrichmentCache = createTtlCache<string, CDDetails>(CACHE_TTL, ENRICHMENT_CACHE_MAX)
 
-function queryCacheKey(platform: Platform, catalogNumber: string): string {
-  return `${QUERY_CACHE_KEY_PREFIX}${platform}:${catalogNumber.toUpperCase()}`
+function queryCacheKey(platform: Platform, catalogNumber: string, context = 'default'): string {
+  return `${QUERY_CACHE_KEY_PREFIX}${platform}:${context}:${catalogNumber.toUpperCase()}`
 }
 
 function enrichmentCacheKey(catalogNumber: string): string {
@@ -122,22 +122,22 @@ function enrichmentCacheKey(catalogNumber: string): string {
  * Return a cached query result for the platform/catalog pair, or null.
  * Errors are never cached, so a transient failure is retried on the next run.
  */
-export function getCachedQueryResult(platform: Platform, catalogNumber: string): QueryResult | null {
-  const key = queryCacheKey(platform, catalogNumber)
+export function getCachedQueryResult(platform: Platform, catalogNumber: string, context = 'default'): QueryResult | null {
+  const key = queryCacheKey(platform, catalogNumber, context)
   const cached = queryResultCache.get(key) ?? null
   logger.debug('cache', cached ? 'query cache hit' : 'query cache miss', { platform, catalogNumber: catalogNumber.toUpperCase(), key })
   return cached
 }
 
 /** Store a successful query result (found / not_found) for later reuse. */
-export function cacheQueryResult(catalogNumber: string, result: QueryResult): void {
+export function cacheQueryResult(catalogNumber: string, result: QueryResult, context = 'default'): void {
   // Errors and challenge results are never cached, so a transient failure or an
   // expired Cloudflare session is retried on the next run.
   if (result.status === 'error' || result.status === 'challenge') {
     logger.debug('cache', 'not caching transient result', { platform: result.platform, catalogNumber: catalogNumber.toUpperCase(), status: result.status })
     return
   }
-  queryResultCache.set(queryCacheKey(result.platform, catalogNumber), result)
+  queryResultCache.set(queryCacheKey(result.platform, catalogNumber, context), result)
   logger.debug('cache', 'query result cached', { platform: result.platform, catalogNumber: catalogNumber.toUpperCase() })
   schedulePersist()
 }

@@ -16,6 +16,7 @@ import { registerLanIpc } from './ipc/lan'
 import { applyLanServer, closeLanServer } from './lan'
 import { initCachePersistence, flushCacheToDisk } from './queries/cache'
 import { prewarmExchangeRates } from './currency'
+import { isAllowedRendererNavigation, isSafeExternalUrl } from './security/urls'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -29,7 +30,8 @@ function createWindow() {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      sandbox: true
     },
     // Frameless title bar styling per platform.
     // - macOS: hiddenInset keeps the native traffic lights.
@@ -47,14 +49,13 @@ function createWindow() {
 
   // Prevent Electron from navigating inside the window
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('http://localhost')) {
-      event.preventDefault()
-      shell.openExternal(url)
-    }
+    if (isAllowedRendererNavigation(url, VITE_DEV_SERVER_URL)) return
+    event.preventDefault()
+    if (isSafeExternalUrl(url)) void shell.openExternal(url)
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (isSafeExternalUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
 
@@ -98,6 +99,10 @@ app.whenReady().then(async () => {
 
   // Register shell.openExternal handler
   ipcMain.handle('openExternal', async (_event, url: string) => {
+    if (!isSafeExternalUrl(url)) {
+      logger.warn('main', 'blocked unsafe external URL', { url: String(url).slice(0, 200) })
+      throw new Error('Only HTTP and HTTPS links can be opened')
+    }
     logger.debug('main', 'openExternal called', { url })
     await shell.openExternal(url)
   })

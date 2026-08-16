@@ -69,15 +69,15 @@ describe('executeBatchQuery', () => {
 
     expect(results.map(r => r.catalogNumber)).toEqual(['UCCG-90530', 'UICD-6234'])
     expect(results[0].results).toHaveLength(9)
-    expect(mockQueryDiscogs).toHaveBeenCalledWith('UCCG-90530')
-    expect(mockQueryEbay).toHaveBeenCalledWith('UCCG-90530')
-    expect(mockQueryKojima).toHaveBeenCalledWith('UCCG-90530')
-    expect(mockQueryHmv).toHaveBeenCalledWith('UCCG-90530')
-    expect(mockQueryYahoo).toHaveBeenCalledWith('UCCG-90530')
-    expect(mockQueryCdjapan).toHaveBeenCalledWith('UCCG-90530')
-    expect(mockQueryTower).toHaveBeenCalledWith('UCCG-90530')
-    expect(mockQuerySurugaya).toHaveBeenCalledWith('UCCG-90530')
-    expect(mockQueryZenmarket).toHaveBeenCalledWith('UCCG-90530')
+    expect(mockQueryDiscogs).toHaveBeenCalledWith('UCCG-90530', expect.anything())
+    expect(mockQueryEbay).toHaveBeenCalledWith('UCCG-90530', expect.anything())
+    expect(mockQueryKojima).toHaveBeenCalledWith('UCCG-90530', expect.anything())
+    expect(mockQueryHmv).toHaveBeenCalledWith('UCCG-90530', expect.anything())
+    expect(mockQueryYahoo).toHaveBeenCalledWith('UCCG-90530', expect.anything())
+    expect(mockQueryCdjapan).toHaveBeenCalledWith('UCCG-90530', expect.anything())
+    expect(mockQueryTower).toHaveBeenCalledWith('UCCG-90530', expect.anything())
+    expect(mockQuerySurugaya).toHaveBeenCalledWith('UCCG-90530', expect.anything())
+    expect(mockQueryZenmarket).toHaveBeenCalledWith('UCCG-90530', expect.anything())
 
     // Progress events are emitted per platform
     const events = sendMock.mock.calls.map(([channel, data]) => ({ channel, event: data.event }))
@@ -128,6 +128,12 @@ describe('executeBatchQuery', () => {
   it('throws when more than 10 catalog numbers are provided', async () => {
     const tooMany = Array.from({ length: 11 }, (_, i) => `X-${i}`)
     await expect(executeBatchQuery(tooMany)).rejects.toThrow('Maximum 10 catalog numbers allowed')
+  })
+
+  it('deduplicates catalog numbers after normalization', async () => {
+    const results = await executeBatchQuery(['uccg90530', 'UCCG-90530', ' uccg 90530 '], ['discogs'])
+    expect(results.map(result => result.catalogNumber)).toEqual(['UCCG-90530'])
+    expect(mockQueryDiscogs).toHaveBeenCalledTimes(1)
   })
 
   it('records per-platform errors and continues with other platforms', async () => {

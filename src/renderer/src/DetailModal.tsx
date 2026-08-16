@@ -147,9 +147,10 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
         setGenProgress(progress)
       }
     }
-    window.electronAPI.receive('detail:enrich-progress', handleProgress)
+    const unsubscribe = window.electronAPI.receive('detail:enrich-progress', handleProgress)
     return () => {
       active = false
+      unsubscribe()
     }
   }, [isOpen, catalogNumber])
 
@@ -185,7 +186,9 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
         setGenError(t('detail.smartPartial', { count: result.analyzedPlatforms.length }))
       }
     } catch (err) {
-      console.warn('smart generate failed:', err)
+      window.electronAPI.log('warn', 'detail.smartGenerate', 'smart generate failed', {
+        error: err instanceof Error ? err.message : String(err)
+      })
       window.electronAPI.log('warn', 'detail.smartGenerate', 'smart generate failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
       setGenError(t('detail.smartFailed'))
     } finally {

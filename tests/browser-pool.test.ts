@@ -123,6 +123,25 @@ describe('browserPool', () => {
     expect(third.browser).toBe(browserC)
   })
 
+  it('never exceeds the browser limit when acquires start concurrently', async () => {
+    const launchResolvers: Array<(browser: ReturnType<typeof createFakeBrowser>) => void> = []
+    mockLaunch.mockImplementation(() => new Promise(resolve => launchResolvers.push(resolve)))
+
+    const acquires = Array.from({ length: 6 }, () => browserPool.acquire())
+    await vi.waitFor(() => expect(mockLaunch).toHaveBeenCalledTimes(3))
+
+    const firstBrowsers = Array.from({ length: 3 }, () => createFakeBrowser())
+    launchResolvers.forEach((resolve, index) => resolve(firstBrowsers[index]))
+    const firstThree = await Promise.all(acquires.slice(0, 3))
+
+    expect(mockLaunch).toHaveBeenCalledTimes(3)
+    await Promise.all(firstThree.map(item => browserPool.release(item.browser, item.page)))
+    const remaining = await Promise.all(acquires.slice(3))
+
+    expect(mockLaunch).toHaveBeenCalledTimes(3)
+    expect(remaining.map(item => item.browser)).toEqual(expect.arrayContaining(firstBrowsers))
+  })
+
   it('release resets the page state and ignores unknown browsers', async () => {
     const page = createFakePage()
     const browser = createFakeBrowser(page)
@@ -173,6 +192,42 @@ describe('browserPool', () => {
     expect(browserB.close).toHaveBeenCalled()
     expect(browserC.close).toHaveBeenCalled()
     await rejection
+  })
+
+  it('does not retain a browser whose launch finishes after closeAll', async () => {
+    let finishLaunch!: (browser: ReturnType<typeof createFakeBrowser>) => void
+    mockLaunch.mockImplementation(() => new Promise(resolve => { finishLaunch = resolve }))
+    const browser = createFakeBrowser()
+    const acquiring = browserPool.acquire()
+    const assertion = expect(acquiring).rejects.toThrow('Browser pool closed')
+    await vi.waitFor(() => expect(mockLaunch).toHaveBeenCalledTimes(1))
+
+    await browserPool.closeAll()
+    finishLaunch(browser)
+
+    await assertion
+    expect(browser.close).toHaveBeenCalled()
+  })
+
+  it('removes a queued acquire when its caller aborts', async () => {
+    mockLaunch
+      .mockResolvedValueOnce(createFakeBrowser())
+      .mockResolvedValueOnce(createFakeBrowser())
+      .mockResolvedValueOnce(createFakeBrowser())
+    const acquired = await Promise.all([
+      browserPool.acquire(),
+      browserPool.acquire(),
+      browserPool.acquire()
+    ])
+    const controller = new AbortController()
+    const queued = browserPool.acquire(controller.signal)
+    const assertion = expect(queued).rejects.toMatchObject({ name: 'AbortError' })
+    controller.abort()
+    await assertion
+
+    await browserPool.release(acquired[0].browser, acquired[0].page)
+    const next = await browserPool.acquire()
+    expect(next.browser).toBe(acquired[0].browser)
   })
 
   it('serves images a 1x1 GIF and blocks media/font requests on new pages', async () => {

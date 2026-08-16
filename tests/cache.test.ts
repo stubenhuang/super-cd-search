@@ -108,6 +108,12 @@ describe('query result cache', () => {
     expect(getCachedQueryResult('ebay', 'UCCG-90530')).toBeNull()
   })
 
+  it('isolates entries per query context', () => {
+    cacheQueryResult('UCCG-90530', found('hmv'), 'fast')
+    expect(getCachedQueryResult('hmv', 'UCCG-90530', 'fast')?.name).toBe('Album')
+    expect(getCachedQueryResult('hmv', 'UCCG-90530', 'full')).toBeNull()
+  })
+
   it('never caches error results', () => {
     const errorResult: QueryResult = {
       platform: 'ebay',

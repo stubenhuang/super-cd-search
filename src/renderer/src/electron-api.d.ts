@@ -66,11 +66,12 @@ export interface IElectronAPI {
   /** The host platform (e.g. 'darwin', 'win32', 'linux'). */
   platform: string
   send: (channel: string, data: unknown) => void
-  receive: (channel: string, func: (...args: unknown[]) => void) => void
+  receive: (channel: string, func: (...args: unknown[]) => void) => () => void
   log: (level: string, tag: string, message: string, meta?: Record<string, unknown>) => void
   getSettings: () => Promise<Settings>
   getSetting: <K extends keyof Settings>(key: K) => Promise<Settings[K] | undefined>
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => Promise<void>
+  updateSettings: (values: Partial<Settings>) => Promise<void>
   deleteSetting: <K extends keyof Settings>(key: K) => Promise<void>
   clearSearchCache: () => Promise<void>
   getThrottleStatus: () => Promise<ThrottleStatus>

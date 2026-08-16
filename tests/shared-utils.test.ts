@@ -10,6 +10,10 @@ describe('normalizeCatalogNumber', () => {
     expect(normalizeCatalogNumber('  uicd6234 ')).toBe('UICD-6234')
   })
 
+  it('normalizes whitespace between the prefix and number', () => {
+    expect(normalizeCatalogNumber('UCCG 90530')).toBe('UCCG-90530')
+  })
+
   it('leaves already-normalized numbers untouched', () => {
     expect(normalizeCatalogNumber('UCCG-90530')).toBe('UCCG-90530')
   })

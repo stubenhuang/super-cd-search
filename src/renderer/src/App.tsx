@@ -95,7 +95,11 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
 
   const handleViewClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
     e.preventDefault()
-    window.electronAPI.openExternal(url).catch(err => console.error('openExternal error:', err))
+    window.electronAPI.openExternal(url).catch(err => {
+      window.electronAPI.log('warn', 'result.externalLink', 'failed to open external link', {
+        error: err instanceof Error ? err.message : String(err)
+      })
+    })
   }
 
   const cardClass = `platform-card ${result.status}`
@@ -189,7 +193,15 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
         <span className="result-catalog">{catalogNumber}</span>
         <span
           className="result-title"
+          role="button"
+          tabIndex={0}
           onClick={() => onTitleClick(catalogNumber)}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onTitleClick(catalogNumber)
+            }
+          }}
           title={t('result.titleClick')}
         >
           {displayName}
@@ -205,7 +217,7 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
               key={r.platform}
               result={r}
               isLowestPrice={r.status === 'found' && effectiveMin !== null && effectiveMin === priceBounds.lowestPrice}
-              isHighestPrice={r.status === 'found' && effectiveMax !== null && effectiveMax === priceBounds.highestPrice}
+              isHighestPrice={priceBounds.lowestPrice !== priceBounds.highestPrice && r.status === 'found' && effectiveMax !== null && effectiveMax === priceBounds.highestPrice}
               displayCurrency={displayCurrency}
               usdToCnyRate={usdToCnyRate}
             />
@@ -415,7 +427,7 @@ function App() {
       mobileNoticeTimerRef.current = setTimeout(() => setMobileNotice(null), 4000)
     }
 
-    window.electronAPI.receive('lan:catalog-added', handleCatalogAdded)
+    return window.electronAPI.receive('lan:catalog-added', handleCatalogAdded)
   }, [parseCatalogNumbers, t])
 
   useEffect(() => {
@@ -425,7 +437,7 @@ function App() {
         setExportProgressText(t('export.preparingImages', { current: progress.current, total: progress.total }))
       }
     }
-    window.electronAPI.receive('export:progress', handleExportProgress)
+    return window.electronAPI.receive('export:progress', handleExportProgress)
   }, [t])
 
   useEffect(() => {
@@ -462,7 +474,7 @@ function App() {
       }
     }
 
-    window.electronAPI.receive('query:progress', handleProgress)
+    return window.electronAPI.receive('query:progress', handleProgress)
   }, [])
 
   // Play completion sound when search finishes

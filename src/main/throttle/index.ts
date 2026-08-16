@@ -17,6 +17,7 @@ interface DomainState {
     maxDelay: number
   }>
   active: boolean
+  timer: ReturnType<typeof setTimeout> | null
 }
 
 interface BackoffState {
@@ -66,7 +67,7 @@ export interface ThrottleOptions {
 function getDomainState(domain: string): DomainState {
   let state = domainStates.get(domain)
   if (!state) {
-    state = { lastRequestTime: 0, pending: [], active: false }
+    state = { lastRequestTime: 0, pending: [], active: false, timer: null }
     domainStates.set(domain, state)
   }
   return state
@@ -78,7 +79,7 @@ function getRandomDelay(minDelay: number, maxDelay: number): number {
 
 function processQueue(domain: string): void {
   const state = domainStates.get(domain)
-  if (!state || state.active || state.pending.length === 0) return
+  if (!state || state.active || state.timer || state.pending.length === 0) return
 
   const next = state.pending[0]
   const now = Date.now()
@@ -86,7 +87,14 @@ function processQueue(domain: string): void {
   const requiredDelay = getRandomDelay(next.minDelay, next.maxDelay)
   const remaining = Math.max(0, requiredDelay - elapsed)
 
-  setTimeout(() => {
+  state.timer = setTimeout(() => {
+    state.timer = null
+    // A request may have become active through another completion path while
+    // this timer was pending. Never release two requests for the same domain.
+    if (state.active) {
+      processQueue(domain)
+      return
+    }
     const entry = state.pending.shift()
     if (entry) {
       state.active = true
@@ -106,6 +114,13 @@ export async function throttledFetch(
 
   return new Promise<Response>((resolve, reject) => {
     const state = getDomainState(domain)
+    const externalSignal = options?.signal
+    if (externalSignal?.aborted) {
+      const error = new Error('Aborted')
+      error.name = 'AbortError'
+      reject(error)
+      return
+    }
     logger.debug('throttle', 'request queued', { domain, url, pending: state.pending.length + 1, active: state.active })
 
     const executeRequest = async () => {
@@ -113,6 +128,8 @@ export async function throttledFetch(
       logger.debug('throttle', 'request executing', { domain, url })
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), timeoutMs)
+      const abortFromCaller = () => controller.abort()
+      externalSignal?.addEventListener('abort', abortFromCaller, { once: true })
 
       try {
         let response: Response
@@ -127,6 +144,7 @@ export async function throttledFetch(
         }
         response = await fetch(url, requestOptions)
         clearTimeout(timeout)
+        externalSignal?.removeEventListener('abort', abortFromCaller)
 
         if (response.status === 429) {
           const backoff = backoffStates.get(domain) || { attempt: 0, nextDelay: BACKOFF_DELAYS[0] }
@@ -145,7 +163,19 @@ export async function throttledFetch(
 
           backoffStates.set(domain, backoff)
 
-          setTimeout(async () => {
+          let retryTimer: ReturnType<typeof setTimeout>
+          const abortBackoff = () => {
+            clearTimeout(retryTimer)
+            backoffStates.delete(domain)
+            state.active = false
+            const error = new Error('Aborted')
+            error.name = 'AbortError'
+            reject(error)
+            processQueue(domain)
+          }
+          externalSignal?.addEventListener('abort', abortBackoff, { once: true })
+          retryTimer = setTimeout(async () => {
+            externalSignal?.removeEventListener('abort', abortBackoff)
             backoff.attempt++
             backoff.nextDelay = BACKOFF_DELAYS[Math.min(backoff.attempt, BACKOFF_DELAYS.length - 1)]
             state.active = false
@@ -171,6 +201,7 @@ export async function throttledFetch(
         processQueue(domain)
       } catch (err) {
         clearTimeout(timeout)
+        externalSignal?.removeEventListener('abort', abortFromCaller)
         state.active = false
         state.lastRequestTime = Date.now()
         logger.warn('throttle', 'request failed', { domain, url, error: err instanceof Error ? err.message : String(err) })
@@ -179,7 +210,24 @@ export async function throttledFetch(
       }
     }
 
-    state.pending.push({ run: executeRequest, minDelay, maxDelay })
+    const queued: DomainState['pending'][number] = { run: executeRequest, minDelay, maxDelay }
+    const abortWhileQueued = () => {
+      const index = state.pending.indexOf(queued)
+      if (index >= 0) {
+        state.pending.splice(index, 1)
+        const error = new Error('Aborted')
+        error.name = 'AbortError'
+        reject(error)
+        processQueue(domain)
+      }
+    }
+    externalSignal?.addEventListener('abort', abortWhileQueued, { once: true })
+    const run = queued.run
+    queued.run = () => {
+      externalSignal?.removeEventListener('abort', abortWhileQueued)
+      run()
+    }
+    state.pending.push(queued)
     processQueue(domain)
   })
 }

@@ -1,6 +1,7 @@
 import { getSetting } from '../settings'
 import { throttledFetch } from '../throttle'
 import { browserPool } from '../browser'
+import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult } from './types'
 import type { CDDetails } from '../../shared/types'
@@ -102,13 +103,13 @@ function getCachedRelease(releaseId: number): ReleaseCacheEntry | null {
   return entry
 }
 
-async function getDiscogsLowestPrice(releaseId: number, token: string): Promise<{ min: number | null; max: number | null }> {
+async function getDiscogsLowestPrice(releaseId: number, token: string, signal?: AbortSignal): Promise<{ min: number | null; max: number | null }> {
   const cached = getCachedRelease(releaseId)
   if (cached) return cached.prices
 
   try {
     const url = `${DISCOGS_API_URL}/marketplace/stats/${releaseId}?token=${token}`
-    const response = await throttledFetch('api.discogs.com', url, undefined, API_THROTTLE)
+    const response = await throttledFetch('api.discogs.com', url, signal ? { signal } : undefined, API_THROTTLE)
 
     if (response.ok) {
       const data = await response.json() as {
@@ -124,13 +125,14 @@ async function getDiscogsLowestPrice(releaseId: number, token: string): Promise<
       }
     }
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.discogs', 'marketplace stats failed', { releaseId, error: err instanceof Error ? err.message : String(err) })
   }
 
   return { min: null, max: null }
 }
 
-async function getReleaseDetails(releaseId: number, token: string): Promise<CDDetails> {
+async function getReleaseDetails(releaseId: number, token: string, signal?: AbortSignal): Promise<CDDetails> {
   const cached = getCachedRelease(releaseId)
   if (cached) {
     logger.debug('queries.discogs', 'release details cache hit', { releaseId })
@@ -140,7 +142,7 @@ async function getReleaseDetails(releaseId: number, token: string): Promise<CDDe
   try {
     const url = `${DISCOGS_API_URL}/releases/${releaseId}?token=${token}`
     logger.debug('queries.discogs', 'fetch release details', { releaseId })
-    const response = await throttledFetch('api.discogs.com', url, undefined, API_THROTTLE)
+    const response = await throttledFetch('api.discogs.com', url, signal ? { signal } : undefined, API_THROTTLE)
 
     if (!response.ok) {
       logger.debug('queries.discogs', 'release details request failed', { releaseId, status: response.status })
@@ -180,6 +182,7 @@ async function getReleaseDetails(releaseId: number, token: string): Promise<CDDe
     logger.debug('queries.discogs', 'release details parsed', { releaseId, details })
     return details
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.discogs', 'release details failed', { releaseId, error: err instanceof Error ? err.message : String(err) })
     return { label: null, format: null, country: null, released: null, genre: null }
   }
@@ -194,15 +197,15 @@ function compactCatalog(value: string): string {
  * marketplace price and release details concurrently, then cache the release
  * data in memory for other searches.
  */
-async function buildDiscogsResultFromHit(hit: DiscogsSearchHit, catalogNumber: string, token: string): Promise<QueryResult> {
+async function buildDiscogsResultFromHit(hit: DiscogsSearchHit, catalogNumber: string, token: string, signal?: AbortSignal): Promise<QueryResult> {
   const titleParts = hit.title.split(' - ')
   const artist = titleParts[0] || null
   const name = titleParts.slice(1).join(' - ') || hit.title
 
   // Fetch lowest marketplace price and release details concurrently.
   const [prices, details] = await Promise.all([
-    getDiscogsLowestPrice(hit.id, token),
-    getReleaseDetails(hit.id, token)
+    getDiscogsLowestPrice(hit.id, token, signal),
+    getReleaseDetails(hit.id, token, signal)
   ])
 
   if (!getCachedRelease(hit.id)) {
@@ -226,11 +229,11 @@ async function buildDiscogsResultFromHit(hit: DiscogsSearchHit, catalogNumber: s
   }
 }
 
-async function queryDiscogsApi(catalogNumber: string, token: string): Promise<QueryResult> {
+async function queryDiscogsApi(catalogNumber: string, token: string, signal?: AbortSignal): Promise<QueryResult> {
   const url = `${DISCOGS_API_URL}/database/search?catno=${encodeURIComponent(catalogNumber)}&type=release&token=${token}`
   logger.debug('queries.discogs', 'search API request', { catalogNumber })
 
-  const response = await throttledFetch('api.discogs.com', url, undefined, API_THROTTLE)
+  const response = await throttledFetch('api.discogs.com', url, signal ? { signal } : undefined, API_THROTTLE)
 
   if (!response.ok) {
     throw new Error(`Discogs API returned ${response.status}`)
@@ -262,7 +265,7 @@ async function queryDiscogsApi(catalogNumber: string, token: string): Promise<Qu
     title: first.title,
     exactCatalogMatch: !!exactMatch
   })
-  return buildDiscogsResultFromHit(first, catalogNumber, token)
+  return buildDiscogsResultFromHit(first, catalogNumber, token, signal)
 }
 
 /**
@@ -326,7 +329,7 @@ export async function queryDiscogsByBarcode(barcode: string): Promise<DiscogsBar
     }
 
     const result = await buildDiscogsResultFromHit(hit, catalogNumber, token)
-    cacheQueryResult(catalogNumber, result)
+    cacheQueryResult(catalogNumber, result, 'api')
 
     const lookup: DiscogsBarcodeLookup = {
       status: 'found',
@@ -344,12 +347,12 @@ export async function queryDiscogsByBarcode(barcode: string): Promise<DiscogsBar
   }
 }
 
-async function queryDiscogsWeb(catalogNumber: string): Promise<QueryResult> {
-  const { browser, page } = await browserPool.acquire()
+async function queryDiscogsWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  const { browser, page } = await browserPool.acquire(signal)
 
   try {
     const searchUrl = `${DISCOGS_WEB_URL}/search/?q=&type=release&catno=${encodeURIComponent(catalogNumber)}`
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     // Wait for results to load (fails fast when the empty state appears).
     await waitForResultOrNoResult(page, { resultSelector: 'div[role="listitem"]', timeoutMs: 4000 })
@@ -385,35 +388,41 @@ async function queryDiscogsWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function queryDiscogs(catalogNumber: string): Promise<QueryResult> {
+export async function queryDiscogs(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.discogs', 'query start', { catalogNumber })
-  const cached = getCachedQueryResult('discogs', catalogNumber)
+  const token = getSetting('discogsToken')
+  const cacheContext = token ? 'api' : 'web'
+  const cached = getCachedQueryResult('discogs', catalogNumber, cacheContext)
   if (cached) return cached
 
-  const token = getSetting('discogsToken')
   logger.debug('queries.discogs', 'query mode', { catalogNumber, hasApiToken: !!token })
 
   let result: QueryResult
 
   if (token) {
     try {
-      result = await queryDiscogsApi(catalogNumber, token)
+      result = await queryDiscogsApi(catalogNumber, token, signal)
     } catch (err) {
+      throwIfAborted(signal)
       logger.warn('queries.discogs', 'API failed, falling back to web scraping', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
       try {
-        result = await queryDiscogsWeb(catalogNumber)
+        result = await queryDiscogsWeb(catalogNumber, signal)
       } catch (webErr) {
+        throwIfAborted(signal)
         result = queryError('discogs', webErr instanceof Error ? webErr.message : 'Unknown error')
       }
     }
   } else {
     try {
-      result = await queryDiscogsWeb(catalogNumber)
+      result = await queryDiscogsWeb(catalogNumber, signal)
     } catch (err) {
+      throwIfAborted(signal)
       result = queryError('discogs', err instanceof Error ? err.message : 'Unknown error')
     }
   }
 
-  cacheQueryResult(catalogNumber, result)
+  throwIfAborted(signal)
+  cacheQueryResult(catalogNumber, result, cacheContext)
   return result
 }

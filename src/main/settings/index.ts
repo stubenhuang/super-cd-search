@@ -244,6 +244,11 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
   store.set(key, value)
 }
 
+/** Persist a settings form in one store write, avoiding partially saved UI state. */
+export function updateSettings(values: Partial<Settings>): void {
+  store.set(values)
+}
+
 export function deleteSetting<K extends keyof Settings>(key: K): void {
   store.delete(key)
 }

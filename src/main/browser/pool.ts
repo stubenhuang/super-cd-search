@@ -34,14 +34,22 @@ interface AcquiredInstance {
   fingerprint: Fingerprint
 }
 
+interface PoolWaiter {
+  resolve: (instance: AcquiredInstance) => void
+  reject: (error: Error) => void
+  signal?: AbortSignal
+  onAbort?: () => void
+}
+
 class BrowserPool {
   private instances: BrowserInstance[] = []
-  private waitQueue: Array<{
-    resolve: (instance: AcquiredInstance) => void
-    reject: (error: Error) => void
-  }> = []
+  /** Browser launches already in progress but not yet present in `instances`. */
+  private creatingCount = 0
+  private generation = 0
+  private waitQueue: PoolWaiter[] = []
 
-  async acquire(): Promise<AcquiredInstance> {
+  async acquire(signal?: AbortSignal): Promise<AcquiredInstance> {
+    if (signal?.aborted) throw this.abortError()
     const available = this.instances.find(i => !i.inUse)
 
     if (available) {
@@ -52,19 +60,49 @@ class BrowserPool {
       return { browser: available.browser, page, fingerprint: available.fingerprint }
     }
 
-    if (this.instances.length < MAX_CONCURRENT) {
-      logger.debug('browser.pool', 'creating new browser instance', { activeInstances: this.instances.length, maxConcurrent: MAX_CONCURRENT })
-      const instance = await this.createInstance()
-      this.instances.push(instance)
-      instance.inUse = true
-      const page = await this.createPage(instance)
-      instance.page = page
-      return { browser: instance.browser, page, fingerprint: instance.fingerprint }
+    // Reserve the slot before awaiting Chrome startup. Without the reservation,
+    // several concurrent callers can all observe `instances.length === 0` and
+    // launch well beyond MAX_CONCURRENT.
+    if (this.instances.length + this.creatingCount < MAX_CONCURRENT) {
+      this.creatingCount++
+      logger.debug('browser.pool', 'creating new browser instance', {
+        activeInstances: this.instances.length,
+        creatingInstances: this.creatingCount,
+        maxConcurrent: MAX_CONCURRENT
+      })
+      const generation = this.generation
+      try {
+        const instance = await this.createInstance()
+        try {
+          const page = await this.createPage(instance)
+          if (generation !== this.generation) throw new Error('Browser pool closed')
+          if (signal?.aborted) throw this.abortError()
+          instance.page = page
+          instance.inUse = true
+          this.instances.push(instance)
+          return { browser: instance.browser, page, fingerprint: instance.fingerprint }
+        } catch (err) {
+          await instance.browser.close().catch(() => {})
+          throw err
+        }
+      } finally {
+        this.creatingCount--
+        this.fillAvailableCapacity()
+      }
     }
 
     logger.debug('browser.pool', 'all instances busy, queueing acquire', { activeInstances: this.instances.length, queueLength: this.waitQueue.length })
     return new Promise((resolve, reject) => {
-      this.waitQueue.push({ resolve, reject })
+      const waiter: PoolWaiter = { resolve, reject, signal }
+      if (signal) {
+        waiter.onAbort = () => {
+          const index = this.waitQueue.indexOf(waiter)
+          if (index >= 0) this.waitQueue.splice(index, 1)
+          reject(this.abortError())
+        }
+        signal.addEventListener('abort', waiter.onAbort, { once: true })
+      }
+      this.waitQueue.push(waiter)
     })
   }
 
@@ -83,7 +121,7 @@ class BrowserPool {
     instance.inUse = false
 
     if (this.waitQueue.length > 0) {
-      const waiter = this.waitQueue.shift()
+      const waiter = this.takeNextWaiter()
       if (waiter) {
         logger.debug('browser.pool', 'handing released instance to queued waiter', { queueLength: this.waitQueue.length })
         instance.inUse = true
@@ -96,10 +134,48 @@ class BrowserPool {
 
   async closeAll(): Promise<void> {
     logger.debug('browser.pool', 'closing all browser instances', { activeInstances: this.instances.length })
+    this.generation++
     await Promise.all(this.instances.map(i => i.browser.close()))
     this.instances = []
-    this.waitQueue.forEach(w => w.reject(new Error('Browser pool closed')))
+    this.waitQueue.forEach(w => {
+      this.removeAbortListener(w)
+      w.reject(new Error('Browser pool closed'))
+    })
     this.waitQueue = []
+  }
+
+  /** Retry queued callers when a failed launch opens a creation slot. */
+  private fillAvailableCapacity(): void {
+    while (
+      this.waitQueue.length > 0 &&
+      this.instances.length + this.creatingCount < MAX_CONCURRENT
+    ) {
+      const waiter = this.takeNextWaiter()
+      if (!waiter) return
+      void this.acquire(waiter.signal).then(waiter.resolve, waiter.reject)
+    }
+  }
+
+  private takeNextWaiter(): PoolWaiter | undefined {
+    let waiter: PoolWaiter | undefined
+    while ((waiter = this.waitQueue.shift())) {
+      this.removeAbortListener(waiter)
+      if (!waiter.signal?.aborted) return waiter
+      waiter.reject(this.abortError())
+    }
+    return undefined
+  }
+
+  private removeAbortListener(waiter: PoolWaiter): void {
+    if (waiter.signal && waiter.onAbort) {
+      waiter.signal.removeEventListener('abort', waiter.onAbort)
+    }
+  }
+
+  private abortError(): Error {
+    const error = new Error('Aborted')
+    error.name = 'AbortError'
+    return error
   }
 
   private async createInstance(): Promise<BrowserInstance> {

@@ -46,15 +46,15 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
 
   // Full registry in canonical order; filter down to the user's selection.
   const registry: Array<{ name: Platform; query: () => Promise<QueryResult> }> = [
-    { name: 'discogs', query: () => queryDiscogs(catalogNumber) },
-    { name: 'ebay', query: () => queryEbay(catalogNumber) },
-    { name: 'kojima', query: () => queryKojima(catalogNumber) },
-    { name: 'hmv', query: () => queryHmv(catalogNumber) },
-    { name: 'yahoo', query: () => queryYahoo(catalogNumber) },
-    { name: 'cdjapan', query: () => queryCdjapan(catalogNumber) },
-    { name: 'tower', query: () => queryTower(catalogNumber) },
-    { name: 'surugaya', query: () => querySurugaya(catalogNumber) },
-    { name: 'zenmarket', query: () => queryZenmarket(catalogNumber) }
+    { name: 'discogs', query: () => queryDiscogs(catalogNumber, signal) },
+    { name: 'ebay', query: () => queryEbay(catalogNumber, signal) },
+    { name: 'kojima', query: () => queryKojima(catalogNumber, signal) },
+    { name: 'hmv', query: () => queryHmv(catalogNumber, signal) },
+    { name: 'yahoo', query: () => queryYahoo(catalogNumber, signal) },
+    { name: 'cdjapan', query: () => queryCdjapan(catalogNumber, signal) },
+    { name: 'tower', query: () => queryTower(catalogNumber, signal) },
+    { name: 'surugaya', query: () => querySurugaya(catalogNumber, signal) },
+    { name: 'zenmarket', query: () => queryZenmarket(catalogNumber, signal) }
   ]
 
   const platforms = registry.filter(p => enabledPlatforms.includes(p.name))
@@ -152,7 +152,9 @@ export async function executeBatchQuery(catalogNumbers: string[], platforms: Pla
 
   batchQueryRunning = true
   try {
-    const trimmed = catalogNumbers.map(c => normalizeCatalogNumber(c)).filter(c => c.length > 0)
+    const trimmed = [...new Set(
+      catalogNumbers.map(c => normalizeCatalogNumber(c)).filter(c => c.length > 0)
+    )]
 
     if (trimmed.length === 0) {
       throw new Error('No catalog numbers provided')

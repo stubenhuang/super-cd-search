@@ -1,4 +1,5 @@
 import { browserPool } from '../browser'
+import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { throttledFetch } from '../throttle'
 import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
@@ -6,6 +7,7 @@ import { notFound, queryError, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
+import { getSetting } from '../settings'
 
 const KOJIMA_WEB_URL = 'https://kojimarokuon.com'
 
@@ -63,7 +65,7 @@ function parseDetailsFromDescription(html: string, tags: string[] = []): CDDetai
  * handle or the endpoint is unavailable, so the caller can fall back to the
  * render-based scraper.
  */
-async function tryGetKojimaProductDataFromJson(link: string): Promise<KojimaProductData | null> {
+async function tryGetKojimaProductDataFromJson(link: string, signal?: AbortSignal): Promise<KojimaProductData | null> {
   const cached = getCachedProductData<KojimaProductData>('kojima', link)
   if (cached) return cached
 
@@ -73,7 +75,7 @@ async function tryGetKojimaProductDataFromJson(link: string): Promise<KojimaProd
 
   try {
     const url = `${KOJIMA_WEB_URL}/products/${encodeURIComponent(handle)}.js`
-    const response = await throttledFetch('kojimarokuon.com', url, undefined, JSON_THROTTLE)
+    const response = await throttledFetch('kojimarokuon.com', url, signal ? { signal } : undefined, JSON_THROTTLE)
     if (!response.ok) return null
 
     const data = await response.json() as {
@@ -107,12 +109,13 @@ async function tryGetKojimaProductDataFromJson(link: string): Promise<KojimaProd
     cacheProductData('kojima', link, result)
     return result
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.kojima', 'Shopify JSON lookup failed, falling back to rendering', { link, error: err instanceof Error ? err.message : String(err) })
     return null
   }
 }
 
-async function getKojimaProductDetails(page: import('puppeteer').Page, link: string): Promise<{ price: number | null; details: CDDetails }> {
+async function getKojimaProductDetails(page: import('puppeteer').Page, link: string, signal?: AbortSignal): Promise<{ price: number | null; details: CDDetails }> {
   const cached = getCachedProductData<{ price: number | null; details: CDDetails }>('kojima', link)
   if (cached) return cached
 
@@ -120,7 +123,7 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
   let price: number | null = null
 
   try {
-    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await gotoWithAbort(page, link, { waitUntil: 'domcontentloaded', timeout: 20000 }, signal)
     await page.waitForSelector(
       '.price__regular, .price-item, .product__price, .product__description, .product-specs, [data-product-price], .price',
       { timeout: 3000 }
@@ -222,13 +225,14 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
     cacheProductData('kojima', link, result)
     return result
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.kojima', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
     return { price: null, details }
   }
 }
 
-async function queryKojimaWeb(catalogNumber: string): Promise<QueryResult> {
-  const { browser, page } = await browserPool.acquire()
+async function queryKojimaWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  const { browser, page } = await browserPool.acquire(signal)
 
   try {
     await page.setExtraHTTPHeaders({
@@ -237,7 +241,7 @@ async function queryKojimaWeb(catalogNumber: string): Promise<QueryResult> {
 
     const searchUrl = `${KOJIMA_WEB_URL}/search/?q=${encodeURIComponent(catalogNumber)}`
     logger.debug('queries.kojima', 'open search page', { catalogNumber, searchUrl })
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     // Wait for the Shopify standard card structure.
     await waitForResultOrNoResult(page, { resultSelector: '.card', timeoutMs: 4000 })
@@ -277,14 +281,18 @@ async function queryKojimaWeb(catalogNumber: string): Promise<QueryResult> {
       logger.debug('queries.kojima', 'fetch product data', { catalogNumber, link })
       // Prefer the lightweight JSON endpoint; fall back to rendering only when
       // it is unavailable, so the common case avoids a second full page load.
-      const productData = await tryGetKojimaProductDataFromJson(link)
-        ?? await getKojimaProductDetails(page, link)
-      priceMin = productData.price
-      priceMax = productData.price
+      const productData = await tryGetKojimaProductDataFromJson(link, signal)
+        ?? (getSetting('fastMode') ? null : await getKojimaProductDetails(page, link, signal))
+      if (!productData) {
+        logger.debug('queries.kojima', 'skipped detail-page fallback in fast mode', { catalogNumber })
+      } else {
+        priceMin = productData.price
+        priceMax = productData.price
 
-      if (productData.details.label || productData.details.format ||
-          productData.details.released || productData.details.genre) {
-        details = productData.details
+        if (productData.details.label || productData.details.format ||
+            productData.details.released || productData.details.genre) {
+          details = productData.details
+        }
       }
     }
 
@@ -304,20 +312,24 @@ async function queryKojimaWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function queryKojima(catalogNumber: string): Promise<QueryResult> {
+export async function queryKojima(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.kojima', 'query start', { catalogNumber })
-  const cached = getCachedQueryResult('kojima', catalogNumber)
+  const cacheContext = getSetting('fastMode') ? 'fast' : 'full'
+  const cached = getCachedQueryResult('kojima', catalogNumber, cacheContext)
   if (cached) return cached
 
   let result: QueryResult
 
   try {
-    result = await queryKojimaWeb(catalogNumber)
+    result = await queryKojimaWeb(catalogNumber, signal)
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.kojima', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('kojima', err instanceof Error ? err.message : 'Unknown error')
   }
 
-  cacheQueryResult(catalogNumber, result)
+  throwIfAborted(signal)
+  cacheQueryResult(catalogNumber, result, cacheContext)
   return result
 }

@@ -3,10 +3,11 @@ import { ipcMain, dialog } from 'electron'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 
-const { mockGetSettings, mockGetSetting, mockSetSetting, mockDeleteSetting } = vi.hoisted(() => ({
+const { mockGetSettings, mockGetSetting, mockSetSetting, mockUpdateSettings, mockDeleteSetting } = vi.hoisted(() => ({
   mockGetSettings: vi.fn(),
   mockGetSetting: vi.fn(),
   mockSetSetting: vi.fn(),
+  mockUpdateSettings: vi.fn(),
   mockDeleteSetting: vi.fn()
 }))
 
@@ -55,6 +56,7 @@ vi.mock('../src/main/settings', () => ({
   getSettings: mockGetSettings,
   getSetting: mockGetSetting,
   setSetting: mockSetSetting,
+  updateSettings: mockUpdateSettings,
   deleteSetting: mockDeleteSetting
 }))
 
@@ -144,8 +146,14 @@ describe('registerSettingsIpc', () => {
     await handler('setSetting')(null, 'discogsToken', 'abc')
     expect(mockSetSetting).toHaveBeenCalledWith('discogsToken', 'abc')
 
+    await handler('updateSettings')(null, { discogsToken: 'new', fastMode: true })
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ discogsToken: 'new', fastMode: true })
+
     await handler('deleteSetting')(null, 'discogsToken')
     expect(mockDeleteSetting).toHaveBeenCalledWith('discogsToken')
+
+    expect(() => handler('getSetting')(null, 'lanToken')).toThrow('Invalid settings key')
+    expect(() => handler('updateSettings')(null, { lanToken: 'secret' })).toThrow('Invalid settings key')
   })
 })
 
@@ -200,7 +208,8 @@ describe('registerImageIpc', () => {
       base64: 'x',
       mimeType: 'image/png'
     })
-    expect(mockDownloadImage).toHaveBeenCalledWith('https://example.com/a.png', undefined)
+    expect(mockDownloadImage).toHaveBeenCalledWith('https://example.com/a.png', undefined, false)
+    expect(await handler('fetchImage')(null, 'http://127.0.0.1/private.png')).toBeNull()
   })
 })
 

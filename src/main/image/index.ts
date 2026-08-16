@@ -1,18 +1,24 @@
 import { app, nativeImage } from 'electron'
 import { createHash } from 'crypto'
-import { mkdirSync, readFileSync, writeFileSync, statSync, unlinkSync } from 'fs'
+import { mkdir, readFile, readdir, writeFile, stat, unlink } from 'fs/promises'
 import { join } from 'path'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { request } from 'http'
 import { request as httpsRequest } from 'https'
 import { getSetting } from '../settings'
 import { logger } from '../logger'
+import { isPrivateNetworkUrl } from '../security/urls'
 
 const DEFAULT_SIZE = 160
 const JPEG_QUALITY = 80
 const TIMEOUT_MS = 15000
 const CACHE_LIMIT = 200
 const DISK_TTL = 24 * 60 * 60 * 1000 // 1 day
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+const MAX_REDIRECTS = 5
+const MAX_NETWORK_CONCURRENCY = 6
+const MAX_DISK_CACHE_BYTES = 250 * 1024 * 1024
+const MAX_DISK_CACHE_FILES = 1000
 
 export interface DownloadImageResult {
   base64: string
@@ -25,6 +31,11 @@ interface CacheEntry extends DownloadImageResult {
 
 const lruCache = new Map<string, CacheEntry>()
 const inflight = new Map<string, Promise<DownloadImageResult | null>>()
+const rawInflight = new Map<string, Promise<{ buffer: Buffer; mimeType: string } | null>>()
+const networkWaiters: Array<() => void> = []
+let activeNetworkRequests = 0
+let diskPruneRunning = false
+let diskWriteCount = 0
 
 /**
  * Get referer header based on image URL domain
@@ -91,18 +102,18 @@ function mimeTypeFromExt(ext: string): string {
  * Read the original bytes of a previously downloaded image from disk, if the
  * file still exists and is within the 1-day TTL. Expired files are deleted.
  */
-function readDiskCache(url: string): { buffer: Buffer; mimeType: string } | null {
+async function readDiskCache(url: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
   const base = join(getImageCacheDir(), urlHash(url))
 
   for (const ext of ['jpg', 'png', 'gif', 'webp', 'bin']) {
     const file = `${base}.${ext}`
     try {
-      const stat = statSync(file)
-      if (Date.now() - stat.mtimeMs > DISK_TTL) {
-        try { unlinkSync(file) } catch { /* ignore */ }
+      const fileStat = await stat(file)
+      if (Date.now() - fileStat.mtimeMs > DISK_TTL) {
+        try { await unlink(file) } catch { /* ignore */ }
         continue
       }
-      return { buffer: readFileSync(file), mimeType: mimeTypeFromExt(ext) }
+      return { buffer: await readFile(file), mimeType: mimeTypeFromExt(ext) }
     } catch {
       // Try the next extension / report a miss.
     }
@@ -112,14 +123,52 @@ function readDiskCache(url: string): { buffer: Buffer; mimeType: string } | null
 }
 
 /** Persist the original downloaded bytes so later requests skip the network. */
-function writeDiskCache(url: string, buffer: Buffer, mimeType: string): void {
+async function writeDiskCache(url: string, buffer: Buffer, mimeType: string): Promise<void> {
   try {
     const dir = getImageCacheDir()
-    mkdirSync(dir, { recursive: true })
+    await mkdir(dir, { recursive: true })
     const file = join(dir, `${urlHash(url)}.${extForMimeType(mimeType)}`)
-    writeFileSync(file, buffer)
+    await writeFile(file, buffer)
+    diskWriteCount++
+    if (diskWriteCount === 1 || diskWriteCount % 25 === 0) void pruneDiskCache(dir)
   } catch (err) {
     logger.warn('image', 'failed to write image cache', { error: err instanceof Error ? err.message : String(err) })
+  }
+}
+
+async function pruneDiskCache(dir: string): Promise<void> {
+  if (diskPruneRunning) return
+  diskPruneRunning = true
+  try {
+    const names = await readdir(dir)
+    const files = (await Promise.all(names.map(async name => {
+      const path = join(dir, name)
+      try {
+        const fileStat = await stat(path)
+        return fileStat.isFile() ? { path, size: fileStat.size, mtimeMs: fileStat.mtimeMs } : null
+      } catch {
+        return null
+      }
+    }))).filter((file): file is { path: string; size: number; mtimeMs: number } => file !== null)
+
+    files.sort((a, b) => a.mtimeMs - b.mtimeMs)
+    let totalBytes = files.reduce((sum, file) => sum + file.size, 0)
+    let remainingFiles = files.length
+    for (const file of files) {
+      const expired = Date.now() - file.mtimeMs > DISK_TTL
+      if (!expired && totalBytes <= MAX_DISK_CACHE_BYTES && remainingFiles <= MAX_DISK_CACHE_FILES) break
+      try {
+        await unlink(file.path)
+        totalBytes -= file.size
+        remainingFiles--
+      } catch {
+        // Another request may already have removed it.
+      }
+    }
+  } catch (err) {
+    logger.warn('image', 'failed to prune image cache', { error: err instanceof Error ? err.message : String(err) })
+  } finally {
+    diskPruneRunning = false
   }
 }
 
@@ -144,15 +193,48 @@ function processImage(buffer: Buffer, mimeType: string, size: number): DownloadI
   return { base64: buffer.toString('base64'), mimeType }
 }
 
-function fetchBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+async function withNetworkSlot<T>(task: () => Promise<T>): Promise<T> {
+  if (activeNetworkRequests >= MAX_NETWORK_CONCURRENCY) {
+    await new Promise<void>(resolve => networkWaiters.push(resolve))
+  }
+  activeNetworkRequests++
+  try {
+    return await task()
+  } finally {
+    activeNetworkRequests--
+    networkWaiters.shift()?.()
+  }
+}
+
+function fetchBuffer(url: string, redirectCount = 0, allowPrivateNetwork = true): Promise<{ buffer: Buffer; mimeType: string } | null> {
   const proxyEnabled = getSetting('proxyEnabled')
   const proxyHost = getSetting('proxyHost')
   const proxyPort = getSetting('proxyPort')
 
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve(null), TIMEOUT_MS)
+    let settled = false
+    const finish = (value: { buffer: Buffer; mimeType: string } | null) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      resolve(value)
+    }
 
-    const parsedUrl = new URL(url)
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(url)
+    } catch {
+      resolve(null)
+      return
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      resolve(null)
+      return
+    }
+    if (!allowPrivateNetwork && isPrivateNetworkUrl(url)) {
+      resolve(null)
+      return
+    }
     const isHttps = parsedUrl.protocol === 'https:'
     const requestFn = isHttps ? httpsRequest : request
     const referer = getReferer(url)
@@ -174,30 +256,68 @@ function fetchBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string } 
 
     const req = requestFn(options, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume()
+        if (redirectCount >= MAX_REDIRECTS) {
+          finish(null)
+          return
+        }
         clearTimeout(timeout)
-        fetchBuffer(res.headers.location).then(resolve)
+        let redirectUrl: string
+        try {
+          redirectUrl = new URL(res.headers.location, parsedUrl).toString()
+        } catch {
+          finish(null)
+          return
+        }
+        fetchBuffer(redirectUrl, redirectCount + 1, allowPrivateNetwork).then(finish)
         return
       }
 
       if (res.statusCode !== 200) {
-        clearTimeout(timeout)
-        resolve(null)
+        res.resume()
+        finish(null)
+        return
+      }
+
+      const contentLength = Number(res.headers['content-length'] || 0)
+      if (contentLength > MAX_IMAGE_BYTES) {
+        res.destroy()
+        finish(null)
+        return
+      }
+      const declaredMimeType = res.headers['content-type'] as string | undefined
+      if (declaredMimeType && !declaredMimeType.toLowerCase().startsWith('image/')) {
+        res.resume()
+        finish(null)
         return
       }
 
       const chunks: Buffer[] = []
-      res.on('data', (chunk: Buffer) => chunks.push(chunk))
+      let bytes = 0
+      res.on('data', (chunk: Buffer) => {
+        bytes += chunk.length
+        if (bytes > MAX_IMAGE_BYTES) {
+          res.destroy()
+          finish(null)
+          return
+        }
+        chunks.push(chunk)
+      })
       res.on('end', () => {
-        clearTimeout(timeout)
-        const mimeType = (res.headers['content-type'] as string) || 'image/jpeg'
-        resolve({ buffer: Buffer.concat(chunks), mimeType })
+        if (bytes > MAX_IMAGE_BYTES) return
+        const mimeType = declaredMimeType || 'image/jpeg'
+        finish({ buffer: Buffer.concat(chunks), mimeType })
       })
     })
 
+    const timeout = setTimeout(() => {
+      req.destroy()
+      finish(null)
+    }, TIMEOUT_MS)
+
     req.on('error', (err) => {
-      clearTimeout(timeout)
       logger.warn('image', 'failed to download image', { url, error: err instanceof Error ? err.message : String(err) })
-      resolve(null)
+      finish(null)
     })
 
     req.end()
@@ -210,9 +330,17 @@ function fetchBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string } 
  *   1. in-memory LRU cache (keyed by url + size)
  *   2. in-flight dedupe for the same key
  *   3. on-disk cache (original bytes, shared across sizes, 1-day TTL)
- *   4. network fetch (unlimited concurrency), then persisted to disk
+ *   4. concurrency-limited network fetch, then persisted to disk
  */
-export function downloadImage(url: string, size: number = DEFAULT_SIZE): Promise<DownloadImageResult | null> {
+export function downloadImage(url: string, size: number = DEFAULT_SIZE, allowPrivateNetwork = true): Promise<DownloadImageResult | null> {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return Promise.resolve(null)
+    if (!allowPrivateNetwork && isPrivateNetworkUrl(url)) return Promise.resolve(null)
+  } catch {
+    return Promise.resolve(null)
+  }
+  size = Math.min(1000, Math.max(32, Math.round(size)))
   const key = cacheKey(url, size)
   logger.debug('image', 'downloadImage start', { url, size, key })
 
@@ -233,16 +361,23 @@ export function downloadImage(url: string, size: number = DEFAULT_SIZE): Promise
   }
 
   const promise = (async () => {
-    const disk = readDiskCache(url)
+    const disk = await readDiskCache(url)
     if (disk) {
       logger.debug('image', 'disk cache hit', { url, size })
       return processImage(disk.buffer, disk.mimeType, size)
     }
 
     logger.debug('image', 'network fetch required', { url, size })
-    const fetched = await fetchBuffer(url)
+    const rawKey = `${allowPrivateNetwork ? 'internal' : 'restricted'}:${url}`
+    let rawRequest = rawInflight.get(rawKey)
+    if (!rawRequest) {
+      rawRequest = withNetworkSlot(() => fetchBuffer(url, 0, allowPrivateNetwork))
+      rawInflight.set(rawKey, rawRequest)
+      void rawRequest.finally(() => rawInflight.delete(rawKey))
+    }
+    const fetched = await rawRequest
     if (!fetched) return null
-    writeDiskCache(url, fetched.buffer, fetched.mimeType)
+    await writeDiskCache(url, fetched.buffer, fetched.mimeType)
     return processImage(fetched.buffer, fetched.mimeType, size)
   })()
 

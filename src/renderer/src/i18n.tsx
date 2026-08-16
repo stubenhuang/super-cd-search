@@ -246,7 +246,7 @@ const zh = {
 const en: Record<keyof typeof zh, string> = {
   'panel.input': 'Input',
   'panel.results': 'Results',
-  'export.button': 'Export CSV',
+  'export.button': 'Export Excel',
   'export.title': 'Export current results as Excel',
   'export.exporting': 'Exporting…',
   'export.saved': 'Exported',
@@ -256,7 +256,7 @@ const en: Record<keyof typeof zh, string> = {
   'export.details': 'Details',
   'export.lowestPrice': 'Lowest Price',
   'export.highestPrice': 'Highest Price',
-  'export.modalTitle': 'Export CSV',
+  'export.modalTitle': 'Export Excel',
   'export.directory': 'Target Directory',
   'export.directoryPlaceholder': 'Choose an export directory',
   'export.pickDirectory': 'Choose Directory…',
@@ -474,7 +474,7 @@ export type TranslationKey = keyof typeof zh
 
 interface I18nContextValue {
   language: Language
-  setLanguage: (language: Language) => void
+  setLanguage: (language: Language, persist?: boolean) => void
   t: (key: TranslationKey, params?: Params) => string
 }
 
@@ -496,9 +496,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const setLanguage = useCallback((next: Language) => {
+  const setLanguage = useCallback((next: Language, persist = true) => {
     setLanguageState(next)
-    void window.electronAPI.setSetting('language', next).catch(() => {})
+    if (persist) void window.electronAPI.setSetting('language', next).catch(() => {})
   }, [])
 
   const t = useCallback(

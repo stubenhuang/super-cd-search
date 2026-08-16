@@ -85,6 +85,34 @@ describe('downloadImage', () => {
     expect(result).toEqual({ base64: 'CQk=', mimeType: 'image/gif' })
   })
 
+  it('follows relative redirects', async () => {
+    handler = (req, res) => {
+      if (req.url === '/relative-first') {
+        res.statusCode = 302
+        res.setHeader('Location', '/relative-second')
+        res.end()
+      } else {
+        res.statusCode = 200
+        res.end(Buffer.from([7]))
+      }
+    }
+    expect(await downloadImage(`${baseUrl}/relative-first`)).toEqual({ base64: 'Bw==', mimeType: 'image/jpeg' })
+  })
+
+  it('rejects non-web protocols', async () => {
+    expect(await downloadImage('file:///etc/passwd')).toBeNull()
+    expect(await downloadImage('javascript:alert(1)')).toBeNull()
+  })
+
+  it('rejects images larger than the download limit', async () => {
+    handler = (_req, res) => {
+      res.statusCode = 200
+      res.setHeader('Content-Length', String(9 * 1024 * 1024))
+      res.end('too large')
+    }
+    expect(await downloadImage(`${baseUrl}/oversized`)).toBeNull()
+  })
+
   it('resolves null on non-200 responses', async () => {
     expect(await downloadImage(`${baseUrl}/missing`)).toBeNull()
   })
@@ -100,14 +128,21 @@ describe('downloadImage', () => {
 
   it('resolves null when the server times out', async () => {
     vi.useFakeTimers()
+    let requestStarted!: () => void
+    const started = new Promise<void>(resolve => { requestStarted = resolve })
     handler = () => {
       // Never respond
+      requestStarted()
     }
 
     const promise = downloadImage(`${baseUrl}/hang`)
-    await vi.advanceTimersByTimeAsync(15000)
-    expect(await promise).toBeNull()
-    vi.useRealTimers()
+    try {
+      await started
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(await promise).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('uses a SOCKS proxy agent when proxy settings are enabled', async () => {

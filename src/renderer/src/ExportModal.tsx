@@ -63,10 +63,10 @@ export function ExportModal({ isOpen, busy, statusText, error, onClose, onConfir
 
   return (
     <div className="export-modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="export-modal" onClick={e => e.stopPropagation()}>
+      <div className="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" onClick={e => e.stopPropagation()}>
         <div className="export-modal-header">
-          <div className="export-modal-title">{t('export.modalTitle')}</div>
-          <button className="export-modal-close" onClick={onClose} disabled={busy} title={t('export.close')}>
+          <div className="export-modal-title" id="export-modal-title">{t('export.modalTitle')}</div>
+          <button className="export-modal-close" onClick={onClose} disabled={busy} title={t('export.close')} aria-label={t('export.close')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -134,13 +134,13 @@ export function ExportModal({ isOpen, busy, statusText, error, onClose, onConfir
           </div>
 
           {busy && statusText && (
-            <div className="export-modal-status">
+            <div className="export-modal-status" role="status" aria-live="polite">
               <span className="export-modal-spinner" aria-hidden="true" />
               <span>{statusText}</span>
             </div>
           )}
           {!busy && error && (
-            <div className="export-modal-error">⚠ {error}</div>
+            <div className="export-modal-error" role="alert">⚠ {error}</div>
           )}
         </div>
 

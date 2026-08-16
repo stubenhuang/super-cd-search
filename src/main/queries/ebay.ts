@@ -1,6 +1,7 @@
 import { getSetting } from '../settings'
 import { throttledFetch } from '../throttle'
 import { browserPool } from '../browser'
+import { abortableDelay, gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
@@ -32,7 +33,7 @@ export function clearItemDetailsCache(): void {
   itemDetailsCache.clear()
 }
 
-async function getEbayAccessToken(): Promise<string | null> {
+async function getEbayAccessToken(signal?: AbortSignal): Promise<string | null> {
   if (accessToken && Date.now() < tokenExpiry) {
     return accessToken
   }
@@ -55,7 +56,8 @@ async function getEbayAccessToken(): Promise<string | null> {
           'Authorization': `Basic ${credentials}`,
           'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope'
+        body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope',
+        ...(signal ? { signal } : {})
       },
       API_THROTTLE
     )
@@ -69,12 +71,13 @@ async function getEbayAccessToken(): Promise<string | null> {
     tokenExpiry = Date.now() + (data.expires_in - 60) * 1000
     return accessToken
   } catch {
+    throwIfAborted(signal)
     return null
   }
 }
 
-async function queryEbayApi(catalogNumber: string): Promise<QueryResult> {
-  const token = await getEbayAccessToken()
+async function queryEbayApi(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  const token = await getEbayAccessToken(signal)
   if (!token) {
     throw new Error('No eBay API credentials')
   }
@@ -84,7 +87,8 @@ async function queryEbayApi(catalogNumber: string): Promise<QueryResult> {
   const response = await throttledFetch('api.ebay.com', url, {
     headers: {
       'Authorization': `Bearer ${token}`
-    }
+    },
+    ...(signal ? { signal } : {})
   }, API_THROTTLE)
 
   if (!response.ok) {
@@ -116,7 +120,7 @@ async function queryEbayApi(catalogNumber: string): Promise<QueryResult> {
           return await convertToUSDWithFallback(amount, currency)
         })
     ),
-    first.itemWebUrl ? getEbayItemDetails(first.itemWebUrl, token) : Promise.resolve(undefined)
+    first.itemWebUrl ? getEbayItemDetails(first.itemWebUrl, token, signal) : Promise.resolve(undefined)
   ])
 
   return {
@@ -132,7 +136,7 @@ async function queryEbayApi(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-async function getEbayItemDetails(itemWebUrl: string, token: string): Promise<CDDetails> {
+async function getEbayItemDetails(itemWebUrl: string, token: string, signal?: AbortSignal): Promise<CDDetails> {
   const details: CDDetails = { label: null, format: null, country: null, released: null, genre: null }
 
   try {
@@ -151,7 +155,8 @@ async function getEbayItemDetails(itemWebUrl: string, token: string): Promise<CD
     const response = await throttledFetch('api.ebay.com', url, {
       headers: {
         'Authorization': `Bearer ${token}`
-      }
+      },
+      ...(signal ? { signal } : {})
     }, API_THROTTLE)
 
     if (!response.ok) return details
@@ -187,6 +192,7 @@ async function getEbayItemDetails(itemWebUrl: string, token: string): Promise<CD
       if (oldest !== undefined) itemDetailsCache.delete(oldest)
     }
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.ebay', 'failed to get item details', { itemWebUrl, error: err instanceof Error ? err.message : String(err) })
   }
 
@@ -208,16 +214,16 @@ async function isPageBlocked(page: Page): Promise<boolean> {
          probe.includes('captcha')
 }
 
-async function queryEbayDomain(page: Page, domain: string, catalogNumber: string): Promise<{ success: boolean; result?: QueryResult }> {
+async function queryEbayDomain(page: Page, domain: string, catalogNumber: string, signal?: AbortSignal): Promise<{ success: boolean; result?: QueryResult }> {
   try {
     logger.debug('queries.ebay', 'trying domain', { catalogNumber, domain })
 
     // Use direct URL navigation (more reliable than search box interaction)
     const searchUrl = `${domain}/sch/i.html?_nkw=${encodeURIComponent(catalogNumber)}`
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     // Short one-time settle delay (balanced anti-detection pacing).
-    await new Promise(r => setTimeout(r, 500 + Math.random() * 500))
+    await abortableDelay(500 + Math.random() * 500, signal)
 
     // Check if blocked
     if (await isPageBlocked(page)) {
@@ -330,13 +336,14 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
       }
     }
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.ebay', 'domain query error', { catalogNumber, domain, error: err instanceof Error ? err.message : String(err) })
     return { success: false }
   }
 }
 
-async function queryEbayWeb(catalogNumber: string): Promise<QueryResult> {
-  const { browser, page } = await browserPool.acquire()
+async function queryEbayWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  const { browser, page } = await browserPool.acquire(signal)
 
   try {
     // Platform-specific headers for realistic browser fingerprint
@@ -365,12 +372,12 @@ async function queryEbayWeb(catalogNumber: string): Promise<QueryResult> {
     })
 
     // Try main domain first
-    let result = await queryEbayDomain(page, EBAY_WEB_URL, catalogNumber)
+    let result = await queryEbayDomain(page, EBAY_WEB_URL, catalogNumber, signal)
 
     // If blocked, try alternative domains
     if (!result.success) {
       for (const altDomain of EBAY_ALT_DOMAINS) {
-        result = await queryEbayDomain(page, altDomain, catalogNumber)
+        result = await queryEbayDomain(page, altDomain, catalogNumber, signal)
         if (result.success) break
       }
     }
@@ -381,26 +388,32 @@ async function queryEbayWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function queryEbay(catalogNumber: string): Promise<QueryResult> {
+export async function queryEbay(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.ebay', 'query start', { catalogNumber })
-  const cached = getCachedQueryResult('ebay', catalogNumber)
+  const hasApiCredentials = !!getSetting('ebayClientId') && !!getSetting('ebayClientSecret')
+  const cacheContext = hasApiCredentials ? 'api' : 'web'
+  const cached = getCachedQueryResult('ebay', catalogNumber, cacheContext)
   if (cached) return cached
 
-  logger.debug('queries.ebay', 'query mode', { catalogNumber, hasApiToken: !!getSetting('ebayClientId') && !!getSetting('ebayClientSecret') })
+  logger.debug('queries.ebay', 'query mode', { catalogNumber, hasApiToken: hasApiCredentials })
 
   let result: QueryResult
 
   try {
-    result = await queryEbayApi(catalogNumber)
+    result = await queryEbayApi(catalogNumber, signal)
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.ebay', 'API failed, falling back to web scraping', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     try {
-      result = await queryEbayWeb(catalogNumber)
+      result = await queryEbayWeb(catalogNumber, signal)
     } catch (webErr) {
+      throwIfAborted(signal)
       result = queryError('ebay', webErr instanceof Error ? webErr.message : 'Unknown error')
     }
   }
 
-  cacheQueryResult(catalogNumber, result)
+  throwIfAborted(signal)
+  cacheQueryResult(catalogNumber, result, cacheContext)
   return result
 }

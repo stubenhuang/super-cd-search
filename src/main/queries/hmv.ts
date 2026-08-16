@@ -1,5 +1,6 @@
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
+import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
@@ -8,7 +9,7 @@ import { logger } from '../logger'
 
 const HMV_WEB_URL = 'https://www.hmv.co.jp'
 
-async function getHmvProductDetails(page: import('puppeteer').Page, link: string): Promise<{ price: number | null; details: CDDetails }> {
+async function getHmvProductDetails(page: import('puppeteer').Page, link: string, signal?: AbortSignal): Promise<{ price: number | null; details: CDDetails }> {
   const cached = getCachedProductData<{ price: number | null; details: CDDetails }>('hmv', link)
   if (cached) return cached
 
@@ -16,7 +17,7 @@ async function getHmvProductDetails(page: import('puppeteer').Page, link: string
   let price: number | null = null
 
   try {
-    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await gotoWithAbort(page, link, { waitUntil: 'domcontentloaded', timeout: 20000 }, signal)
     await page.waitForSelector(
       '.priceInfoBlock, .price, .productSpec, .itemSpec, .specList, .detailInfo, .product-spec',
       { timeout: 3000 }
@@ -123,13 +124,14 @@ async function getHmvProductDetails(page: import('puppeteer').Page, link: string
     cacheProductData('hmv', link, result)
     return result
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.hmv', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
     return { price: null, details }
   }
 }
 
-async function queryHmvWeb(catalogNumber: string): Promise<QueryResult> {
-  const { browser, page } = await browserPool.acquire()
+async function queryHmvWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  const { browser, page } = await browserPool.acquire(signal)
 
   try {
     await page.setExtraHTTPHeaders({
@@ -138,7 +140,7 @@ async function queryHmvWeb(catalogNumber: string): Promise<QueryResult> {
 
     const searchUrl = `${HMV_WEB_URL}/en/search/keyword_${encodeURIComponent(catalogNumber)}/target_ALL/type_sr/`
     logger.debug('queries.hmv', 'open search page', { catalogNumber, searchUrl })
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     // Wait for the product list; .clearfix identifies actual products.
     await waitForResultOrNoResult(page, { resultSelector: '.resultList > li.list.clearfix, li.list.clearfix', timeoutMs: 4000 })
@@ -219,7 +221,7 @@ async function queryHmvWeb(catalogNumber: string): Promise<QueryResult> {
     // mode we skip this second navigation to keep traffic and latency low.
     if (link && !getSetting('fastMode')) {
       logger.debug('queries.hmv', 'fetch product detail page', { catalogNumber, link })
-      const productData = await getHmvProductDetails(page, link)
+      const productData = await getHmvProductDetails(page, link, signal)
       if (priceMin === null && productData.price !== null) {
         priceMin = productData.price
         priceMax = productData.price
@@ -246,20 +248,24 @@ async function queryHmvWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function queryHmv(catalogNumber: string): Promise<QueryResult> {
+export async function queryHmv(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.hmv', 'query start', { catalogNumber })
-  const cached = getCachedQueryResult('hmv', catalogNumber)
+  const cacheContext = getSetting('fastMode') ? 'fast' : 'full'
+  const cached = getCachedQueryResult('hmv', catalogNumber, cacheContext)
   if (cached) return cached
 
   let result: QueryResult
 
   try {
-    result = await queryHmvWeb(catalogNumber)
+    result = await queryHmvWeb(catalogNumber, signal)
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.hmv', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('hmv', err instanceof Error ? err.message : 'Unknown error')
   }
 
-  cacheQueryResult(catalogNumber, result)
+  throwIfAborted(signal)
+  cacheQueryResult(catalogNumber, result, cacheContext)
   return result
 }

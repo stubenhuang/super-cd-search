@@ -1,5 +1,6 @@
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
+import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
@@ -8,14 +9,14 @@ import { logger } from '../logger'
 
 const YAHOO_SHOPPING_URL = 'https://shopping.yahoo.co.jp'
 
-async function getYahooProductDetails(page: import('puppeteer').Page, link: string): Promise<CDDetails> {
+async function getYahooProductDetails(page: import('puppeteer').Page, link: string, signal?: AbortSignal): Promise<CDDetails> {
   const cached = getCachedProductData<CDDetails>('yahoo', link)
   if (cached) return cached
 
   const details: CDDetails = { label: null, format: null, country: null, released: null, genre: null }
 
   try {
-    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await gotoWithAbort(page, link, { waitUntil: 'domcontentloaded', timeout: 20000 }, signal)
     await page.waitForSelector(
       'table, .specTable, .productSpec, .productDescription, .itemDescription, [class*="description"]',
       { timeout: 3000 }
@@ -82,13 +83,14 @@ async function getYahooProductDetails(page: import('puppeteer').Page, link: stri
     cacheProductData('yahoo', link, details)
     return details
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.yahoo', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
     return details
   }
 }
 
-async function queryYahooWeb(catalogNumber: string): Promise<QueryResult> {
-  const { browser, page } = await browserPool.acquire()
+async function queryYahooWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  const { browser, page } = await browserPool.acquire(signal)
 
   try {
     await page.setExtraHTTPHeaders({
@@ -97,7 +99,7 @@ async function queryYahooWeb(catalogNumber: string): Promise<QueryResult> {
 
     const searchUrl = `${YAHOO_SHOPPING_URL}/search/${encodeURIComponent(catalogNumber)}/0/?first=1&tab_ex=commerce`
     logger.debug('queries.yahoo', 'open search page', { catalogNumber, searchUrl })
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     // Wait for the first search result item.
     await waitForResultOrNoResult(page, { resultSelector: '.SearchResult_SearchResultItem__mJ7vY', timeoutMs: 4000 })
@@ -148,7 +150,7 @@ async function queryYahooWeb(catalogNumber: string): Promise<QueryResult> {
     let details: CDDetails | undefined
     if (link && !getSetting('fastMode')) {
       logger.debug('queries.yahoo', 'fetch product detail page', { catalogNumber, link })
-      details = await getYahooProductDetails(page, link)
+      details = await getYahooProductDetails(page, link, signal)
       const hasDetails = details.label || details.format || details.released || details.genre
       if (!hasDetails) details = undefined
     }
@@ -169,20 +171,24 @@ async function queryYahooWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function queryYahoo(catalogNumber: string): Promise<QueryResult> {
+export async function queryYahoo(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.yahoo', 'query start', { catalogNumber })
-  const cached = getCachedQueryResult('yahoo', catalogNumber)
+  const cacheContext = getSetting('fastMode') ? 'fast' : 'full'
+  const cached = getCachedQueryResult('yahoo', catalogNumber, cacheContext)
   if (cached) return cached
 
   let result: QueryResult
 
   try {
-    result = await queryYahooWeb(catalogNumber)
+    result = await queryYahooWeb(catalogNumber, signal)
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.yahoo', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('yahoo', err instanceof Error ? err.message : 'Unknown error')
   }
 
-  cacheQueryResult(catalogNumber, result)
+  throwIfAborted(signal)
+  cacheQueryResult(catalogNumber, result, cacheContext)
   return result
 }

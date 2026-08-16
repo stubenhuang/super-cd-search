@@ -4,6 +4,7 @@ import { notFound, queryError, cloudflareChallenge, parseJPYPrice } from './type
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
+import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 
 const SURUGAYA_WEB_URL = 'https://www.suruga-ya.jp'
 
@@ -13,7 +14,8 @@ const SURUGAYA_WEB_URL = 'https://www.suruga-ya.jp'
  * not running/verified, or the challenge reappears mid-scrape, we surface a
  * `challenge` status instead of failing silently.
  */
-async function querySurugayaWeb(catalogNumber: string): Promise<QueryResult> {
+async function querySurugayaWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   const acquired = await acquireCloudflarePage()
   if (!acquired) {
     logger.debug('queries.surugaya', 'real-Chrome session unavailable', { catalogNumber })
@@ -28,7 +30,7 @@ async function querySurugayaWeb(catalogNumber: string): Promise<QueryResult> {
 
     const searchUrl = `${SURUGAYA_WEB_URL}/search?search_word=${encodeURIComponent(catalogNumber)}`
     logger.debug('queries.surugaya', 'open search page', { catalogNumber, searchUrl })
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     if (await isCloudflareChallenge(page)) {
       logger.debug('queries.surugaya', 'Cloudflare challenge detected', { catalogNumber })
@@ -126,19 +128,22 @@ async function querySurugayaWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function querySurugaya(catalogNumber: string): Promise<QueryResult> {
+export async function querySurugaya(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.surugaya', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('surugaya', catalogNumber)
   if (cached) return cached
 
   let result: QueryResult
   try {
-    result = await querySurugayaWeb(catalogNumber)
+    result = await querySurugayaWeb(catalogNumber, signal)
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.surugaya', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('surugaya', err instanceof Error ? err.message : 'Unknown error')
   }
 
+  throwIfAborted(signal)
   cacheQueryResult(catalogNumber, result)
   return result
 }

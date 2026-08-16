@@ -4,6 +4,7 @@ import { notFound, queryError, cloudflareChallenge, parseJPYPrice } from './type
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
+import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 
 const ZENMARKET_WEB_URL = 'https://zenmarket.jp'
 
@@ -13,7 +14,8 @@ const ZENMARKET_WEB_URL = 'https://zenmarket.jp'
 // once a real-Chrome session is available.
 const ZENMARKET_SEARCH_PATH = '/en/yshopping.aspx'
 
-async function queryZenmarketWeb(catalogNumber: string): Promise<QueryResult> {
+async function queryZenmarketWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   const acquired = await acquireCloudflarePage()
   if (!acquired) {
     logger.debug('queries.zenmarket', 'real-Chrome session unavailable', { catalogNumber })
@@ -28,7 +30,7 @@ async function queryZenmarketWeb(catalogNumber: string): Promise<QueryResult> {
 
     const searchUrl = `${ZENMARKET_WEB_URL}${ZENMARKET_SEARCH_PATH}?q=${encodeURIComponent(catalogNumber)}`
     logger.debug('queries.zenmarket', 'open search page', { catalogNumber, searchUrl })
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     if (await isCloudflareChallenge(page)) {
       logger.debug('queries.zenmarket', 'Cloudflare challenge detected', { catalogNumber })
@@ -120,19 +122,22 @@ async function queryZenmarketWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function queryZenmarket(catalogNumber: string): Promise<QueryResult> {
+export async function queryZenmarket(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.zenmarket', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('zenmarket', catalogNumber)
   if (cached) return cached
 
   let result: QueryResult
   try {
-    result = await queryZenmarketWeb(catalogNumber)
+    result = await queryZenmarketWeb(catalogNumber, signal)
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.zenmarket', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('zenmarket', err instanceof Error ? err.message : 'Unknown error')
   }
 
+  throwIfAborted(signal)
   cacheQueryResult(catalogNumber, result)
   return result
 }

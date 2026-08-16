@@ -1,4 +1,5 @@
 import { browserPool } from '../browser'
+import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
@@ -12,8 +13,8 @@ const TOWER_WEB_URL = 'https://tower.jp'
  * Tower Records Japan exposes an item search at /search/item/{catalogNumber}.
  * The result list is server-rendered; we read the first result card directly.
  */
-async function queryTowerWeb(catalogNumber: string): Promise<QueryResult> {
-  const { browser, page } = await browserPool.acquire()
+async function queryTowerWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  const { browser, page } = await browserPool.acquire(signal)
 
   try {
     await page.setExtraHTTPHeaders({
@@ -22,7 +23,7 @@ async function queryTowerWeb(catalogNumber: string): Promise<QueryResult> {
 
     const searchUrl = `${TOWER_WEB_URL}/search/item/${encodeURIComponent(catalogNumber)}`
     logger.debug('queries.tower', 'open search page', { catalogNumber, searchUrl })
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     // Wait briefly for the server-rendered result list to settle.
     await waitForResultOrNoResult(page, {
@@ -131,7 +132,8 @@ async function queryTowerWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function queryTower(catalogNumber: string): Promise<QueryResult> {
+export async function queryTower(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.tower', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('tower', catalogNumber)
   if (cached) return cached
@@ -139,12 +141,14 @@ export async function queryTower(catalogNumber: string): Promise<QueryResult> {
   let result: QueryResult
 
   try {
-    result = await queryTowerWeb(catalogNumber)
+    result = await queryTowerWeb(catalogNumber, signal)
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.tower', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('tower', err instanceof Error ? err.message : 'Unknown error')
   }
 
+  throwIfAborted(signal)
   cacheQueryResult(catalogNumber, result)
   return result
 }

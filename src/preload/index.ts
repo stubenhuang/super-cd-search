@@ -32,8 +32,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   receive: (channel: string, func: (...args: unknown[]) => void) => {
     if (validReceiveChannels.includes(channel as typeof validReceiveChannels[number])) {
-      ipcRenderer.on(channel, (_event, ...args) => func(...args))
+      const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => func(...args)
+      ipcRenderer.on(channel, listener)
+      return () => ipcRenderer.removeListener(channel, listener)
     }
+    return () => {}
   },
   log: (level: string, tag: string, message: string, meta?: Record<string, unknown>) => {
     const safeLevel = validLogLevels.has(level) ? level : 'info'
@@ -44,6 +47,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('getSetting', key),
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]): Promise<void> =>
     ipcRenderer.invoke('setSetting', key, value),
+  updateSettings: (values: Partial<Settings>): Promise<void> =>
+    ipcRenderer.invoke('updateSettings', values),
   deleteSetting: <K extends keyof Settings>(key: K): Promise<void> =>
     ipcRenderer.invoke('deleteSetting', key),
   clearSearchCache: (): Promise<void> => ipcRenderer.invoke('clearSearchCache'),

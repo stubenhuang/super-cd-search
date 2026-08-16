@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus, ThemeMode, Language, BarcodeProvider } from './electron-api'
 import { PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
-import { saveTheme } from './theme'
+import { applyTheme } from './theme'
 import { useI18n } from './i18n'
 import './Settings.css'
 
@@ -44,6 +44,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [theme, setTheme] = useState<ThemeMode>('light')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const savedThemeRef = useRef<ThemeMode>('light')
+  const savedLanguageRef = useRef<Language>('zh')
 
   useEffect(() => {
     if (isOpen) {
@@ -123,39 +125,50 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
-    setTheme(settings.theme || 'light')
+    const savedTheme = settings.theme || 'light'
+    const savedLanguage = settings.language || 'zh'
+    setTheme(savedTheme)
+    setLanguage(savedLanguage, false)
+    savedThemeRef.current = savedTheme
+    savedLanguageRef.current = savedLanguage
   }, [refreshCloudflareStatus])
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await window.electronAPI.setSetting('discogsToken', discogsToken)
-      await window.electronAPI.setSetting('ebayClientId', ebayClientId)
-      await window.electronAPI.setSetting('ebayClientSecret', ebayClientSecret)
-      await window.electronAPI.setSetting('proxyEnabled', proxyEnabled)
-      await window.electronAPI.setSetting('proxyHost', proxyHost)
-      await window.electronAPI.setSetting('proxyPort', proxyPort)
-      await window.electronAPI.setSetting('barcodeProviders', barcodeProviders)
-      await window.electronAPI.setSetting('standardPlatforms', standardPlatforms)
-      await window.electronAPI.setSetting('deepPlatforms', deepPlatforms)
-      await window.electronAPI.setSetting('fastMode', fastMode)
-      await window.electronAPI.setSetting('llm', {
-        enabled: llmEnabled,
-        apiBaseUrl: llmApiBaseUrl,
-        apiKey: llmApiKey,
-        model: llmModel,
-        platformEnabled: {
-          discogs: llmPlatformDiscogs,
-          ebay: llmPlatformEbay,
-          kojima: llmPlatformKojima,
-          hmv: llmPlatformHmv,
-          yahoo: llmPlatformYahoo,
-          cdjapan: llmPlatformCdjapan,
-          tower: llmPlatformTower,
-          surugaya: llmPlatformSurugaya,
-          zenmarket: llmPlatformZenmarket
+      await window.electronAPI.updateSettings({
+        discogsToken,
+        ebayClientId,
+        ebayClientSecret,
+        proxyEnabled,
+        proxyHost,
+        proxyPort,
+        barcodeProviders,
+        standardPlatforms,
+        deepPlatforms,
+        fastMode,
+        theme,
+        language,
+        llm: {
+          enabled: llmEnabled,
+          apiBaseUrl: llmApiBaseUrl,
+          apiKey: llmApiKey,
+          model: llmModel,
+          platformEnabled: {
+            discogs: llmPlatformDiscogs,
+            ebay: llmPlatformEbay,
+            kojima: llmPlatformKojima,
+            hmv: llmPlatformHmv,
+            yahoo: llmPlatformYahoo,
+            cdjapan: llmPlatformCdjapan,
+            tower: llmPlatformTower,
+            surugaya: llmPlatformSurugaya,
+            zenmarket: llmPlatformZenmarket
+          }
         }
       })
+      savedThemeRef.current = theme
+      savedLanguageRef.current = language
       window.electronAPI.log('debug', 'settings', 'settings saved', { llmEnabled, llmModel, llmApiBaseUrl })
       setToast({ kind: 'success', text: t('settings.saved') })
       setTimeout(() => setToast(null), 3000)
@@ -166,6 +179,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleCancel = () => {
+    setTheme(savedThemeRef.current)
+    applyTheme(savedThemeRef.current)
+    setLanguage(savedLanguageRef.current, false)
+    onClose()
   }
 
   const toggleBarcodeProvider = (provider: BarcodeProvider) => {
@@ -702,7 +722,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                       onChange={e => {
                         const next = e.target.value as ThemeMode
                         setTheme(next)
-                        void saveTheme(next)
+                        applyTheme(next)
                       }}
                     />
                     <span className="st-theme-radio"></span>
@@ -730,7 +750,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                       name="language"
                       value={option.value}
                       checked={language === option.value}
-                      onChange={e => setLanguage(e.target.value as Language)}
+                      onChange={e => setLanguage(e.target.value as Language, false)}
                     />
                     <span className="st-theme-radio"></span>
                     <span className="st-theme-label">{option.label}</span>
@@ -744,12 +764,12 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   }
 
   return (
-    <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-panel" onClick={e => e.stopPropagation()}>
+    <div className="settings-overlay" onClick={handleCancel}>
+      <div className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={e => e.stopPropagation()}>
         {/* Sidebar */}
         <nav className="settings-sidebar">
           <div className="settings-sidebar-header">
-            <h2>{t('settings.title')}</h2>
+            <h2 id="settings-title">{t('settings.title')}</h2>
             <div className="st-divider">
               <div className="st-divider-line"></div>
               <div className="st-divider-diamond"></div>
@@ -761,6 +781,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 key={item.key}
                 className={`settings-nav-item ${activeSection === item.key ? 'active' : ''}`}
                 onClick={() => setActiveSection(item.key)}
+                aria-current={activeSection === item.key ? 'page' : undefined}
               >
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
@@ -768,7 +789,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             ))}
           </div>
           <div className="settings-sidebar-footer">
-            <button className="st-close-button" onClick={onClose}>
+            <button className="st-close-button" onClick={handleCancel}>
               <span>✕</span> {t('settings.close')}
             </button>
           </div>
@@ -786,7 +807,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           <footer className="settings-footer">
             <span className="st-footer-hint">{t('settings.footerHint')}</span>
             <div className="st-footer-actions">
-              <button className="st-btn-cancel" onClick={onClose}>{t('settings.cancel')}</button>
+              <button className="st-btn-cancel" onClick={handleCancel}>{t('settings.cancel')}</button>
               <button className="st-btn-save" onClick={handleSave} disabled={saving}>
                 {saving ? t('settings.saving') : t('settings.save')}
               </button>
@@ -794,7 +815,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           </footer>
         </div>
 
-        {toast && <div className={`st-toast ${toast.kind === 'error' ? 'error' : ''}`}>{toast.text}</div>}
+        {toast && <div role="status" aria-live="polite" className={`st-toast ${toast.kind === 'error' ? 'error' : ''}`}>{toast.text}</div>}
       </div>
     </div>
   )

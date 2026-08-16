@@ -1,4 +1,5 @@
 import { browserPool } from '../browser'
+import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
@@ -14,13 +15,13 @@ const PRICE_CURRENCIES: Currency[] = ['JPY', 'USD', 'EUR', 'GBP', 'CNY']
  * is needed: the catalog number is the URL. The page carries schema.org
  * itemprop markers, which we read directly.
  */
-async function queryCdjapanWeb(catalogNumber: string): Promise<QueryResult> {
-  const { browser, page } = await browserPool.acquire()
+async function queryCdjapanWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  const { browser, page } = await browserPool.acquire(signal)
 
   try {
     const productUrl = `${CDJAPAN_WEB_URL}/product/${encodeURIComponent(catalogNumber)}`
     logger.debug('queries.cdjapan', 'open product page', { catalogNumber, productUrl })
-    await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
 
     const extracted = await page.evaluate(() => {
       const name = document.querySelector('h1 [itemprop="name"]')?.textContent?.trim() || null
@@ -108,7 +109,8 @@ async function queryCdjapanWeb(catalogNumber: string): Promise<QueryResult> {
   }
 }
 
-export async function queryCdjapan(catalogNumber: string): Promise<QueryResult> {
+export async function queryCdjapan(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  throwIfAborted(signal)
   logger.debug('queries.cdjapan', 'query start', { catalogNumber })
   const cached = getCachedQueryResult('cdjapan', catalogNumber)
   if (cached) return cached
@@ -116,12 +118,14 @@ export async function queryCdjapan(catalogNumber: string): Promise<QueryResult> 
   let result: QueryResult
 
   try {
-    result = await queryCdjapanWeb(catalogNumber)
+    result = await queryCdjapanWeb(catalogNumber, signal)
   } catch (err) {
+    throwIfAborted(signal)
     logger.warn('queries.cdjapan', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
     result = queryError('cdjapan', err instanceof Error ? err.message : 'Unknown error')
   }
 
+  throwIfAborted(signal)
   cacheQueryResult(catalogNumber, result)
   return result
 }

@@ -73,6 +73,33 @@ describe('throttledFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('serializes requests queued in the same event-loop turn', async () => {
+    const resolvers: Array<(response: Response) => void> = []
+    fetchMock.mockImplementation(() => new Promise(resolve => resolvers.push(resolve)))
+
+    const requests = [1, 2, 3].map(index => throttledFetch(
+      'burst.test',
+      `https://burst.test/${index}`,
+      undefined,
+      { minDelay: 0, maxDelay: 0 }
+    ))
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    resolvers.shift()!(new Response('one', { status: 200 }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    resolvers.shift()!(new Response('two', { status: 200 }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+
+    resolvers.shift()!(new Response('three', { status: 200 }))
+    await vi.advanceTimersByTimeAsync(0)
+    await Promise.all(requests)
+  })
+
   it('retries with backoff on 429 responses', async () => {
     fetchMock
       .mockResolvedValueOnce(new Response('rate', { status: 429 }))
@@ -128,6 +155,36 @@ describe('throttledFetch', () => {
 
     await vi.advanceTimersByTimeAsync(10)
     await vi.advanceTimersByTimeAsync(100)
+    await assertion
+  })
+
+  it('removes a queued request when the caller aborts', async () => {
+    let resolveFirst!: (response: Response) => void
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+
+    const first = throttledFetch('cancel-queue.test', 'https://cancel-queue.test/1', undefined, { minDelay: 0, maxDelay: 0 })
+    await vi.advanceTimersByTimeAsync(0)
+    const controller = new AbortController()
+    const second = throttledFetch('cancel-queue.test', 'https://cancel-queue.test/2', { signal: controller.signal }, { minDelay: 0, maxDelay: 0 })
+    const assertion = expect(second).rejects.toMatchObject({ name: 'AbortError' })
+    controller.abort()
+    await assertion
+
+    resolveFirst(new Response('ok', { status: 200 }))
+    await vi.advanceTimersByTimeAsync(0)
+    await first
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('forwards caller cancellation to an active fetch', async () => {
+    fetchMock.mockImplementation((_url: string, opts: RequestInit) => new Promise((_resolve, reject) => {
+      opts.signal?.addEventListener('abort', () => reject(new Error('caller aborted')))
+    }))
+    const controller = new AbortController()
+    const promise = throttledFetch('cancel-active.test', 'https://cancel-active.test/1', { signal: controller.signal }, { minDelay: 0, maxDelay: 0 })
+    const assertion = expect(promise).rejects.toThrow('caller aborted')
+    await vi.advanceTimersByTimeAsync(0)
+    controller.abort()
     await assertion
   })
 
