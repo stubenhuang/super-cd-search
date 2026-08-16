@@ -1,4 +1,4 @@
-import type { BarcodeProvider, Platform } from './types'
+import type { BarcodeProvider, Platform, PublishPlatform } from './types'
 
 /**
  * Canonical platform order used across the app: result ordering, export
@@ -65,3 +65,6 @@ export const BARCODE_PROVIDER_LABELS: Record<BarcodeProvider, string> = {
   yahoo: 'Yahoo Shopping',
   surugaya: 'Suruga-ya'
 }
+
+/** Marketplaces a published CD can be marked as listed on (user-maintained). */
+export const PUBLISH_PLATFORMS: PublishPlatform[] = ['taobao', 'xianyu', 'discogs']

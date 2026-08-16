@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CDLibraryRecord, CDLibraryRecordInput } from './electron-api'
+import type {
+  CDLibraryRecord,
+  CDLibraryRecordInput,
+  LibraryPublishStatusFilter,
+  PublishItem,
+  PublishPlatform,
+  PublishSnapshot
+} from './electron-api'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { useI18n } from './i18n'
 import './CDLibrary.css'
@@ -145,7 +152,9 @@ function RecordForm({ record, onClose, onSaved }: RecordFormProps) {
   )
 }
 
-function LibraryCover({ record }: { record: CDLibraryRecord }) {
+type CoverRecord = Pick<CDLibraryRecord, 'catalogNumber' | 'imageUrl' | 'hasEmbeddedImage'>
+
+function LibraryCover({ record }: { record: CoverRecord }) {
   const { t } = useI18n()
   const [source, setSource] = useState<string>('')
   const [failed, setFailed] = useState(false)
@@ -179,6 +188,293 @@ function formatPrice(value: number | null): string {
   return value === null ? '—' : value.toFixed(2)
 }
 
+const PLATFORM_LABEL_KEYS: Record<PublishPlatform, 'library.platformTaobao' | 'library.platformXianyu' | 'library.platformDiscogs'> = {
+  taobao: 'library.platformTaobao',
+  xianyu: 'library.platformXianyu',
+  discogs: 'library.platformDiscogs'
+}
+
+const PLATFORM_ORDER: PublishPlatform[] = ['taobao', 'xianyu', 'discogs']
+
+/** "发布状态" cell: persistent toggle for the record. */
+function PublishStatusCell({
+  record,
+  busy,
+  onToggle
+}: {
+  record: CDLibraryRecord
+  busy: boolean
+  onToggle: (record: CDLibraryRecord) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <button
+      type="button"
+      className={`library-status-toggle${record.published ? ' on' : ''}`}
+      onClick={() => onToggle(record)}
+      disabled={busy}
+    >
+      {record.published ? t('library.publishedYes') : t('library.publishedNo')}
+    </button>
+  )
+}
+
+/** "发布平台" cell: per-platform checkmarks, editable once the record is published. */
+function PublishPlatformsCell({
+  record,
+  busy,
+  onTogglePlatform
+}: {
+  record: CDLibraryRecord
+  busy: boolean
+  onTogglePlatform: (record: CDLibraryRecord, platform: PublishPlatform) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="library-platforms-cell">
+      {PLATFORM_ORDER.map(platform => {
+        const on = (record.platforms ?? []).includes(platform)
+        return (
+          <button
+            key={platform}
+            type="button"
+            className={`library-platform-toggle${on ? ' on' : ''}`}
+            onClick={() => onTogglePlatform(record, platform)}
+            disabled={busy || !record.published}
+          >
+            {t(PLATFORM_LABEL_KEYS[platform])}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+const PRICE_FIELD_KEYS = [
+  ['lowestPriceUsd', 'export.lowestPriceUsd'],
+  ['highestPriceUsd', 'export.highestPriceUsd'],
+  ['lowestPriceCny', 'export.lowestPriceCny'],
+  ['highestPriceCny', 'export.highestPriceCny']
+] as const
+
+interface PublishModalProps {
+  onClose: () => void
+  /** Refresh the library table so its publish columns stay in sync. */
+  onChanged: () => void
+}
+
+/**
+ * Desktop publish manager: full parity with the phone "发布" tab — per-field
+ * copy, published-state toggle and platform checkmarks, kept live against
+ * phone-side edits via the publish-updated event.
+ */
+function PublishModal({ onClose, onChanged }: PublishModalProps) {
+  const { t } = useI18n()
+  const [snapshot, setSnapshot] = useState<PublishSnapshot | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+
+  const reload = useCallback(async () => {
+    try {
+      setSnapshot(await window.electronAPI.getPublishSnapshot())
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+    return window.electronAPI.receive('library:publish-updated', () => { void reload() })
+  }, [reload])
+
+  const copy = async (key: string, text: string | number | null) => {
+    if (text === null || text === '') return
+    try {
+      await navigator.clipboard.writeText(String(text))
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(current => (current === key ? null : current)), 1200)
+    } catch {
+      setError(t('library.copyFailed'))
+    }
+  }
+
+  const mutate = async (fn: () => Promise<void>, apply: (items: PublishItem[]) => PublishItem[]) => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+      setSnapshot(current => (current ? { ...current, items: apply(current.items) } : current))
+      onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const togglePublished = (item: PublishItem) => {
+    const next = !item.published
+    return mutate(
+      () => window.electronAPI.setPublishState(item.catalogNumber, next),
+      items => items.map(row => (row.catalogNumber === item.catalogNumber ? { ...row, published: next } : row))
+    )
+  }
+
+  const togglePlatform = (item: PublishItem, platform: PublishPlatform) => {
+    const next = (item.platforms ?? []).includes(platform)
+      ? item.platforms.filter(entry => entry !== platform)
+      : [...(item.platforms ?? []), platform]
+    return mutate(
+      () => window.electronAPI.setPublishPlatforms(item.catalogNumber, next),
+      items => items.map(row => (row.catalogNumber === item.catalogNumber ? { ...row, platforms: next } : row))
+    )
+  }
+
+  /** Closing the page ends the in-memory round; phones get the finished event. */
+  const requestClose = async () => {
+    if (busy || loading) return
+    if (items.length > 0) {
+      if (!window.confirm(t('library.closeRoundConfirm'))) return
+      setBusy(true)
+      setError(null)
+      try {
+        const result = await window.electronAPI.finishPublishBatch()
+        if (result.status !== 'finished') {
+          setError(result.error || t('export.failed'))
+          return
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+        return
+      } finally {
+        setBusy(false)
+      }
+      onChanged()
+    }
+    onClose()
+  }
+
+  const items = snapshot?.items ?? []
+  const publishedCount = items.filter(item => item.published).length
+  const platformCount = items.filter(item => (item.platforms ?? []).length > 0).length
+
+  return (
+    <div className="library-modal-overlay" onClick={() => requestClose()}>
+      <div className="library-modal publish-modal" onClick={event => event.stopPropagation()}>
+        <div className="library-modal-header">
+          <h2>{t('library.publishBatchTitle')}</h2>
+          <button type="button" onClick={() => requestClose()} aria-label={t('library.close')}>×</button>
+        </div>
+        <div className="library-modal-body publish-modal-body">
+          {error && <div className="library-form-error">{error}</div>}
+          {loading ? (
+            <div className="publish-modal-empty">{t('library.loading')}</div>
+          ) : items.length === 0 ? (
+            <div className="publish-modal-empty">{t('library.publishEmpty')}</div>
+          ) : (
+            <>
+              <div className="publish-modal-stats">
+                <span>{t('library.publishStats', { total: items.length, published: publishedCount, platforms: platformCount })}</span>
+                {snapshot?.publishedAt ? (
+                  <span className="publish-modal-time">{new Date(snapshot.publishedAt).toLocaleString()}</span>
+                ) : null}
+              </div>
+              <div className="publish-modal-list">
+                {items.map(item => (
+                  <article key={item.catalogNumber} className="publish-modal-item">
+                    <div className="publish-modal-cover"><LibraryCover record={item} /></div>
+                    <div className="publish-modal-item-main">
+                      <div className="publish-modal-cat">
+                        <span className="publish-modal-catno">{item.catalogNumber}</span>
+                        <button
+                          type="button"
+                          className="publish-copy-btn"
+                          disabled={busy}
+                          onClick={() => copy(`cat:${item.catalogNumber}`, item.catalogNumber)}
+                        >
+                          {copiedKey === `cat:${item.catalogNumber}` ? t('library.copied') : t('library.copy')}
+                        </button>
+                      </div>
+                      <details className="publish-modal-details">
+                        <summary>{item.details || t('library.noDetails')}</summary>
+                        <div className="publish-modal-details-text">{item.details}</div>
+                        <button
+                          type="button"
+                          className="publish-copy-btn"
+                          disabled={busy || !item.details}
+                          onClick={() => copy(`details:${item.catalogNumber}`, item.details || null)}
+                        >
+                          {copiedKey === `details:${item.catalogNumber}` ? t('library.copied') : t('library.copyDetails')}
+                        </button>
+                      </details>
+                      <div className="publish-modal-prices">
+                        {PRICE_FIELD_KEYS.map(([field, labelKey]) => {
+                          const value = item[field]
+                          const copyKey = `${field}:${item.catalogNumber}`
+                          return (
+                            <button
+                              key={field}
+                              type="button"
+                              className="publish-price-cell"
+                              disabled={busy || value === null}
+                              onClick={() => copy(copyKey, value)}
+                            >
+                              <span className="publish-price-label">{t(labelKey)}</span>
+                              <span className="publish-price-value">{formatPrice(value)}</span>
+                              <span className="publish-price-hint">{copiedKey === copyKey ? t('library.copied') : '⧉'}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div className="publish-modal-item-side">
+                      <button
+                        type="button"
+                        className={`library-status-toggle${item.published ? ' on' : ''}`}
+                        disabled={busy}
+                        onClick={() => togglePublished(item)}
+                      >
+                        {item.published ? t('library.publishedYes') : t('library.publishedNo')}
+                      </button>
+                      <div className="library-platforms-cell">
+                        {PLATFORM_ORDER.map(platform => {
+                          const on = (item.platforms ?? []).includes(platform)
+                          return (
+                            <button
+                              key={platform}
+                              type="button"
+                              className={`library-platform-toggle${on ? ' on' : ''}`}
+                              disabled={busy || !item.published}
+                              onClick={() => togglePlatform(item, platform)}
+                            >
+                              {t(PLATFORM_LABEL_KEYS[platform])}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="library-modal-actions">
+          <button type="button" className="primary" onClick={() => requestClose()} disabled={busy || loading}>
+            {t('library.finishPublish')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface CDLibraryProps {
   refreshVersion: number
 }
@@ -191,16 +487,27 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
   const [pageSize, setPageSize] = useState<PageSize>(20)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string[]>([])
+  const [publishStatus, setPublishStatus] = useState<LibraryPublishStatusFilter>('all')
+  const [publishPlatform, setPublishPlatform] = useState<PublishPlatform | 'all'>('all')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const activeFilterCount = (publishStatus !== 'all' ? 1 : 0) + (publishPlatform !== 'all' ? 1 : 0)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [editing, setEditing] = useState<CDLibraryRecord | null | undefined>(undefined)
+  const [publishModalOpen, setPublishModalOpen] = useState(false)
   const headerCheckboxRef = useRef<HTMLInputElement>(null)
 
   const loadRecords = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await window.electronAPI.listLibraryRecords({ catalogQuery: query, page, pageSize })
+      const result = await window.electronAPI.listLibraryRecords({
+        catalogQuery: query,
+        page,
+        pageSize,
+        publishStatus,
+        publishPlatform
+      })
       setRecords(result.records)
       setTotal(result.total)
       if (result.page !== page) setPage(result.page)
@@ -209,7 +516,7 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, query, t])
+  }, [page, pageSize, query, publishStatus, publishPlatform, t])
 
   useEffect(() => { void loadRecords() }, [loadRecords, refreshVersion])
 
@@ -227,6 +534,16 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
     setQuery(value)
     setPage(1)
     setSelected([])
+  }
+
+  const handlePublishStatusFilter = (value: LibraryPublishStatusFilter) => {
+    setPublishStatus(value)
+    setPage(1)
+  }
+
+  const handlePublishPlatformFilter = (value: PublishPlatform | 'all') => {
+    setPublishPlatform(value)
+    setPage(1)
   }
 
   const handlePageSize = (value: PageSize) => {
@@ -294,7 +611,10 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
   }
 
   const handleExport = async () => {
-    if (selected.length === 0) return
+    if (selected.length === 0) {
+      setNotice({ kind: 'error', text: t('library.needSelection') })
+      return
+    }
     setBusy(true)
     setNotice(null)
     const headers = [
@@ -312,24 +632,128 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
     }
   }
 
+  const handlePublish = async () => {
+    if (selected.length === 0) {
+      setNotice({ kind: 'error', text: t('library.needSelection') })
+      return
+    }
+    if (!window.confirm(t('library.publishConfirm', { count: selected.length }))) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      const result = await window.electronAPI.publishLibraryRecords(selected)
+      if (result.status === 'published') {
+        // The publish page opens right away, so no success notice is needed;
+        // only warn when the phone cannot actually see the round.
+        try {
+          const lan = await window.electronAPI.getLanStatus()
+          if (lan.state !== 'running') {
+            setNotice({ kind: 'error', text: t('library.lanOffHint') })
+          }
+        } catch {
+          // LAN status is informational only; ignore lookup failures here.
+        }
+        await loadRecords()
+        setPublishModalOpen(true)
+      } else {
+        setNotice({ kind: 'error', text: t('library.storageError', { error: result.error || t('export.failed') }) })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const togglePublishState = async (record: CDLibraryRecord) => {
+    if (busy || record.published === undefined) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      await window.electronAPI.setPublishState(record.catalogNumber, !record.published)
+      await loadRecords()
+    } catch (err) {
+      setNotice({ kind: 'error', text: t('library.storageError', { error: err instanceof Error ? err.message : String(err) }) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const togglePublishPlatform = async (record: CDLibraryRecord, platform: PublishPlatform) => {
+    if (busy || record.published !== true) return
+    const current = record.platforms ?? []
+    const next = current.includes(platform)
+      ? current.filter(item => item !== platform)
+      : [...current, platform]
+    setBusy(true)
+    setNotice(null)
+    try {
+      await window.electronAPI.setPublishPlatforms(record.catalogNumber, next)
+      await loadRecords()
+    } catch (err) {
+      setNotice({ kind: 'error', text: t('library.storageError', { error: err instanceof Error ? err.message : String(err) }) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
     <section className="library-panel">
-      <div className="library-toolbar">
-        <input
-          className="library-search"
-          value={query}
-          onChange={event => handleQueryChange(event.target.value)}
-          placeholder={t('library.searchPlaceholder')}
-        />
-        <div className="library-toolbar-actions">
-          {selected.length > 0 && <span className="library-selected-count">{t('library.selected', { count: selected.length })}</span>}
-          <button onClick={() => setEditing(null)} disabled={busy}>{t('library.add')}</button>
-          <button onClick={handleImport} disabled={busy}>{busy ? t('library.importing') : t('library.import')}</button>
-          <button onClick={handleExport} disabled={busy || selected.length === 0}>{t('library.exportSelected')}</button>
-          <button className="danger" onClick={() => deleteRecords(selected)} disabled={busy || selected.length === 0}>{t('library.deleteSelected')}</button>
+      <div className="library-toolbar-block">
+        <div className="library-toolbar">
+          <input
+            className="library-search"
+            value={query}
+            onChange={event => handleQueryChange(event.target.value)}
+            placeholder={t('library.searchPlaceholder')}
+          />
+          <button
+            type="button"
+            className={`library-filter-toggle${filtersOpen ? ' active' : ''}`}
+            onClick={() => setFiltersOpen(value => !value)}
+          >
+            {t('library.filter')}{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+          </button>
+          <div className="library-toolbar-actions">
+            {selected.length > 0 && <span className="library-selected-count">{t('library.selected', { count: selected.length })}</span>}
+            <button onClick={() => setEditing(null)} disabled={busy}>{t('library.add')}</button>
+            <button onClick={handleImport} disabled={busy}>{busy ? t('library.importing') : t('library.import')}</button>
+            <button onClick={handleExport} disabled={busy}>{t('library.exportSelected')}</button>
+            <button onClick={handlePublish} disabled={busy}>{t('library.publishSelected')}</button>
+            <button className="danger" onClick={() => deleteRecords(selected)} disabled={busy || selected.length === 0}>{t('library.deleteSelected')}</button>
+          </div>
         </div>
+        {filtersOpen && (
+          <div className="library-filter-panel">
+            <select
+              className="library-filter"
+              value={publishStatus}
+              onChange={event => handlePublishStatusFilter(event.target.value as LibraryPublishStatusFilter)}
+            >
+              <option value="all">{t('library.publishStateColumn')} · {t('library.filterAll')}</option>
+              <option value="unpublished">{t('library.publishStateColumn')} · {t('library.publishedNo')}</option>
+              <option value="published">{t('library.publishStateColumn')} · {t('library.publishedYes')}</option>
+            </select>
+            <select
+              className="library-filter"
+              value={publishPlatform}
+              onChange={event => handlePublishPlatformFilter(event.target.value as PublishPlatform | 'all')}
+            >
+              <option value="all">{t('library.publishPlatformColumn')} · {t('library.filterAll')}</option>
+              <option value="taobao">{t('library.publishPlatformColumn')} · {t('library.platformTaobao')}</option>
+              <option value="xianyu">{t('library.publishPlatformColumn')} · {t('library.platformXianyu')}</option>
+              <option value="discogs">{t('library.publishPlatformColumn')} · {t('library.platformDiscogs')}</option>
+            </select>
+            <button
+              type="button"
+              className="library-filter-reset"
+              onClick={() => { setPublishStatus('all'); setPublishPlatform('all'); setPage(1) }}
+              disabled={activeFilterCount === 0}
+            >
+              {t('library.resetFilter')}
+            </button>
+          </div>
+        )}
       </div>
       {notice && <div className={`library-notice ${notice.kind}`}>{notice.text}</div>}
       <div className="library-table-wrap">
@@ -348,6 +772,8 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
               <col className="library-col-price" />
               <col className="library-col-price" />
               <col className="library-col-price" />
+              <col className="library-col-publish-state" />
+              <col className="library-col-publish-platforms" />
               <col className="library-col-actions" />
             </colgroup>
             <thead>
@@ -360,6 +786,8 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
                 <th className="library-price-header">{t('export.highestPriceUsd')}</th>
                 <th className="library-price-header">{t('export.lowestPriceCny')}</th>
                 <th className="library-price-header">{t('export.highestPriceCny')}</th>
+                <th className="library-publish-header">{t('library.publishStateColumn')}</th>
+                <th className="library-publish-header">{t('library.publishPlatformColumn')}</th>
                 <th className="library-actions-header">{t('library.actions')}</th>
               </tr>
             </thead>
@@ -374,6 +802,12 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
                   <td className="library-price-cell">{formatPrice(record.highestPriceUsd)}</td>
                   <td className="library-price-cell">{formatPrice(record.lowestPriceCny)}</td>
                   <td className="library-price-cell">{formatPrice(record.highestPriceCny)}</td>
+                  <td className="library-publish-cell">
+                    <PublishStatusCell record={record} busy={busy} onToggle={togglePublishState} />
+                  </td>
+                  <td className="library-publish-cell">
+                    <PublishPlatformsCell record={record} busy={busy} onTogglePlatform={togglePublishPlatform} />
+                  </td>
                   <td className="library-actions-cell">
                     <div className="library-row-actions">
                       <button onClick={() => setEditing(record)} disabled={busy}>{t('library.edit')}</button>
@@ -407,6 +841,12 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
             setPage(1)
             void loadRecords()
           }}
+        />
+      )}
+      {publishModalOpen && (
+        <PublishModal
+          onClose={() => setPublishModalOpen(false)}
+          onChanged={() => { void loadRecords() }}
         />
       )}
     </section>

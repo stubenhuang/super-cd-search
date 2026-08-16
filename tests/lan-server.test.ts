@@ -7,7 +7,8 @@ import {
   extractCookieToken,
   extractRequestHost,
   isAllowedRequestHost,
-  LanHttpServer
+  LanHttpServer,
+  type LanPublishHandlers
 } from '../src/main/lan/server'
 
 class MockResponse {
@@ -45,6 +46,17 @@ function callHandler(
   if (host) headers.host = host
   if (cookie) headers.cookie = cookie
   handler({ headers, url } as unknown as IncomingMessage, res as unknown as ServerResponse)
+  return res
+}
+
+async function callGetHandler(
+  handler: (req: IncomingMessage, res: ServerResponse) => void,
+  url: string
+): Promise<MockResponse> {
+  const res = new MockResponse()
+  const headers: Record<string, string> = { host: '192.168.1.5:8787', cookie: 'super_cd_lan=token' }
+  handler({ headers, url, method: 'GET' } as unknown as IncomingMessage, res as unknown as ServerResponse)
+  await res.finished
   return res
 }
 
@@ -248,6 +260,131 @@ describe('buildLanUrl', () => {
   })
 })
 
+function mockPublishHandlers(overrides: Partial<LanPublishHandlers> = {}): LanPublishHandlers {
+  return {
+    list: async () => ({
+      publishedAt: 1710000000000,
+      items: [
+        {
+          catalogNumber: 'TOCP-1',
+          imageUrl: '',
+          hasEmbeddedImage: false,
+          details: 'detail text',
+          lowestPriceUsd: 1,
+          highestPriceUsd: 2,
+          lowestPriceCny: null,
+          highestPriceCny: null,
+          published: false,
+          platforms: []
+        }
+      ]
+    }),
+    subscribe: () => () => {},
+    setPublished: async () => ({ status: 'ok' }),
+    setPlatforms: async () => ({ status: 'ok' }),
+    image: async () => null,
+    ...overrides
+  }
+}
+
+describe('createLanRequestHandler publish routes', () => {
+  it('requires authentication for publish endpoints', () => {
+    const handler = createLanRequestHandler('192.168.1.5', 'token', undefined, undefined, mockPublishHandlers())
+    expect(callHandler(handler, '192.168.1.5', '/api/publish/list').statusCode).toBe(401)
+    expect(callHandler(handler, '192.168.1.5', '/api/publish/events').statusCode).toBe(401)
+    expect(callHandler(handler, '192.168.1.5', '/publish/image?catalog=X').statusCode).toBe(401)
+  })
+
+  it('rejects publish routes when no handlers are configured', async () => {
+    const handler = createLanRequestHandler('192.168.1.5', 'token')
+    expect(callHandler(handler, '192.168.1.5', '/api/publish/list?token=token').statusCode).toBe(404)
+    expect((await callGetHandler(handler, '/api/publish/events?token=token')).statusCode).toBe(404)
+    expect(callHandler(handler, '192.168.1.5', '/publish/image?catalog=X&token=token').statusCode).toBe(404)
+  })
+
+  it('serves the publish snapshot', async () => {
+    const handler = createLanRequestHandler('192.168.1.5', 'token', undefined, undefined, mockPublishHandlers())
+    const res = await callGetHandler(handler, '/api/publish/list')
+    expect(res.statusCode).toBe(200)
+    const snapshot = JSON.parse(res.body)
+    expect(snapshot.publishedAt).toBe(1710000000000)
+    expect(snapshot.items[0].catalogNumber).toBe('TOCP-1')
+  })
+
+  it('turns publish list failures into a 500 response', async () => {
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      mockPublishHandlers({ list: async () => { throw new Error('db down') } })
+    )
+    expect((await callGetHandler(handler, '/api/publish/list')).statusCode).toBe(500)
+  })
+
+  it('validates publish-state bodies', async () => {
+    const calls: Array<[string, boolean]> = []
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      mockPublishHandlers({
+        setPublished: async (catalogNumber, published) => {
+          calls.push([catalogNumber, published])
+          return { status: 'ok' }
+        }
+      })
+    )
+
+    const ok = await callPostHandler(handler, JSON.stringify({ catalogNumber: 'TOCP-1', published: true }), undefined, undefined, '/api/publish/state')
+    expect(ok.statusCode).toBe(200)
+    expect(JSON.parse(ok.body).status).toBe('ok')
+    expect(calls).toEqual([['TOCP-1', true]])
+
+    expect((await callPostHandler(handler, 'not-json', undefined, undefined, '/api/publish/state')).statusCode).toBe(400)
+    expect((await callPostHandler(handler, JSON.stringify({ catalogNumber: 'TOCP-1' }), undefined, undefined, '/api/publish/state')).statusCode).toBe(400)
+    expect((await callPostHandler(handler, JSON.stringify({ published: true }), undefined, undefined, '/api/publish/state')).statusCode).toBe(400)
+  })
+
+  it('validates platform bodies', async () => {
+    const calls: Array<[string, string[]]> = []
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      mockPublishHandlers({
+        setPlatforms: async (catalogNumber, platforms) => {
+          calls.push([catalogNumber, [...platforms]])
+          return { status: 'ok' }
+        }
+      })
+    )
+
+    const ok = await callPostHandler(
+      handler,
+      JSON.stringify({ catalogNumber: 'TOCP-1', platforms: ['taobao', 'xianyu'] }),
+      undefined,
+      undefined,
+      '/api/publish/platforms'
+    )
+    expect(ok.statusCode).toBe(200)
+    expect(calls).toEqual([['TOCP-1', ['taobao', 'xianyu']]])
+
+    expect((await callPostHandler(handler, JSON.stringify({ catalogNumber: 'TOCP-1' }), undefined, undefined, '/api/publish/platforms')).statusCode).toBe(400)
+    expect((await callPostHandler(handler, JSON.stringify({ catalogNumber: 'TOCP-1', platforms: 'taobao' }), undefined, undefined, '/api/publish/platforms')).statusCode).toBe(400)
+    expect((await callPostHandler(handler, JSON.stringify({ catalogNumber: 'TOCP-1', platforms: [1] }), undefined, undefined, '/api/publish/platforms')).statusCode).toBe(400)
+  })
+
+  it('validates the publish image query parameter', async () => {
+    const handler = createLanRequestHandler('192.168.1.5', 'token', undefined, undefined, mockPublishHandlers())
+    expect((await callGetHandler(handler, '/publish/image')).statusCode).toBe(400)
+    expect((await callGetHandler(handler, '/publish/image?catalog=')).statusCode).toBe(400)
+    expect((await callGetHandler(handler, '/publish/image?catalog=TOCP-1')).statusCode).toBe(404)
+  })
+})
+
 describe('LanHttpServer', () => {
   it('starts on loopback, serves authorized requests and stops', async () => {
     const server = new LanHttpServer()
@@ -292,6 +429,60 @@ describe('LanHttpServer', () => {
     })
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ status: 'added', catalogNumber: 'TOCP-1' })
+  })
+
+  it('serves publish cover images as binary responses', async () => {
+    const server = new LanHttpServer()
+    openServers.push(server)
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
+
+    const port = await server.start({
+      host: '127.0.0.1',
+      port: 0,
+      token: 'integration-token',
+      publishHandlers: mockPublishHandlers({
+        image: async () => ({ buffer: png, mimeType: 'image/png' })
+      })
+    })
+
+    const response = await fetch(`http://127.0.0.1:${port}/publish/image?catalog=TOCP-1&token=integration-token`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toBe('image/png')
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(png)
+  })
+
+  it('streams publish changes over SSE and stops cleanly with open streams', async () => {
+    const server = new LanHttpServer()
+    openServers.push(server)
+    let notify: ((kind: string) => void) | null = null
+    const port = await server.start({
+      host: '127.0.0.1',
+      port: 0,
+      token: 'integration-token',
+      publishHandlers: mockPublishHandlers({
+        subscribe: listener => {
+          notify = listener as (kind: string) => void
+          return () => { notify = null }
+        }
+      })
+    })
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/publish/events?token=integration-token`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/event-stream')
+
+    const reader = response.body!.getReader()
+    const first = await reader.read()
+    expect(Buffer.from(first.value!).toString('utf8')).toContain('retry: 2000')
+
+    notify!('finished')
+    const event = await reader.read()
+    expect(Buffer.from(event.value!).toString('utf8')).toContain('event: finished')
+
+    // Leaving the stream open must not hang stop(): SSE connections are destroyed.
+    await reader.cancel()
+    await server.stop()
+    expect(server.running).toBe(false)
   })
 
   it('rejects a second server on the same port', async () => {

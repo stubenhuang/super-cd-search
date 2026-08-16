@@ -20,11 +20,21 @@ import type {
   CDLibraryRecordInput,
   CDLibraryListQuery,
   CDLibraryListResult,
-  CDLibraryImportResult
+  CDLibraryImportResult,
+  PublishPlatform,
+  PublishResult,
+  PublishSnapshot
 } from '../shared/types'
 
 const validSendChannels = ['toMain', 'renderer:log'] as const
-const validReceiveChannels = ['fromMain', 'query:progress', 'detail:enrich-progress', 'export:progress', 'lan:catalog-added'] as const
+const validReceiveChannels = [
+  'fromMain',
+  'query:progress',
+  'detail:enrich-progress',
+  'export:progress',
+  'lan:catalog-added',
+  'library:publish-updated'
+] as const
 
 const validLogLevels = new Set(['debug', 'info', 'warn', 'error'])
 
@@ -95,6 +105,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('library:export-excel', catalogNumbers, headers, defaultFileName, targetDirectory),
   getLibraryImage: (catalogNumber: string): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('library:image', catalogNumber),
+  publishLibraryRecords: (catalogNumbers: string[]): Promise<PublishResult> =>
+    ipcRenderer.invoke('library:publish', catalogNumbers),
+  finishPublishBatch: (): Promise<PublishResult> =>
+    ipcRenderer.invoke('library:finish-publish'),
+  getPublishSnapshot: (): Promise<PublishSnapshot> =>
+    ipcRenderer.invoke('library:get-publish-snapshot'),
+  setPublishState: (catalogNumber: string, published: boolean): Promise<void> =>
+    ipcRenderer.invoke('library:set-publish-state', catalogNumber, published),
+  setPublishPlatforms: (catalogNumber: string, platforms: PublishPlatform[]): Promise<void> =>
+    ipcRenderer.invoke('library:set-publish-platforms', catalogNumber, platforms),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),

@@ -1,10 +1,12 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
 import { join } from 'path'
+import { PUBLISH_PLATFORMS } from '../../shared/platforms'
 import type {
   CDLibraryListQuery,
   CDLibraryListResult,
   CDLibraryRecord,
-  CDLibraryRecordInput
+  CDLibraryRecordInput,
+  PublishPlatform
 } from '../../shared/types'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { logger } from '../logger'
@@ -20,6 +22,8 @@ interface LibraryRow {
   has_embedded_image: number
   created_at: number
   updated_at: number
+  published: number
+  platforms: string
 }
 
 export interface EmbeddedLibraryImage {
@@ -103,7 +107,7 @@ export function validateLibraryRecordInput(input: CDLibraryRecordInput): CDLibra
 }
 
 function mapRow(row: LibraryRow): CDLibraryRecord {
-  return {
+  const record: CDLibraryRecord = {
     catalogNumber: row.catalog_number,
     imageUrl: row.image_url || '',
     details: row.details || '',
@@ -114,6 +118,22 @@ function mapRow(row: LibraryRow): CDLibraryRecord {
     hasEmbeddedImage: row.has_embedded_image === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+  record.published = row.published === 1
+  record.platforms = parsePlatformsJson(row.platforms)
+  return record
+}
+
+function parsePlatformsJson(value: string | null | undefined): PublishPlatform[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is PublishPlatform =>
+      typeof item === 'string' && (PUBLISH_PLATFORMS as string[]).includes(item)
+    )
+  } catch {
+    return []
   }
 }
 
@@ -187,8 +207,48 @@ export function initCDLibrary(userDataDir: string): void {
       PRAGMA user_version = 1;
     `)
   }
+  if (version < 3) {
+    // Publish batch: single overwritten-in-place batch; items only carry
+    // user-maintained state, library fields are joined live on read. The drop
+    // rebuilds tables from interim dev builds that named the flag differently.
+    db.exec(`
+      DROP TABLE IF EXISTS publish_items;
+      CREATE TABLE IF NOT EXISTS publish_items (
+        catalog_number TEXT PRIMARY KEY COLLATE NOCASE,
+        sort_order INTEGER NOT NULL,
+        published INTEGER NOT NULL DEFAULT 0,
+        platforms TEXT NOT NULL DEFAULT '[]',
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS publish_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+      PRAGMA user_version = 3;
+    `)
+  }
+  if (version < 4) {
+    // Publish state (published flag + platform checkmarks) became persistent
+    // per-record columns; the round tables are gone (rounds now live in memory).
+    db.exec(`
+      ALTER TABLE cd_library ADD COLUMN published INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE cd_library ADD COLUMN platforms TEXT NOT NULL DEFAULT '[]';
+      UPDATE cd_library SET
+        published = COALESCE((
+          SELECT pi.published FROM publish_items pi
+          WHERE pi.catalog_number = cd_library.catalog_number
+        ), 0),
+        platforms = COALESCE((
+          SELECT pi.platforms FROM publish_items pi
+          WHERE pi.catalog_number = cd_library.catalog_number
+        ), '[]');
+      DROP TABLE IF EXISTS publish_items;
+      DROP TABLE IF EXISTS publish_meta;
+      PRAGMA user_version = 4;
+    `)
+  }
   database = db
-  logger.info('library.db', 'CD library database initialized', { filePath, version: Math.max(version, 1) })
+  logger.info('library.db', 'CD library database initialized', { filePath, version: Math.max(version, 4) })
 }
 
 export function closeCDLibrary(): void {
@@ -197,31 +257,52 @@ export function closeCDLibrary(): void {
   database = null
 }
 
+const PUBLISH_STATUS_FILTERS = ['all', 'published', 'unpublished'] as const
+
 export function listLibraryRecords(query: CDLibraryListQuery): CDLibraryListResult {
   const db = getDatabase()
   const catalogQuery = String(query?.catalogQuery ?? '').trim()
   const pageSize = ([20, 50, 100] as number[]).includes(query?.pageSize) ? query.pageSize : 20
   const requestedPage = Number.isInteger(query?.page) && query.page > 0 ? query.page : 1
-  const where = catalogQuery ? 'WHERE instr(lower(catalog_number), lower(?)) > 0' : ''
-  const countStmt = db.prepare(`SELECT COUNT(*) AS count FROM cd_library ${where}`)
-  const countRow = (catalogQuery ? countStmt.get(catalogQuery) : countStmt.get()) as { count: number }
+
+  const conditions: string[] = []
+  const filterParams: Array<string | number> = []
+  if (catalogQuery) {
+    conditions.push('instr(lower(cl.catalog_number), lower(?)) > 0')
+    filterParams.push(catalogQuery)
+  }
+  const publishStatus = PUBLISH_STATUS_FILTERS.find(value => value === query?.publishStatus) ?? 'all'
+  if (publishStatus === 'published') conditions.push('cl.published = 1')
+  else if (publishStatus === 'unpublished') conditions.push('cl.published = 0')
+  const publishPlatform = query?.publishPlatform
+  if (publishPlatform && publishPlatform !== 'all') {
+    // platforms is a small JSON array of fixed safe tokens, so substring match works.
+    conditions.push(`cl.platforms LIKE '%"' || ? || '"%'`)
+    filterParams.push(publishPlatform)
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  const countRow = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM cd_library cl
+    ${where}
+  `).get(...filterParams) as { count: number }
   const total = Number(countRow.count)
   const maxPage = Math.max(1, Math.ceil(total / pageSize))
   const page = Math.min(requestedPage, maxPage)
   const listStmt = db.prepare(`
-    SELECT catalog_number, image_url, details,
-      lowest_price_usd, highest_price_usd, lowest_price_cny, highest_price_cny,
-      CASE WHEN image_blob IS NULL THEN 0 ELSE 1 END AS has_embedded_image,
-      created_at, updated_at
-    FROM cd_library
+    SELECT cl.catalog_number, cl.image_url, cl.details,
+      cl.lowest_price_usd, cl.highest_price_usd, cl.lowest_price_cny, cl.highest_price_cny,
+      CASE WHEN cl.image_blob IS NULL THEN 0 ELSE 1 END AS has_embedded_image,
+      cl.created_at, cl.updated_at,
+      cl.published, cl.platforms
+    FROM cd_library cl
     ${where}
-    ORDER BY updated_at DESC, catalog_number ASC
+    ORDER BY cl.updated_at DESC, cl.catalog_number ASC
     LIMIT ? OFFSET ?
   `)
   const offset = (page - 1) * pageSize
-  const rows = (catalogQuery
-    ? listStmt.all(catalogQuery, pageSize, offset)
-    : listStmt.all(pageSize, offset)) as unknown as LibraryRow[]
+  const rows = listStmt.all(...filterParams, pageSize, offset) as unknown as LibraryRow[]
   return { records: rows.map(mapRow), total, page, pageSize }
 }
 
@@ -231,7 +312,7 @@ export function getLibraryRecords(catalogNumbers: string[]): CDLibraryRecord[] {
     SELECT catalog_number, image_url, details,
       lowest_price_usd, highest_price_usd, lowest_price_cny, highest_price_cny,
       CASE WHEN image_blob IS NULL THEN 0 ELSE 1 END AS has_embedded_image,
-      created_at, updated_at
+      created_at, updated_at, published, platforms
     FROM cd_library WHERE catalog_number = ? COLLATE NOCASE
   `)
   const records: CDLibraryRecord[] = []
@@ -390,6 +471,33 @@ export function getEmbeddedLibraryImage(catalogNumber: string): EmbeddedLibraryI
 export function getLibraryCount(): number {
   const row = getDatabase().prepare('SELECT COUNT(*) AS count FROM cd_library').get() as { count: number }
   return Number(row.count)
+}
+
+/**
+ * Set the persistent "published" flag of one library record. Survives publish
+ * rounds and app restarts; the user maintains it from desktop or phone.
+ */
+export function setRecordPublishState(catalogNumber: string, published: boolean): void {
+  const db = getDatabase()
+  const result = db.prepare(`
+    UPDATE cd_library SET published = ?, updated_at = ?
+    WHERE catalog_number = ? COLLATE NOCASE
+  `).run(published ? 1 : 0, Date.now(), normalizeCatalogNumber(String(catalogNumber ?? '')))
+  if (Number(result.changes) === 0) throw new Error('记录不存在')
+}
+
+/** Update the persistent published-platform checkmarks of one library record. */
+export function setRecordPublishPlatforms(catalogNumber: string, platforms: PublishPlatform[]): void {
+  if (!Array.isArray(platforms) || platforms.some(item => !(PUBLISH_PLATFORMS as string[]).includes(item))) {
+    throw new Error('平台列表无效')
+  }
+  const unique = [...new Set(platforms)]
+  const db = getDatabase()
+  const result = db.prepare(`
+    UPDATE cd_library SET platforms = ?, updated_at = ?
+    WHERE catalog_number = ? COLLATE NOCASE
+  `).run(JSON.stringify(unique), Date.now(), normalizeCatalogNumber(String(catalogNumber ?? '')))
+  if (Number(result.changes) === 0) throw new Error('记录不存在')
 }
 
 export { PRICE_KEYS }

@@ -6,7 +6,9 @@ import type {
   CDLibraryListQuery,
   CDLibraryRecordInput,
   ExcelExportPayload,
-  ExportFileResult
+  ExportFileResult,
+  PublishPlatform,
+  PublishResult
 } from '../../shared/types'
 import { parseLibraryExcel } from '../excel/importer'
 import { writeExcelFile, type ImageFetcher } from '../excel/exporter'
@@ -17,10 +19,14 @@ import {
   getEmbeddedLibraryImage,
   getLibraryRecords,
   listLibraryRecords,
+  setRecordPublishPlatforms,
+  setRecordPublishState,
   updateLibraryRecord,
   upsertImportedRecords,
   upsertLibraryRecords
 } from '../library'
+import { finishPublishRound, getPublishSnapshot, startPublishRound } from '../publish/round'
+import { notifyPublishChanged, notifyPublishObservers } from '../lan/publish-bus'
 import { logger } from '../logger'
 import { getSetting, setSetting } from '../settings'
 
@@ -43,24 +49,73 @@ export function registerLibraryIpc(): void {
   ipcMain.handle('library:create', (_event, input: CDLibraryRecordInput) => {
     const record = createLibraryRecord(input)
     logger.info('ipc.library', 'library record created', { catalogNumber: record.catalogNumber })
+    notifyPublishObservers()
     return record
   })
 
   ipcMain.handle('library:update', (_event, catalogNumber: string, input: CDLibraryRecordInput) => {
     const record = updateLibraryRecord(String(catalogNumber ?? ''), input)
     logger.info('ipc.library', 'library record updated', { catalogNumber: record.catalogNumber })
+    notifyPublishObservers()
     return record
   })
 
   ipcMain.handle('library:upsert-search-results', (_event, inputs: CDLibraryRecordInput[]) => {
     upsertLibraryRecords(inputs)
     logger.debug('ipc.library', 'search results persisted to library', { count: inputs.length })
+    notifyPublishObservers()
   })
 
   ipcMain.handle('library:delete', (_event, catalogNumbers: string[]) => {
     const deleted = deleteLibraryRecords(validateCatalogNumbers(catalogNumbers))
     logger.info('ipc.library', 'library records deleted', { deleted })
+    notifyPublishObservers()
     return deleted
+  })
+
+  ipcMain.handle('library:publish', (_event, catalogNumbers: string[]): PublishResult => {
+    try {
+      const selected = validateCatalogNumbers(catalogNumbers)
+      if (selected.length === 0) throw new Error('请先选择要发布的记录')
+      const count = startPublishRound(selected)
+      if (count === 0) throw new Error('所选记录都不在 CD 库中')
+      notifyPublishChanged()
+      return { status: 'published', count }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      logger.warn('ipc.library', 'library publish failed', { error: message })
+      return { status: 'error', error: message }
+    }
+  })
+
+  ipcMain.handle('library:finish-publish', (): PublishResult => {
+    try {
+      finishPublishRound()
+      notifyPublishChanged('finished')
+      return { status: 'finished' }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      logger.warn('ipc.library', 'library publish finish failed', { error: message })
+      return { status: 'error', error: message }
+    }
+  })
+
+  ipcMain.handle('library:get-publish-snapshot', () => getPublishSnapshot())
+
+  ipcMain.handle('library:set-publish-state', (_event, catalogNumber: string, published: boolean) => {
+    if (typeof published !== 'boolean') throw new Error('发布状态格式无效')
+    setRecordPublishState(String(catalogNumber ?? ''), published)
+    notifyPublishChanged()
+    logger.debug('ipc.library', 'publish state updated from desktop', { catalogNumber, published })
+  })
+
+  ipcMain.handle('library:set-publish-platforms', (_event, catalogNumber: string, platforms: PublishPlatform[]) => {
+    setRecordPublishPlatforms(String(catalogNumber ?? ''), platforms)
+    notifyPublishChanged()
+    logger.debug('ipc.library', 'publish platforms updated from desktop', {
+      catalogNumber,
+      count: Array.isArray(platforms) ? platforms.length : -1
+    })
   })
 
   ipcMain.handle('library:image', (_event, catalogNumber: string) => {
@@ -81,6 +136,7 @@ export function registerLibraryIpc(): void {
       }
       const parsed = await parseLibraryExcel(filePath)
       const counts = upsertImportedRecords(parsed.records)
+      notifyPublishObservers()
       logger.info('ipc.library', 'library Excel imported', {
         filePath,
         added: counts.added,

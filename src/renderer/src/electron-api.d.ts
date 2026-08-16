@@ -29,7 +29,12 @@ import type {
   CDLibraryRecordInput,
   CDLibraryListQuery,
   CDLibraryListResult,
-  CDLibraryImportResult
+  CDLibraryImportResult,
+  LibraryPublishStatusFilter,
+  PublishItem,
+  PublishPlatform,
+  PublishResult,
+  PublishSnapshot
 } from '../../shared/types'
 
 export type {
@@ -62,7 +67,12 @@ export type {
   CDLibraryRecordInput,
   CDLibraryListQuery,
   CDLibraryListResult,
-  CDLibraryImportResult
+  CDLibraryImportResult,
+  LibraryPublishStatusFilter,
+  PublishItem,
+  PublishPlatform,
+  PublishResult,
+  PublishSnapshot
 }
 
 // Extended progress type for received messages (includes event)
@@ -108,6 +118,11 @@ export interface IElectronAPI {
     targetDirectory?: string
   ) => Promise<ExportFileResult>
   getLibraryImage: (catalogNumber: string) => Promise<{ base64: string; mimeType: string } | null>
+  publishLibraryRecords: (catalogNumbers: string[]) => Promise<PublishResult>
+  finishPublishBatch: () => Promise<PublishResult>
+  getPublishSnapshot: () => Promise<PublishSnapshot>
+  setPublishState: (catalogNumber: string, published: boolean) => Promise<void>
+  setPublishPlatforms: (catalogNumber: string, platforms: PublishPlatform[]) => Promise<void>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
   startCloudflareChallenge: (platform: CloudflarePlatform) => Promise<CloudflareChallengeResult>

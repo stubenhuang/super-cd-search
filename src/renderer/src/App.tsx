@@ -463,6 +463,14 @@ function App() {
   }, [parseCatalogNumbers, t])
 
   useEffect(() => {
+    // Phone-side publish state changes (published flag, platform checkmarks)
+    // should be reflected in the CD library table's publish columns.
+    return window.electronAPI.receive('library:publish-updated', () => {
+      setLibraryRefreshVersion(version => version + 1)
+    })
+  }, [])
+
+  useEffect(() => {
     const handleExportProgress = (...args: unknown[]) => {
       const progress = args[0] as ExportProgress
       if (progress?.phase === 'images') {

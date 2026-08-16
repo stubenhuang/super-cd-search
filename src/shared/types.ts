@@ -281,13 +281,55 @@ export interface CDLibraryRecord extends CDLibraryRecordInput {
   hasEmbeddedImage: boolean
   createdAt: number
   updatedAt: number
+  /** Persistent "published" flag, maintained by the user across publish rounds. */
+  published?: boolean
+  /** Platforms the user already published this record to (persistent). */
+  platforms?: PublishPlatform[]
+}
+
+/** Marketplaces the user can mark a published CD as listed on. User-maintained only. */
+export type PublishPlatform = 'taobao' | 'xianyu' | 'discogs'
+
+/** One CD of the current in-memory publish round, with live library fields joined in. */
+export interface PublishItem {
+  catalogNumber: string
+  imageUrl: string
+  hasEmbeddedImage: boolean
+  details: string
+  lowestPriceUsd: number | null
+  highestPriceUsd: number | null
+  lowestPriceCny: number | null
+  highestPriceCny: number | null
+  /** User-maintained persistent "published" flag. */
+  published: boolean
+  platforms: PublishPlatform[]
+}
+
+/** Phone/desktop view of the current publish round (empty when no round is active). */
+export interface PublishSnapshot {
+  publishedAt: number | null
+  items: PublishItem[]
+}
+
+/** Result of the desktop "publish selected" / "finish batch" actions (IPC-facing). */
+export interface PublishResult {
+  status: 'published' | 'finished' | 'error'
+  count?: number
+  error?: string
 }
 
 export interface CDLibraryListQuery {
   catalogQuery: string
   page: number
   pageSize: 20 | 50 | 100
+  /** Filter by the persistent publish-status column; omit or 'all' for no filter. */
+  publishStatus?: LibraryPublishStatusFilter
+  /** Filter by a checked publish platform; omit or 'all' for no filter. */
+  publishPlatform?: PublishPlatform | 'all'
 }
+
+/** Filter values for the library list's publish-status column. */
+export type LibraryPublishStatusFilter = 'all' | 'published' | 'unpublished'
 
 export interface CDLibraryListResult {
   records: CDLibraryRecord[]

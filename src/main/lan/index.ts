@@ -2,17 +2,23 @@ import { randomBytes } from 'crypto'
 import { BrowserWindow } from 'electron'
 import { getSetting, getLanToken, setLanToken } from '../settings'
 import { listLanCandidates, selectAutoLanAddress, isAllowedLanIPv4, normalizeLanPort } from './network'
-import { LanHttpServer } from './server'
+import { LanHttpServer, type LanPublishHandlers, type LanPublishImage } from './server'
+import { notifyPublishChanged, subscribePublishChanges } from './publish-bus'
 import { isBatchQueryRunning } from '../orchestrator'
 import { resolveBarcodeCatalogCached } from '../barcode/resolver'
 import { normalizeDiscogsBarcode } from '../queries/discogs'
 import { BARCODE_PROVIDER_LABELS } from '../../shared/platforms'
+import { downloadImage } from '../image'
+import { isPrivateNetworkUrl, isSafeExternalUrl } from '../security/urls'
+import { getEmbeddedLibraryImage, getLibraryRecords, setRecordPublishPlatforms, setRecordPublishState } from '../library'
+import { getPublishSnapshot } from '../publish/round'
 import { logger } from '../logger'
 import type {
   BarcodeCatalogCandidate,
   LanBarcodeLookupResponse,
   LanCatalogAddedEvent,
-  LanServerStatus
+  LanServerStatus,
+  PublishPlatform
 } from '../../shared/types'
 
 export const DEFAULT_LAN_PORT = 8787
@@ -66,6 +72,57 @@ function emitCatalogAdded(event: LanCatalogAddedEvent): void {
       window.webContents.send('lan:catalog-added', event)
     }
   }
+}
+
+function publishErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+/**
+ * Publish batch API for the phone "发布" tab. Available whenever the LAN server
+ * runs (unlike barcode lookups, publishing does not conflict with searches).
+ * Every mutation is persisted to the library database and fanned out through
+ * the publish bus (SSE to phones + IPC to the desktop renderer).
+ */
+const lanPublishHandlers: LanPublishHandlers = {
+  list: async () => getPublishSnapshot(),
+
+  setPublished: async (catalogNumber: string, published: boolean) => {
+    try {
+      setRecordPublishState(catalogNumber, published)
+      notifyPublishChanged()
+      logger.debug('lan.publish', 'publish state toggled from phone', { catalogNumber, published })
+      return { status: 'ok' }
+    } catch (err) {
+      return { status: 'error', message: publishErrorMessage(err) }
+    }
+  },
+
+  setPlatforms: async (catalogNumber: string, platforms: PublishPlatform[]) => {
+    try {
+      setRecordPublishPlatforms(catalogNumber, platforms)
+      notifyPublishChanged()
+      logger.debug('lan.publish', 'platforms updated from phone', { catalogNumber, count: platforms.length })
+      return { status: 'ok' }
+    } catch (err) {
+      return { status: 'error', message: publishErrorMessage(err) }
+    }
+  },
+
+  image: async (catalogNumber: string): Promise<LanPublishImage | null> => {
+    const embedded = getEmbeddedLibraryImage(catalogNumber)
+    if (embedded) return { buffer: embedded.buffer, mimeType: embedded.mimeType }
+
+    const record = getLibraryRecords([catalogNumber])[0]
+    if (!record?.imageUrl) return null
+    if (!isSafeExternalUrl(record.imageUrl) || isPrivateNetworkUrl(record.imageUrl)) return null
+    const image = await downloadImage(record.imageUrl, 240, false)
+    if (!image) return null
+    if (image.mimeType !== 'image/png' && image.mimeType !== 'image/jpeg') return null
+    return { buffer: Buffer.from(image.base64, 'base64'), mimeType: image.mimeType }
+  },
+
+  subscribe: subscribePublishChanges
 }
 
 interface PendingBarcodeCandidates {
@@ -301,7 +358,8 @@ export async function applyLanServer(): Promise<LanServerStatus> {
       port,
       token,
       handleBarcodeLookup: handleLanBarcodeLookup,
-      handleBarcodeSelection: handleLanBarcodeSelection
+      handleBarcodeSelection: handleLanBarcodeSelection,
+      publishHandlers: lanPublishHandlers
     })
     lastStart = { host, port, token }
     currentStatus = runningStatus()

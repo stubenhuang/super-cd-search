@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
   image: vi.fn(),
   records: vi.fn(),
   imported: vi.fn(),
+  startRound: vi.fn(),
+  finishRound: vi.fn(),
+  snapshot: vi.fn(),
+  setPublished: vi.fn(),
+  setPlatforms: vi.fn(),
   parse: vi.fn(),
   write: vi.fn(),
   download: vi.fn(),
@@ -27,7 +32,15 @@ vi.mock('../src/main/library', () => ({
   deleteLibraryRecords: mocks.remove,
   getEmbeddedLibraryImage: mocks.image,
   getLibraryRecords: mocks.records,
-  upsertImportedRecords: mocks.imported
+  upsertImportedRecords: mocks.imported,
+  setRecordPublishState: mocks.setPublished,
+  setRecordPublishPlatforms: mocks.setPlatforms
+}))
+
+vi.mock('../src/main/publish/round', () => ({
+  startPublishRound: mocks.startRound,
+  finishPublishRound: mocks.finishRound,
+  getPublishSnapshot: mocks.snapshot
 }))
 
 vi.mock('../src/main/excel/importer', () => ({ parseLibraryExcel: mocks.parse }))
@@ -162,5 +175,41 @@ describe('library IPC', () => {
     expect(await handler('library:export-excel')(null, ['MISSING'], sevenHeaders, 'out.xlsx')).toMatchObject({
       status: 'error', error: '所选记录不存在'
     })
+  })
+
+  it('starts publish rounds and reports errors', async () => {
+    mocks.startRound.mockReturnValue(2)
+    expect(await handler('library:publish')(null, ['A-1', 'B-2'])).toEqual({ status: 'published', count: 2 })
+    expect(mocks.startRound).toHaveBeenCalledWith(['A-1', 'B-2'])
+
+    mocks.startRound.mockReturnValue(0)
+    expect(await handler('library:publish')(null, ['GONE'])).toMatchObject({
+      status: 'error', error: '所选记录都不在 CD 库中'
+    })
+
+    expect(await handler('library:publish')(null, [])).toMatchObject({ status: 'error' })
+    expect(await handler('library:publish')(null, 'X-1')).toMatchObject({ status: 'error', error: '编号列表格式无效' })
+  })
+
+  it('finishes the publish round and reports errors', async () => {
+    expect(await handler('library:finish-publish')()).toEqual({ status: 'finished' })
+    expect(mocks.finishRound).toHaveBeenCalled()
+  })
+
+  it('serves the publish snapshot for the desktop manager', async () => {
+    mocks.snapshot.mockReturnValue({ publishedAt: 1710000000000, items: [] })
+    expect(await handler('library:get-publish-snapshot')()).toEqual({ publishedAt: 1710000000000, items: [] })
+  })
+
+  it('forwards desktop publish-state and platform edits', async () => {
+    await handler('library:set-publish-state')(null, 'A-1', true)
+    expect(mocks.setPublished).toHaveBeenCalledWith('A-1', true)
+
+    await handler('library:set-publish-platforms')(null, 'A-1', ['taobao', 'xianyu'])
+    expect(mocks.setPlatforms).toHaveBeenCalledWith('A-1', ['taobao', 'xianyu'])
+
+    expect(() => handler('library:set-publish-state')(null, 'A-1', 'yes')).toThrow('发布状态格式无效')
+    mocks.setPlatforms.mockImplementationOnce(() => { throw new Error('平台列表无效') })
+    expect(() => handler('library:set-publish-platforms')(null, 'A-1', ['jd'])).toThrow('平台列表无效')
   })
 })
