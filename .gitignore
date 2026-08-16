@@ -54,3 +54,6 @@ src/main/lan/zxing-wasm.browser.js
 
 # Documentation
 tasks/
+
+# ZCode local session data
+.zcode/
