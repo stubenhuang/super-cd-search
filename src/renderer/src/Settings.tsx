@@ -14,7 +14,7 @@ type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'cloudflare'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const { t, language, setLanguage } = useI18n()
-  const [activeSection, setActiveSection] = useState<SectionKey>('api')
+  const [activeSection, setActiveSection] = useState<SectionKey>('appearance')
   const [discogsToken, setDiscogsToken] = useState('')
   const [ebayClientId, setEbayClientId] = useState('')
   const [ebayClientSecret, setEbayClientSecret] = useState('')
