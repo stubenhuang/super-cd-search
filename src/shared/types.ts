@@ -239,11 +239,6 @@ export interface ExportFileResult {
   error?: string
 }
 
-export interface DirectorySelectResult {
-  status: 'selected' | 'cancelled'
-  path?: string
-}
-
 export interface ExcelExportRow {
   catalogNumber: string
   imageUrl: string

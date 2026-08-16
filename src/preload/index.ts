@@ -10,8 +10,6 @@ import type {
   CloudflareSessionStatus,
   DetailEnrichmentResult,
   ExportFileResult,
-  ExcelExportPayload,
-  DirectorySelectResult,
   QueryResult,
   CDDetails,
   LanCandidate,
@@ -80,10 +78,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('detail:enrich', catalogNumber, existingResults, knownDetails),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
-  exportExcel: (defaultFileName: string, payload: ExcelExportPayload, targetDirectory?: string): Promise<ExportFileResult> =>
-    ipcRenderer.invoke('export:excel', defaultFileName, payload, targetDirectory),
-  selectExportDirectory: (): Promise<DirectorySelectResult> =>
-    ipcRenderer.invoke('export:select-directory'),
   listLibraryRecords: (query: CDLibraryListQuery): Promise<CDLibraryListResult> =>
     ipcRenderer.invoke('library:list', query),
   createLibraryRecord: (input: CDLibraryRecordInput): Promise<CDLibraryRecord> =>

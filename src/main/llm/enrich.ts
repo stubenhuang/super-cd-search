@@ -8,6 +8,7 @@ import type {
   QueryResult
 } from '../../shared/types'
 import { aggregateDetails, emptyCDDetails, hasAllDetailFields, isValidDetailValue, missingDetailKeys } from '../../shared/details'
+import { isLlmConfigured } from '../../shared/llm'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
@@ -78,13 +79,7 @@ function emitProgress(progress: DetailEnrichProgress): void {
 }
 
 function isLLMConfigured(): boolean {
-  const llm = getSetting('llm')
-  return !!(
-    llm?.enabled &&
-    llm.apiKey &&
-    llm.apiBaseUrl &&
-    llm.model
-  )
+  return isLlmConfigured(getSetting('llm'))
 }
 
 function isPlatformEnabledForLLM(platform: Platform): boolean {

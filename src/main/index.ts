@@ -7,7 +7,6 @@ import { registerCurrencyIpc } from './ipc/currency'
 import { registerCloudflareIpc } from './ipc/cloudflare'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
-import { registerExportIpc } from './ipc/export'
 import { registerLibraryIpc } from './ipc/library'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
 import { initCloudflareChrome, closeCloudflareChrome } from './cloudflare'
@@ -93,7 +92,6 @@ app.whenReady().then(async () => {
   registerOrchestratorIpc()
   registerEnrichmentIpc()
   registerLoggingIpc()
-  registerExportIpc()
   registerLibraryIpc()
   registerImageIpc()
   registerThrottleIpc()

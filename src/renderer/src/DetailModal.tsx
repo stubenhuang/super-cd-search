@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
-import type { QueryResult, CDDetails, DetailEnrichProgress } from './electron-api'
+import type { QueryResult, CDDetails } from './electron-api'
 import { PLATFORM_LABELS } from '../../shared/platforms'
 import { DETAIL_KEYS, aggregateDetails, missingDetailKeys, isValidDetailValue } from '../../shared/details'
 import { useCoverImage } from './hooks/useCoverImage'
@@ -31,24 +31,15 @@ interface DetailModalProps {
   catalogNumber: string
   results: QueryResult[]
   enrichedDetails?: CDDetails | null
-  onDetailsEnriched: (catalogNumber: string, details: CDDetails) => void
 }
 
-export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedDetails, onDetailsEnriched }: DetailModalProps) {
+export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedDetails }: DetailModalProps) {
   const { t } = useI18n()
   const [copied, setCopied] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [genError, setGenError] = useState<string | null>(null)
-  const [genDone, setGenDone] = useState(false)
-  const [genProgress, setGenProgress] = useState<DetailEnrichProgress | null>(null)
 
   useEffect(() => {
     if (!isOpen) {
       setCopied(false)
-      setGenerating(false)
-      setGenError(null)
-      setGenDone(false)
-      setGenProgress(null)
     }
   }, [isOpen])
 
@@ -138,90 +129,6 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
     }
   }, [copyText])
 
-  useEffect(() => {
-    if (!isOpen) return
-    let active = true
-    const handleProgress = (...args: unknown[]) => {
-      const progress = args[0] as DetailEnrichProgress
-      if (active && progress?.catalogNumber === catalogNumber) {
-        setGenProgress(progress)
-      }
-    }
-    const unsubscribe = window.electronAPI.receive('detail:enrich-progress', handleProgress)
-    return () => {
-      active = false
-      unsubscribe()
-    }
-  }, [isOpen, catalogNumber])
-
-  const handleSmartGenerate = useCallback(async () => {
-    if (generating) return
-    setGenError(null)
-    setGenDone(false)
-    setGenProgress(null)
-    window.electronAPI.log('debug', 'detail.smartGenerate', 'smart generate clicked', { catalogNumber, missingFields })
-
-    try {
-      setGenerating(true)
-      // The main process checks LLM configuration itself; it also serves
-      // previously generated details from cache without needing the LLM.
-      const result = await window.electronAPI.enrichDetails(catalogNumber, results, mergedDetails)
-      window.electronAPI.log('debug', 'detail.smartGenerate', 'enrichment returned', {
-        catalogNumber,
-        status: result.status,
-        usedCache: result.usedCache,
-        analyzedPlatforms: result.analyzedPlatforms
-      })
-
-      // Cached/partial details are still useful even when the LLM is not
-      // configured, so apply them before deciding which message to show.
-      onDetailsEnriched(catalogNumber, result.details)
-
-      if (result.status === 'complete') {
-        setGenDone(true)
-      } else if (!result.llmConfigured) {
-        window.electronAPI.log('warn', 'detail.smartGenerate', 'LLM not configured and fields still missing', { catalogNumber })
-        setGenError(t('detail.smartNoLlm'))
-      } else {
-        setGenError(t('detail.smartPartial', { count: result.analyzedPlatforms.length }))
-      }
-    } catch (err) {
-      window.electronAPI.log('warn', 'detail.smartGenerate', 'smart generate failed', {
-        error: err instanceof Error ? err.message : String(err)
-      })
-      window.electronAPI.log('warn', 'detail.smartGenerate', 'smart generate failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
-      setGenError(t('detail.smartFailed'))
-    } finally {
-      setGenerating(false)
-    }
-  }, [catalogNumber, generating, mergedDetails, onDetailsEnriched, results, t])
-
-  const skipReasonText = useCallback((reason?: string): string => {
-    switch (reason) {
-      case 'platform_disabled': return t('detail.smartSkipDisabled')
-      case 'not_found': return t('detail.smartSkipNotFound')
-      case 'no_product_link': return t('detail.smartSkipNoLink')
-      case 'cloudflare_challenge': return t('detail.smartSkipCloudflare')
-      case 'fetch_failed': return t('detail.smartSkipFetch')
-      case 'llm_failed': return t('detail.smartSkipLlm')
-      default: return t('detail.smartSkipUnknown')
-    }
-  }, [t])
-
-  const genStatusText = useMemo(() => {
-    if (!genProgress) return null
-    const platform = PLATFORM_LABELS[genProgress.platform] || genProgress.platform
-    switch (genProgress.status) {
-      case 'searching': return t('detail.smartSearching', { platform })
-      case 'fetching': return t('detail.smartFetching', { platform })
-      case 'analyzing': return t('detail.smartAnalyzing', { platform })
-      case 'skipped': return t('detail.smartSkipped', { platform, reason: skipReasonText(genProgress.reason) })
-      case 'complete': return t('detail.smartComplete')
-      case 'error': return t('detail.smartFailed')
-      default: return null
-    }
-  }, [genProgress, skipReasonText, t])
-
   if (!isOpen) return null
 
   return (
@@ -277,35 +184,12 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
 
           {missingFields.length > 0 && (
             <div className="detail-modal-smart">
-              <button
-                type="button"
-                className="detail-modal-smart-btn"
-                onClick={handleSmartGenerate}
-                disabled={generating}
-                title={t('detail.smartGenerateTitle')}
-              >
-                <span className="detail-modal-smart-icon" aria-hidden="true">🧠</span>
-                <span>{generating ? t('detail.smartGenerating') : t('detail.smartGenerate')}</span>
-              </button>
               <span className="detail-modal-smart-missing">
                 {t('detail.smartMissing', {
                   fields: missingFields.map(key => t(DETAIL_LABEL_KEYS[key])).join(' / ')
                 })}
               </span>
             </div>
-          )}
-
-          {generating && genStatusText && (
-            <div className="detail-modal-smart-status">
-              <span className="detail-modal-smart-spinner" aria-hidden="true" />
-              <span>{genStatusText}</span>
-            </div>
-          )}
-          {!generating && genDone && (
-            <div className="detail-modal-smart-done">✓ {t('detail.smartComplete')}</div>
-          )}
-          {!generating && genError && (
-            <div className="detail-modal-smart-error">⚠ {genError}</div>
           )}
         </div>
 

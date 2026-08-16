@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, ExportProgress, LanCatalogAddedEvent, CDLibraryRecordInput } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, CDLibraryRecordInput } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
-import { ExportModal, type ExportConfirmOptions } from './ExportModal'
+import { FlowDialog, type AutoFlowState } from './FlowDialog'
 import { aggregateDetails, missingDetailKeys } from '../../shared/details'
+import { isLlmConfigured } from '../../shared/llm'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
@@ -292,12 +293,7 @@ function App() {
   const deepSearchSucceededRef = useRef(false)
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('USD')
   const [usdToCnyRate, setUsdToCnyRate] = useState<number | null>(null)
-  const [exportState, setExportState] = useState<'idle' | 'exporting' | 'saved' | 'error'>('idle')
-  const [showExportModal, setShowExportModal] = useState(false)
-  const [exportBusy, setExportBusy] = useState(false)
-  const [exportProgressText, setExportProgressText] = useState<string | null>(null)
-  const [exportError, setExportError] = useState<string | null>(null)
-  const exportResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [autoFlow, setAutoFlow] = useState<AutoFlowState>(null)
   const [libraryRefreshVersion, setLibraryRefreshVersion] = useState(0)
   const [librarySyncError, setLibrarySyncError] = useState<string | null>(null)
 
@@ -341,6 +337,27 @@ function App() {
     }
   }, [t, usdToCnyRate])
 
+  // After the search pipeline settles, offer LLM smart generation for any
+  // catalog whose detail fields are still incomplete. Stays silent when the
+  // LLM is not configured — there is nothing to ask for in that case.
+  const maybePromptSmartGenerate = useCallback(async (
+    targets: string[],
+    workingResults: Map<string, QueryResult[]>,
+    workingEnriched: Map<string, CDDetails>
+  ) => {
+    const incompleteCatalogs = targets.filter(catalogNumber =>
+      !hasCompleteDetails(workingResults.get(catalogNumber) || [], workingEnriched.get(catalogNumber))
+    )
+    if (incompleteCatalogs.length === 0) return
+    try {
+      const llm = await window.electronAPI.getSetting('llm')
+      if (!isLlmConfigured(llm)) return
+    } catch {
+      return
+    }
+    setAutoFlow({ kind: 'smart-prompt', catalogs: incompleteCatalogs })
+  }, [])
+
   const handleInputChange = useCallback((nextInput: string) => {
     const nextCount = parseCatalogNumbers(nextInput).length
     if (nextCount > MAX_SEARCH_INPUT_CATALOGS) {
@@ -383,6 +400,7 @@ function App() {
 
     setError(null)
     void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
+    setAutoFlow(null)
     setIsLoading(true)
     setProgressStatus(new Map())
     setCompletedCatalogs(new Set())
@@ -404,6 +422,23 @@ function App() {
         completedResults,
         new Map()
       )
+      // Standard-search runs that left numbers unfound are offered a deep dig
+      // pass (deep mode already queries every platform). Otherwise go straight
+      // to the completeness check for smart generation.
+      if (!cancelledRef.current) {
+        const digPlatforms = searchMode === 'standard' ? deepPlatforms : []
+        const emptyTargets = digPlatforms.length > 0
+          ? catalogNumbers.filter(cn => {
+              const rs = completedResults.get(cn)
+              return !rs || rs.length === 0 || !rs.some(r => r.status === 'found')
+            })
+          : []
+        if (emptyTargets.length > 0) {
+          setAutoFlow({ kind: 'deep-dig-prompt', catalogs: emptyTargets, platforms: digPlatforms })
+        } else {
+          await maybePromptSmartGenerate(catalogNumbers, completedResults, new Map())
+        }
+      }
     } catch (err) {
       if (!cancelledRef.current) {
         window.electronAPI.log('warn', 'app.search', 'search failed', { error: err instanceof Error ? err.message : String(err) })
@@ -413,7 +448,7 @@ function App() {
       setIsLoading(false)
       setIsCancelling(false)
     }
-  }, [input, parseCatalogNumbers, persistCatalogsToLibrary, searchMode, t])
+  }, [input, maybePromptSmartGenerate, parseCatalogNumbers, persistCatalogsToLibrary, searchMode, t])
 
   const handleCancel = useCallback(async () => {
     window.electronAPI.log('debug', 'app.search', 'cancel requested')
@@ -424,21 +459,21 @@ function App() {
 
   useEffect(() => {
     return () => {
-      if (exportResetTimerRef.current) clearTimeout(exportResetTimerRef.current)
       if (mobileNoticeTimerRef.current) clearTimeout(mobileNoticeTimerRef.current)
     }
   }, [])
 
   // Report whether the desktop search controls are idle to the LAN server.
-  // Phone barcode submissions are rejected while any search/export work is in
-  // progress (checked again in the main process right before writing).
+  // Phone barcode submissions are rejected while any search or smart
+  // generation work is in progress (checked again in the main process right
+  // before writing).
   useEffect(() => {
-    const available = !isLoading && !isCancelling && !isDeepSearching && !exportBusy
+    const available = !isLoading && !isCancelling && !isDeepSearching && autoFlow?.kind !== 'smart-running'
     void window.electronAPI.setLanSearchAvailability(available).catch(() => {})
     return () => {
       void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     }
-  }, [isLoading, isCancelling, isDeepSearching, exportBusy])
+  }, [isLoading, isCancelling, isDeepSearching, autoFlow])
 
   // Numbers added from the phone are appended to the search box (deduplicated).
   useEffect(() => {
@@ -469,16 +504,6 @@ function App() {
       setLibraryRefreshVersion(version => version + 1)
     })
   }, [])
-
-  useEffect(() => {
-    const handleExportProgress = (...args: unknown[]) => {
-      const progress = args[0] as ExportProgress
-      if (progress?.phase === 'images') {
-        setExportProgressText(t('export.preparingImages', { current: progress.current, total: progress.total }))
-      }
-    }
-    return window.electronAPI.receive('export:progress', handleExportProgress)
-  }, [t])
 
   useEffect(() => {
     const handleProgress = (...args: unknown[]) => {
@@ -590,201 +615,111 @@ function App() {
 
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
-  // Entries that produced no "found" result across their queried platforms.
-  const emptyCatalogs = useMemo(() => {
-    if (searchMode !== 'standard') return []
-    return catalogOrder.filter((cn) => {
-      const rs = results.get(cn)
-      return !rs || rs.length === 0 || !rs.some((r) => r.status === 'found')
-    })
-  }, [searchMode, catalogOrder, results])
-
-  const showDeepSearchButton =
-    searchMode === 'standard' && !isLoading && !isCancelling && emptyCatalogs.length > 0
-
-  const handleDeepSearch = useCallback(async () => {
-    const targets = emptyCatalogs
-    if (targets.length === 0 || isDeepSearching) return
-
-    let settings: Settings | undefined
-    try {
-      settings = await window.electronAPI.getSettings()
-    } catch {
-      settings = undefined
-    }
-    const deepPlatforms = settings?.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS
-    if (deepPlatforms.length === 0) {
-      setError(t('error.noPlatforms'))
-      return
-    }
+  // Deep dig pass over catalogs that produced no "found" result. Merges the
+  // extra platform results into the given working copies (state updates race
+  // with query:progress events otherwise) and returns the merged map, or null
+  // when the dig never ran / failed.
+  const runDeepDig = useCallback(async (
+    targets: string[],
+    platforms: Platform[],
+    workingResults: Map<string, QueryResult[]>,
+    workingEnriched: Map<string, CDDetails>
+  ): Promise<Map<string, QueryResult[]> | null> => {
+    if (targets.length === 0 || platforms.length === 0 || isDeepSearching) return null
 
     setError(null)
     void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     cancelledRef.current = false
     deepSearchSucceededRef.current = false
     setDeepSearchTargets(targets)
-    setDeepSearchPlatforms(deepPlatforms)
+    setDeepSearchPlatforms(platforms)
     setIsDeepSearching(true)
-    window.electronAPI.log('debug', 'app.deepSearch', 'deep search started', { targets, platforms: deepPlatforms })
+    window.electronAPI.log('debug', 'app.deepSearch', 'deep search started', { targets, platforms })
     try {
-      const batchResults = await window.electronAPI.executeBatchQuery(targets, deepPlatforms)
+      const batchResults = await window.electronAPI.executeBatchQuery(targets, platforms)
       window.electronAPI.log('debug', 'app.deepSearch', 'deep search finished', { resultCount: batchResults.length })
-      const merged = applyBatchResults(results, batchResults)
+      const merged = applyBatchResults(workingResults, batchResults)
       setResults(merged)
       await persistCatalogsToLibrary(
         batchResults.map(batch => batch.catalogNumber),
         merged,
-        enrichedDetails
+        workingEnriched
       )
       deepSearchSucceededRef.current = true
+      return merged
     } catch (err) {
       window.electronAPI.log('warn', 'app.deepSearch', 'deep search failed', { error: err instanceof Error ? err.message : String(err) })
       setError(err instanceof Error ? err.message : t('error.queryFailed'))
+      return null
     } finally {
       setIsDeepSearching(false)
       setDeepSearchTargets([])
       setDeepSearchPlatforms([])
     }
-  }, [emptyCatalogs, enrichedDetails, isDeepSearching, persistCatalogsToLibrary, results, t])
+  }, [isDeepSearching, persistCatalogsToLibrary, t])
+
+  const handleDeepDigConfirm = useCallback(async () => {
+    if (autoFlow?.kind !== 'deep-dig-prompt') return
+    const { catalogs, platforms } = autoFlow
+    setAutoFlow(null)
+    const merged = await runDeepDig(catalogs, platforms, results, enrichedDetails)
+    await maybePromptSmartGenerate(catalogOrder, merged ?? results, enrichedDetails)
+  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, runDeepDig])
+
+  const handleDeepDigSkip = useCallback(async () => {
+    if (autoFlow?.kind !== 'deep-dig-prompt') return
+    setAutoFlow(null)
+    await maybePromptSmartGenerate(catalogOrder, results, enrichedDetails)
+  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results])
+
+  const handleSmartConfirm = useCallback(async () => {
+    if (autoFlow?.kind !== 'smart-prompt') return
+    const targets = autoFlow.catalogs
+    const workingResults = new Map(results)
+    const workingEnriched = new Map(enrichedDetails)
+    let failed = 0
+
+    for (let index = 0; index < targets.length; index++) {
+      const catalogNumber = targets[index]
+      setAutoFlow({ kind: 'smart-running', current: index + 1, total: targets.length, catalogNumber })
+      window.electronAPI.log('info', 'app.smartGenerate', 'auto smart generation started', { catalogNumber })
+      try {
+        const enrichment = await window.electronAPI.enrichDetails(
+          catalogNumber,
+          workingResults.get(catalogNumber) || [],
+          workingEnriched.get(catalogNumber)
+        )
+        if (enrichment.status === 'error') failed++
+        workingEnriched.set(catalogNumber, enrichment.details)
+        setEnrichedDetails(new Map(workingEnriched))
+      } catch (err) {
+        failed++
+        window.electronAPI.log('warn', 'app.smartGenerate', 'auto smart generation failed', {
+          catalogNumber,
+          error: err instanceof Error ? err.message : String(err)
+        })
+      }
+    }
+
+    await persistCatalogsToLibrary(targets, workingResults, workingEnriched)
+    setAutoFlow({ kind: 'smart-done', failed })
+  }, [autoFlow, enrichedDetails, persistCatalogsToLibrary, results])
+
+  const handleSmartSkip = useCallback(() => {
+    if (autoFlow?.kind !== 'smart-prompt') return
+    setAutoFlow(null)
+  }, [autoFlow])
+
+  const handleFlowClose = useCallback(() => {
+    if (autoFlow?.kind !== 'smart-done') return
+    setAutoFlow(null)
+  }, [autoFlow])
 
   const handleTitleClick = useCallback((catalogNumber: string) => {
     window.electronAPI.log('debug', 'app.detail', 'detail modal opened', { catalogNumber })
     setSelectedCatalog(catalogNumber)
     setShowDetailModal(true)
   }, [])
-
-  const handleDetailsEnriched = useCallback((catalogNumber: string, details: CDDetails) => {
-    window.electronAPI.log('info', 'app.detail', 'detail fields enriched', { catalogNumber })
-    const next = new Map(enrichedDetails)
-    next.set(catalogNumber, details)
-    setEnrichedDetails(next)
-    void persistCatalogsToLibrary([catalogNumber], results, next)
-  }, [enrichedDetails, persistCatalogsToLibrary, results])
-
-  const handleExportCsv = useCallback(() => {
-    if (isLoading || isDeepSearching || catalogOrder.length === 0) return
-
-    setExportError(null)
-    setExportProgressText(null)
-    setShowExportModal(true)
-    window.electronAPI.log('debug', 'app.export', 'Excel export modal opened', { catalogCount: catalogOrder.length })
-  }, [catalogOrder.length, isDeepSearching, isLoading])
-
-  const handleExportModalClose = useCallback(() => {
-    if (exportBusy) return
-    setShowExportModal(false)
-    setExportError(null)
-    setExportProgressText(null)
-    setExportState('idle')
-  }, [exportBusy])
-
-  const handleExportConfirm = useCallback(async (options: ExportConfirmOptions) => {
-    void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
-    setExportBusy(true)
-    setExportError(null)
-    setExportState('exporting')
-    window.electronAPI.log('info', 'app.export', 'Excel export confirmed', {
-      directory: options.directory,
-      deepSearch: options.deepSearch,
-      smartGenerate: options.smartGenerate,
-      catalogCount: catalogOrder.length
-    })
-
-    try {
-      setExportProgressText(t('export.preparing'))
-
-      let workingResults = new Map(results)
-      let workingEnriched = new Map(enrichedDetails)
-
-      if (options.deepSearch) {
-        const emptyCatalogsToDig = catalogOrder.filter(cn => {
-          const rs = workingResults.get(cn)
-          return !rs || rs.length === 0 || !rs.some(r => r.status === 'found')
-        })
-
-        if (emptyCatalogsToDig.length > 0) {
-          let settings: Settings | undefined
-          try {
-            settings = await window.electronAPI.getSettings()
-          } catch {
-            settings = undefined
-          }
-          const platforms = settings?.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS
-          if (platforms.length === 0) {
-            throw new Error(t('error.noPlatforms'))
-          }
-
-          setExportProgressText(t('export.deepSearchingCount', { count: emptyCatalogsToDig.length }))
-          window.electronAPI.log('info', 'app.export', 'auto deep search started', { targets: emptyCatalogsToDig, platforms })
-          const batches = await window.electronAPI.executeBatchQuery(emptyCatalogsToDig, platforms)
-          workingResults = applyBatchResults(workingResults, batches)
-          setResults(workingResults)
-        }
-      }
-
-      if (options.smartGenerate) {
-        const total = catalogOrder.length
-        for (let index = 0; index < catalogOrder.length; index++) {
-          const catalogNumber = catalogOrder[index]
-          const currentResults = workingResults.get(catalogNumber) || []
-          const currentEnriched = workingEnriched.get(catalogNumber)
-
-          if (!hasCompleteDetails(currentResults, currentEnriched)) {
-            setExportProgressText(t('export.smartGenerating', { current: index + 1, total, catalogNumber }))
-            window.electronAPI.log('info', 'app.export', 'auto smart generation started', { catalogNumber })
-            const enrichment = await window.electronAPI.enrichDetails(catalogNumber, currentResults, currentEnriched)
-            workingEnriched.set(catalogNumber, enrichment.details)
-            setEnrichedDetails(new Map(workingEnriched))
-          }
-        }
-      }
-
-      setExportProgressText(t('export.writing'))
-
-      const headers = [
-        t('export.catalogNumber'),
-        t('export.image'),
-        t('export.details'),
-        t('export.lowestPriceUsd'),
-        t('export.highestPriceUsd'),
-        t('export.lowestPriceCny'),
-        t('export.highestPriceCny')
-      ]
-      const cnyRate = usdToCnyRate ?? await window.electronAPI.getUsdToDisplayRate('CNY')
-      const rows = buildExportRows({
-        catalogNumbers: catalogOrder,
-        resultsByCatalog: workingResults,
-        enrichedDetailsByCatalog: workingEnriched,
-        usdToCnyRate: cnyRate,
-        t: t as (key: string) => string
-      })
-
-      await persistCatalogsToLibrary(catalogOrder, workingResults, workingEnriched)
-
-      const now = new Date()
-      const stamp = `${now.toISOString().slice(0, 10)}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
-      const fileName = `super-cd-search-results-${stamp}.xlsx`
-      const result = await window.electronAPI.exportExcel(fileName, { headers, rows }, options.directory)
-
-      if (result.status === 'saved') {
-        window.electronAPI.log('info', 'app.export', 'Excel exported', { filePath: result.filePath, catalogCount: catalogOrder.length })
-        setExportState('saved')
-        setShowExportModal(false)
-        if (exportResetTimerRef.current) clearTimeout(exportResetTimerRef.current)
-        exportResetTimerRef.current = setTimeout(() => setExportState('idle'), 2500)
-      } else if (result.status === 'error') {
-        setExportError(result.error || t('export.failed'))
-        setExportState('error')
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      window.electronAPI.log('warn', 'app.export', 'Excel export failed', { error: message })
-      setExportError(message || t('export.failed'))
-      setExportState('error')
-    } finally {
-      setExportBusy(false)
-    }
-  }, [catalogOrder, enrichedDetails, persistCatalogsToLibrary, results, t, usdToCnyRate])
 
   const handleCurrencyChange = useCallback((currency: DisplayCurrency) => {
     setDisplayCurrency(currency)
@@ -978,34 +913,6 @@ function App() {
         <section className="right-panel">
           <div className="panel-header">
             <h2>{t('panel.results')}</h2>
-            <div className="panel-header-actions">
-              {showDeepSearchButton && (
-                <button
-                  className="deep-search-button"
-                  onClick={handleDeepSearch}
-                  disabled={isDeepSearching}
-                  title={t('deepSearch.title')}
-                >
-                  {isDeepSearching ? t('deepSearch.digging') : t('deepSearch.button')}
-                </button>
-              )}
-              {results.size > 0 && (
-                <button
-                  className="export-csv-button"
-                  onClick={handleExportCsv}
-                  disabled={exportState === 'exporting' || isLoading || isDeepSearching}
-                  title={t('export.title')}
-                >
-                  {exportState === 'exporting'
-                    ? t('export.exporting')
-                    : exportState === 'saved'
-                      ? t('export.saved')
-                      : exportState === 'error'
-                        ? t('export.failed')
-                        : t('export.button')}
-                </button>
-              )}
-            </div>
           </div>
           <div className="panel-content">
             {results.size === 0 && !hasProgress && (
@@ -1058,13 +965,13 @@ function App() {
       )}
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
-      <ExportModal
-        isOpen={showExportModal}
-        busy={exportBusy}
-        statusText={exportProgressText}
-        error={exportError}
-        onClose={handleExportModalClose}
-        onConfirm={handleExportConfirm}
+      <FlowDialog
+        flow={autoFlow}
+        onDeepDigConfirm={handleDeepDigConfirm}
+        onDeepDigSkip={handleDeepDigSkip}
+        onSmartConfirm={handleSmartConfirm}
+        onSmartSkip={handleSmartSkip}
+        onClose={handleFlowClose}
       />
       {showDetailModal && selectedCatalog && (
         <DetailModal
@@ -1073,7 +980,6 @@ function App() {
           catalogNumber={selectedCatalog}
           results={results.get(selectedCatalog) || []}
           enrichedDetails={enrichedDetails.get(selectedCatalog)}
-          onDetailsEnriched={handleDetailsEnriched}
         />
       )}
     </div>

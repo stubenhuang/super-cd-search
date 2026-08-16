@@ -16,10 +16,7 @@ import type {
   DetailEnrichProgress,
   DetailEnrichmentResult,
   ExportFileResult,
-  ExportProgress,
-  ExcelExportPayload,
   ExcelExportRow,
-  DirectorySelectResult,
   LanCandidate,
   LanServerStatus,
   LanCatalogAddedEvent,
@@ -54,10 +51,7 @@ export type {
   DetailEnrichProgress,
   DetailEnrichmentResult,
   ExportFileResult,
-  ExportProgress,
-  ExcelExportPayload,
   ExcelExportRow,
-  DirectorySelectResult,
   LanCandidate,
   LanServerStatus,
   LanCatalogAddedEvent,
@@ -103,8 +97,6 @@ export interface IElectronAPI {
     knownDetails?: CDDetails | null
   ) => Promise<DetailEnrichmentResult>
   cancelBatchQuery: () => Promise<void>
-  exportExcel: (defaultFileName: string, payload: ExcelExportPayload, targetDirectory?: string) => Promise<ExportFileResult>
-  selectExportDirectory: () => Promise<DirectorySelectResult>
   listLibraryRecords: (query: CDLibraryListQuery) => Promise<CDLibraryListResult>
   createLibraryRecord: (input: CDLibraryRecordInput) => Promise<CDLibraryRecord>
   updateLibraryRecord: (catalogNumber: string, input: CDLibraryRecordInput) => Promise<CDLibraryRecord>
