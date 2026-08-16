@@ -1641,6 +1641,44 @@ html[data-platform='win32'] .app-header {
   transform: none;
 }
 
+/* ============================================
+   APP TOAST - library upsert summary after a search
+   ============================================ */
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 1100;
+  max-width: min(520px, calc(100vw - 48px));
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-card);
+  box-shadow:
+    0 12px 40px rgba(44, 37, 32, 0.2),
+    0 4px 12px rgba(44, 37, 32, 0.12);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  animation: toast-slide-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+
+@keyframes toast-slide-up {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -73,7 +73,15 @@ describe('CD library SQLite store', () => {
 
   it('upserts search records as complete overwrites and deletes transactionally', () => {
     createLibraryRecord(record('X-1', { details: 'manual', imageUrl: 'https://example.com/old.jpg' }))
-    upsertLibraryRecords([record('X-1', { details: 'searched', imageUrl: '' }), record('X-2')])
+
+    const upsert = upsertLibraryRecords([record('X-1', { details: 'searched', imageUrl: '' }), record('X-2')])
+    expect(upsert.inserted).toEqual(['X-2'])
+    expect(upsert.updated).toEqual(['X-1'])
+
+    // Upserting the same records again classifies everything as an update.
+    const repeat = upsertLibraryRecords([record('X-2', { details: 'again' })])
+    expect(repeat.inserted).toEqual([])
+    expect(repeat.updated).toEqual(['X-2'])
 
     const records = getLibraryRecords(['X-2', 'X-1'])
     expect(records.map(item => item.catalogNumber)).toEqual(['X-2', 'X-1'])

@@ -477,11 +477,23 @@ function PublishModal({ onClose, onChanged }: PublishModalProps) {
 
 interface CDLibraryProps {
   refreshVersion: number
+  /** Catalog numbers upserted since the library was last viewed (drive the "new" badges). */
+  newCatalogs: Set<string>
+  /** Called once when the library page is entered; clears the badge source. */
+  onNewCatalogsViewed: () => void
 }
 
-export function CDLibrary({ refreshVersion }: CDLibraryProps) {
+export function CDLibrary({ refreshVersion, newCatalogs, onNewCatalogsViewed }: CDLibraryProps) {
   const { t } = useI18n()
   const [records, setRecords] = useState<CDLibraryRecord[]>([])
+  // Snapshot of the badge set at mount: stays stable for this visit even after
+  // the source set in App is cleared, so badges never flash away mid-render.
+  const [viewedNewCatalogs] = useState(() => new Set(newCatalogs))
+
+  useEffect(() => {
+    onNewCatalogsViewed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<PageSize>(20)
@@ -795,7 +807,12 @@ export function CDLibrary({ refreshVersion }: CDLibraryProps) {
               {records.map(record => (
                 <tr key={record.catalogNumber} className={selectedSet.has(record.catalogNumber) ? 'selected' : ''}>
                   <td className="library-check-cell"><input type="checkbox" checked={selectedSet.has(record.catalogNumber)} onChange={() => toggleRecord(record.catalogNumber)} /></td>
-                  <td className="library-catalog-cell">{record.catalogNumber}</td>
+                  <td className="library-catalog-cell">
+                    {viewedNewCatalogs.has(record.catalogNumber) && (
+                      <span className="library-new-badge">{t('library.newBadge')}</span>
+                    )}
+                    {record.catalogNumber}
+                  </td>
                   <td className="library-image-cell"><LibraryCover record={record} /></td>
                   <td><div className="library-details-preview">{record.details || '—'}</div></td>
                   <td className="library-price-cell">{formatPrice(record.lowestPriceUsd)}</td>

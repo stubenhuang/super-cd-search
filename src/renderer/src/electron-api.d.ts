@@ -27,6 +27,7 @@ import type {
   CDLibraryListQuery,
   CDLibraryListResult,
   CDLibraryImportResult,
+  CDLibraryUpsertResult,
   LibraryPublishStatusFilter,
   PublishItem,
   PublishPlatform,
@@ -62,6 +63,7 @@ export type {
   CDLibraryListQuery,
   CDLibraryListResult,
   CDLibraryImportResult,
+  CDLibraryUpsertResult,
   LibraryPublishStatusFilter,
   PublishItem,
   PublishPlatform,
@@ -100,7 +102,7 @@ export interface IElectronAPI {
   listLibraryRecords: (query: CDLibraryListQuery) => Promise<CDLibraryListResult>
   createLibraryRecord: (input: CDLibraryRecordInput) => Promise<CDLibraryRecord>
   updateLibraryRecord: (catalogNumber: string, input: CDLibraryRecordInput) => Promise<CDLibraryRecord>
-  upsertLibraryRecords: (inputs: CDLibraryRecordInput[]) => Promise<void>
+  upsertLibraryRecords: (inputs: CDLibraryRecordInput[]) => Promise<CDLibraryUpsertResult>
   deleteLibraryRecords: (catalogNumbers: string[]) => Promise<number>
   importLibraryExcel: () => Promise<CDLibraryImportResult>
   exportLibraryExcel: (

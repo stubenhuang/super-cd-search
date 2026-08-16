@@ -19,6 +19,7 @@ import type {
   CDLibraryListQuery,
   CDLibraryListResult,
   CDLibraryImportResult,
+  CDLibraryUpsertResult,
   PublishPlatform,
   PublishResult,
   PublishSnapshot
@@ -84,7 +85,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('library:create', input),
   updateLibraryRecord: (catalogNumber: string, input: CDLibraryRecordInput): Promise<CDLibraryRecord> =>
     ipcRenderer.invoke('library:update', catalogNumber, input),
-  upsertLibraryRecords: (inputs: CDLibraryRecordInput[]): Promise<void> =>
+  upsertLibraryRecords: (inputs: CDLibraryRecordInput[]): Promise<CDLibraryUpsertResult> =>
     ipcRenderer.invoke('library:upsert-search-results', inputs),
   deleteLibraryRecords: (catalogNumbers: string[]): Promise<number> =>
     ipcRenderer.invoke('library:delete', catalogNumbers),

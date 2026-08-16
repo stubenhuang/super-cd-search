@@ -6,6 +6,7 @@ import type {
   CDLibraryListResult,
   CDLibraryRecord,
   CDLibraryRecordInput,
+  CDLibraryUpsertResult,
   PublishPlatform
 } from '../../shared/types'
 import { normalizeCatalogNumber } from '../../shared/utils'
@@ -369,20 +370,28 @@ export function updateLibraryRecord(catalogNumber: string, input: CDLibraryRecor
   return getLibraryRecords([key])[0]!
 }
 
-export function upsertLibraryRecords(inputs: CDLibraryRecordInput[]): void {
+export function upsertLibraryRecords(inputs: CDLibraryRecordInput[]): CDLibraryUpsertResult {
   if (!Array.isArray(inputs)) throw new Error('记录列表格式无效')
   const records = inputs.map(validateLibraryRecordInput)
   const db = getDatabase()
+  const exists = db.prepare('SELECT 1 AS found FROM cd_library WHERE catalog_number = ? COLLATE NOCASE')
   const stmt = upsertStatement(db)
   const now = Date.now()
+  const inserted: string[] = []
+  const updated: string[] = []
   db.exec('BEGIN IMMEDIATE')
   try {
-    records.forEach(record => stmt.run(...values(record), now, now))
+    records.forEach(record => {
+      if (exists.get(record.catalogNumber)) updated.push(record.catalogNumber)
+      else inserted.push(record.catalogNumber)
+      stmt.run(...values(record), now, now)
+    })
     db.exec('COMMIT')
   } catch (err) {
     db.exec('ROLLBACK')
     throw err
   }
+  return { inserted, updated }
 }
 
 export function upsertImportedRecords(records: ImportedLibraryRecord[]): { added: number; updated: number } {

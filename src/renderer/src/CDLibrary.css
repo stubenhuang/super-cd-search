@@ -141,7 +141,7 @@
   box-sizing: border-box;
   padding: 10px 9px;
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
   border-bottom: 1px solid var(--border-light);
 }
 
@@ -168,10 +168,21 @@
 
 .library-table tbody tr.selected { background: rgba(176, 139, 62, 0.08); }
 .library-table tbody tr:hover { background: var(--bg-secondary); }
-.library-check-cell { text-align: center !important; vertical-align: middle !important; }
+.library-check-cell { text-align: center !important; }
 .library-catalog-cell { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
-.library-image-cell { vertical-align: middle !important; }
-
+.library-new-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
+  color: var(--on-accent);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  vertical-align: middle;
+}
 .library-cover,
 .library-cover-placeholder {
   width: 78px;
@@ -208,12 +219,10 @@
 .library-price-cell { text-align: right !important; }
 .library-price-cell { font-family: var(--font-mono); font-size: 12px; }
 .library-actions-header { text-align: center !important; }
-.library-actions-cell { vertical-align: top !important; }
 .library-row-actions { display: flex; justify-content: center; gap: 6px; }
 .library-row-actions button { padding: 5px 7px; font-size: 12px; }
 
 .library-publish-header { text-align: center !important; }
-.library-publish-cell { vertical-align: top !important; }
 .library-status-toggle,
 .library-platform-toggle {
   padding: 3px 8px;

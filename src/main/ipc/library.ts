@@ -61,9 +61,14 @@ export function registerLibraryIpc(): void {
   })
 
   ipcMain.handle('library:upsert-search-results', (_event, inputs: CDLibraryRecordInput[]) => {
-    upsertLibraryRecords(inputs)
-    logger.debug('ipc.library', 'search results persisted to library', { count: inputs.length })
+    const result = upsertLibraryRecords(inputs)
+    logger.debug('ipc.library', 'search results persisted to library', {
+      count: inputs.length,
+      inserted: result.inserted.length,
+      updated: result.updated.length
+    })
     notifyPublishObservers()
+    return result
   })
 
   ipcMain.handle('library:delete', (_event, catalogNumbers: string[]) => {

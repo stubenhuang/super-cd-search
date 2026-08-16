@@ -296,6 +296,12 @@ function App() {
   const [autoFlow, setAutoFlow] = useState<AutoFlowState>(null)
   const [libraryRefreshVersion, setLibraryRefreshVersion] = useState(0)
   const [librarySyncError, setLibrarySyncError] = useState<string | null>(null)
+  // Upsert outcome of the current search pipeline, accumulated across the
+  // standard search / deep dig / smart generation stages.
+  const pipelineUpsertRef = useRef({ inserted: new Set<string>(), updated: new Set<string>() })
+  const [libraryNewCatalogs, setLibraryNewCatalogs] = useState<Set<string>>(new Set())
+  const [libraryToast, setLibraryToast] = useState<string | null>(null)
+  const libraryToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Platforms queried by the currently running search. Resolved from the
   // latest settings each time a search starts (see handleSearch).
@@ -327,7 +333,17 @@ function App() {
         t: t as (key: string) => string
       })
       const records: CDLibraryRecordInput[] = rows.map(row => ({ ...row }))
-      await window.electronAPI.upsertLibraryRecords(records)
+      const upsert = await window.electronAPI.upsertLibraryRecords(records)
+      for (const cn of upsert.inserted) pipelineUpsertRef.current.inserted.add(cn)
+      for (const cn of upsert.updated) pipelineUpsertRef.current.updated.add(cn)
+      if (upsert.inserted.length > 0 || upsert.updated.length > 0) {
+        setLibraryNewCatalogs(prev => {
+          const next = new Set(prev)
+          for (const cn of upsert.inserted) next.add(cn)
+          for (const cn of upsert.updated) next.add(cn)
+          return next
+        })
+      }
       setLibrarySyncError(null)
       setLibraryRefreshVersion(version => version + 1)
     } catch (err) {
@@ -337,25 +353,38 @@ function App() {
     }
   }, [t, usdToCnyRate])
 
+  // Summarize the pipeline's library upserts as a 3-second toast. Called at
+  // every terminal point of the search flow (immediately, or after the last
+  // auto-flow dialog closes).
+  const showLibraryToast = useCallback(() => {
+    const { inserted, updated } = pipelineUpsertRef.current
+    if (inserted.size === 0 && updated.size === 0) return
+    setLibraryToast(t('library.searchUpsertToast', { inserted: inserted.size, updated: updated.size }))
+    if (libraryToastTimerRef.current) clearTimeout(libraryToastTimerRef.current)
+    libraryToastTimerRef.current = setTimeout(() => setLibraryToast(null), 3000)
+  }, [t])
+
   // After the search pipeline settles, offer LLM smart generation for any
   // catalog whose detail fields are still incomplete. Stays silent when the
   // LLM is not configured — there is nothing to ask for in that case.
+  // Returns whether the smart-generate dialog was opened.
   const maybePromptSmartGenerate = useCallback(async (
     targets: string[],
     workingResults: Map<string, QueryResult[]>,
     workingEnriched: Map<string, CDDetails>
-  ) => {
+  ): Promise<boolean> => {
     const incompleteCatalogs = targets.filter(catalogNumber =>
       !hasCompleteDetails(workingResults.get(catalogNumber) || [], workingEnriched.get(catalogNumber))
     )
-    if (incompleteCatalogs.length === 0) return
+    if (incompleteCatalogs.length === 0) return false
     try {
       const llm = await window.electronAPI.getSetting('llm')
-      if (!isLlmConfigured(llm)) return
+      if (!isLlmConfigured(llm)) return false
     } catch {
-      return
+      return false
     }
     setAutoFlow({ kind: 'smart-prompt', catalogs: incompleteCatalogs })
+    return true
   }, [])
 
   const handleInputChange = useCallback((nextInput: string) => {
@@ -401,6 +430,7 @@ function App() {
     setError(null)
     void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     setAutoFlow(null)
+    pipelineUpsertRef.current = { inserted: new Set(), updated: new Set() }
     setIsLoading(true)
     setProgressStatus(new Map())
     setCompletedCatalogs(new Set())
@@ -436,7 +466,8 @@ function App() {
         if (emptyTargets.length > 0) {
           setAutoFlow({ kind: 'deep-dig-prompt', catalogs: emptyTargets, platforms: digPlatforms })
         } else {
-          await maybePromptSmartGenerate(catalogNumbers, completedResults, new Map())
+          const prompted = await maybePromptSmartGenerate(catalogNumbers, completedResults, new Map())
+          if (!prompted) showLibraryToast()
         }
       }
     } catch (err) {
@@ -448,7 +479,7 @@ function App() {
       setIsLoading(false)
       setIsCancelling(false)
     }
-  }, [input, maybePromptSmartGenerate, parseCatalogNumbers, persistCatalogsToLibrary, searchMode, t])
+  }, [input, maybePromptSmartGenerate, parseCatalogNumbers, persistCatalogsToLibrary, searchMode, showLibraryToast, t])
 
   const handleCancel = useCallback(async () => {
     window.electronAPI.log('debug', 'app.search', 'cancel requested')
@@ -460,6 +491,7 @@ function App() {
   useEffect(() => {
     return () => {
       if (mobileNoticeTimerRef.current) clearTimeout(mobileNoticeTimerRef.current)
+      if (libraryToastTimerRef.current) clearTimeout(libraryToastTimerRef.current)
     }
   }, [])
 
@@ -663,14 +695,20 @@ function App() {
     const { catalogs, platforms } = autoFlow
     setAutoFlow(null)
     const merged = await runDeepDig(catalogs, platforms, results, enrichedDetails)
-    await maybePromptSmartGenerate(catalogOrder, merged ?? results, enrichedDetails)
-  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, runDeepDig])
+    if (cancelledRef.current) {
+      showLibraryToast()
+      return
+    }
+    const prompted = await maybePromptSmartGenerate(catalogOrder, merged ?? results, enrichedDetails)
+    if (!prompted) showLibraryToast()
+  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, runDeepDig, showLibraryToast])
 
   const handleDeepDigSkip = useCallback(async () => {
     if (autoFlow?.kind !== 'deep-dig-prompt') return
     setAutoFlow(null)
-    await maybePromptSmartGenerate(catalogOrder, results, enrichedDetails)
-  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results])
+    const prompted = await maybePromptSmartGenerate(catalogOrder, results, enrichedDetails)
+    if (!prompted) showLibraryToast()
+  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, showLibraryToast])
 
   const handleSmartConfirm = useCallback(async () => {
     if (autoFlow?.kind !== 'smart-prompt') return
@@ -708,12 +746,18 @@ function App() {
   const handleSmartSkip = useCallback(() => {
     if (autoFlow?.kind !== 'smart-prompt') return
     setAutoFlow(null)
-  }, [autoFlow])
+    showLibraryToast()
+  }, [autoFlow, showLibraryToast])
 
   const handleFlowClose = useCallback(() => {
     if (autoFlow?.kind !== 'smart-done') return
     setAutoFlow(null)
-  }, [autoFlow])
+    showLibraryToast()
+  }, [autoFlow, showLibraryToast])
+
+  const handleNewCatalogsViewed = useCallback(() => {
+    setLibraryNewCatalogs(new Set())
+  }, [])
 
   const handleTitleClick = useCallback((catalogNumber: string) => {
     window.electronAPI.log('debug', 'app.detail', 'detail modal opened', { catalogNumber })
@@ -746,24 +790,6 @@ function App() {
       <header className="app-header">
         <h1>Super CD Search</h1>
         <div className="app-header-actions">
-          <div className="currency-toggle" role="group" aria-label="Currency">
-            <button
-              type="button"
-              className={displayCurrency === 'USD' ? 'active' : ''}
-              onClick={() => handleCurrencyChange('USD')}
-              title={t('currency.usdTitle')}
-            >
-              USD
-            </button>
-            <button
-              type="button"
-              className={displayCurrency === 'CNY' ? 'active' : ''}
-              onClick={() => handleCurrencyChange('CNY')}
-              title={t('currency.cnyTitle')}
-            >
-              CNY
-            </button>
-          </div>
           <button
             className="lan-button"
             onClick={() => setShowLanPanel(true)}
@@ -913,6 +939,24 @@ function App() {
         <section className="right-panel">
           <div className="panel-header">
             <h2>{t('panel.results')}</h2>
+            <div className="currency-toggle" role="group" aria-label="Currency">
+              <button
+                type="button"
+                className={displayCurrency === 'USD' ? 'active' : ''}
+                onClick={() => handleCurrencyChange('USD')}
+                title={t('currency.usdTitle')}
+              >
+                USD
+              </button>
+              <button
+                type="button"
+                className={displayCurrency === 'CNY' ? 'active' : ''}
+                onClick={() => handleCurrencyChange('CNY')}
+                title={t('currency.cnyTitle')}
+              >
+                CNY
+              </button>
+            </div>
           </div>
           <div className="panel-content">
             {results.size === 0 && !hasProgress && (
@@ -960,8 +1004,15 @@ function App() {
       </main>
       ) : (
         <main className="app-main library-main">
-          <CDLibrary refreshVersion={libraryRefreshVersion} />
+          <CDLibrary
+            refreshVersion={libraryRefreshVersion}
+            newCatalogs={libraryNewCatalogs}
+            onNewCatalogsViewed={handleNewCatalogsViewed}
+          />
         </main>
+      )}
+      {libraryToast && (
+        <div className="app-toast" role="status" aria-live="polite">{libraryToast}</div>
       )}
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />

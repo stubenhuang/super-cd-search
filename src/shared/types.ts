@@ -282,6 +282,12 @@ export interface CDLibraryRecord extends CDLibraryRecordInput {
   platforms?: PublishPlatform[]
 }
 
+/** Outcome of upserting search results: which catalog numbers were new vs updated. */
+export interface CDLibraryUpsertResult {
+  inserted: string[]
+  updated: string[]
+}
+
 /** Marketplaces the user can mark a published CD as listed on. User-maintained only. */
 export type PublishPlatform = 'taobao' | 'xianyu' | 'discogs'
 
