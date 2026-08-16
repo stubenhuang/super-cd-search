@@ -126,4 +126,27 @@ describe('preload API', () => {
     await api.setLanSearchCatalogCount(10)
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:setCatalogCount', 10)
   })
+
+  it('forwards CD library calls to ipcRenderer.invoke', async () => {
+    api = await loadPreload()
+    vi.mocked(ipcRenderer.invoke).mockResolvedValue({ records: [] })
+    const input = { catalogNumber: 'X-1', imageUrl: '', details: '', lowestPriceUsd: null, highestPriceUsd: null, lowestPriceCny: null, highestPriceCny: null }
+
+    await api.listLibraryRecords({ catalogQuery: 'X', page: 1, pageSize: 20 })
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('library:list', { catalogQuery: 'X', page: 1, pageSize: 20 })
+    await api.createLibraryRecord(input)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('library:create', input)
+    await api.updateLibraryRecord('X-1', input)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('library:update', 'X-1', input)
+    await api.upsertLibraryRecords([input])
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('library:upsert-search-results', [input])
+    await api.deleteLibraryRecords(['X-1'])
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('library:delete', ['X-1'])
+    await api.importLibraryExcel()
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('library:import-excel')
+    await api.exportLibraryExcel(['X-1'], ['编号'], 'out.xlsx')
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('library:export-excel', ['X-1'], ['编号'], 'out.xlsx', undefined)
+    await api.getLibraryImage('X-1')
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('library:image', 'X-1')
+  })
 })

@@ -248,8 +248,10 @@ export interface ExcelExportRow {
   catalogNumber: string
   imageUrl: string
   details: string
-  lowestPrice: string
-  highestPrice: string
+  lowestPriceUsd: number | null
+  highestPriceUsd: number | null
+  lowestPriceCny: number | null
+  highestPriceCny: number | null
 }
 
 export interface ExcelExportPayload {
@@ -261,6 +263,51 @@ export interface ExportProgress {
   phase: 'images'
   current: number
   total: number
+}
+
+export interface CDLibraryRecordInput {
+  catalogNumber: string
+  imageUrl: string
+  details: string
+  lowestPriceUsd: number | null
+  highestPriceUsd: number | null
+  lowestPriceCny: number | null
+  highestPriceCny: number | null
+  /** Internal edit hint; never exported as a business field. */
+  preserveEmbeddedImage?: boolean
+}
+
+export interface CDLibraryRecord extends CDLibraryRecordInput {
+  hasEmbeddedImage: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export interface CDLibraryListQuery {
+  catalogQuery: string
+  page: number
+  pageSize: 20 | 50 | 100
+}
+
+export interface CDLibraryListResult {
+  records: CDLibraryRecord[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface CDLibraryImportError {
+  row: number
+  message: string
+}
+
+export interface CDLibraryImportResult {
+  status: 'imported' | 'cancelled' | 'error'
+  added: number
+  updated: number
+  skipped: number
+  errors: CDLibraryImportError[]
+  error?: string
 }
 
 export interface ThrottleStatus {

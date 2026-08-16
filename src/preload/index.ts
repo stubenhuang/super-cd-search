@@ -15,7 +15,12 @@ import type {
   QueryResult,
   CDDetails,
   LanCandidate,
-  LanServerStatus
+  LanServerStatus,
+  CDLibraryRecord,
+  CDLibraryRecordInput,
+  CDLibraryListQuery,
+  CDLibraryListResult,
+  CDLibraryImportResult
 } from '../shared/types'
 
 const validSendChannels = ['toMain', 'renderer:log'] as const
@@ -69,6 +74,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('export:excel', defaultFileName, payload, targetDirectory),
   selectExportDirectory: (): Promise<DirectorySelectResult> =>
     ipcRenderer.invoke('export:select-directory'),
+  listLibraryRecords: (query: CDLibraryListQuery): Promise<CDLibraryListResult> =>
+    ipcRenderer.invoke('library:list', query),
+  createLibraryRecord: (input: CDLibraryRecordInput): Promise<CDLibraryRecord> =>
+    ipcRenderer.invoke('library:create', input),
+  updateLibraryRecord: (catalogNumber: string, input: CDLibraryRecordInput): Promise<CDLibraryRecord> =>
+    ipcRenderer.invoke('library:update', catalogNumber, input),
+  upsertLibraryRecords: (inputs: CDLibraryRecordInput[]): Promise<void> =>
+    ipcRenderer.invoke('library:upsert-search-results', inputs),
+  deleteLibraryRecords: (catalogNumbers: string[]): Promise<number> =>
+    ipcRenderer.invoke('library:delete', catalogNumbers),
+  importLibraryExcel: (): Promise<CDLibraryImportResult> =>
+    ipcRenderer.invoke('library:import-excel'),
+  exportLibraryExcel: (
+    catalogNumbers: string[],
+    headers: string[],
+    defaultFileName: string,
+    targetDirectory?: string
+  ): Promise<ExportFileResult> =>
+    ipcRenderer.invoke('library:export-excel', catalogNumbers, headers, defaultFileName, targetDirectory),
+  getLibraryImage: (catalogNumber: string): Promise<{ base64: string; mimeType: string } | null> =>
+    ipcRenderer.invoke('library:image', catalogNumber),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),

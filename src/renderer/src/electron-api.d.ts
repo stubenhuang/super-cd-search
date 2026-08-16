@@ -24,7 +24,12 @@ import type {
   LanServerStatus,
   LanCatalogAddedEvent,
   BarcodeProvider,
-  BarcodeCatalogCandidate
+  BarcodeCatalogCandidate,
+  CDLibraryRecord,
+  CDLibraryRecordInput,
+  CDLibraryListQuery,
+  CDLibraryListResult,
+  CDLibraryImportResult
 } from '../../shared/types'
 
 export type {
@@ -52,7 +57,12 @@ export type {
   LanServerStatus,
   LanCatalogAddedEvent,
   BarcodeProvider,
-  BarcodeCatalogCandidate
+  BarcodeCatalogCandidate,
+  CDLibraryRecord,
+  CDLibraryRecordInput,
+  CDLibraryListQuery,
+  CDLibraryListResult,
+  CDLibraryImportResult
 }
 
 // Extended progress type for received messages (includes event)
@@ -85,6 +95,19 @@ export interface IElectronAPI {
   cancelBatchQuery: () => Promise<void>
   exportExcel: (defaultFileName: string, payload: ExcelExportPayload, targetDirectory?: string) => Promise<ExportFileResult>
   selectExportDirectory: () => Promise<DirectorySelectResult>
+  listLibraryRecords: (query: CDLibraryListQuery) => Promise<CDLibraryListResult>
+  createLibraryRecord: (input: CDLibraryRecordInput) => Promise<CDLibraryRecord>
+  updateLibraryRecord: (catalogNumber: string, input: CDLibraryRecordInput) => Promise<CDLibraryRecord>
+  upsertLibraryRecords: (inputs: CDLibraryRecordInput[]) => Promise<void>
+  deleteLibraryRecords: (catalogNumbers: string[]) => Promise<number>
+  importLibraryExcel: () => Promise<CDLibraryImportResult>
+  exportLibraryExcel: (
+    catalogNumbers: string[],
+    headers: string[],
+    defaultFileName: string,
+    targetDirectory?: string
+  ) => Promise<ExportFileResult>
+  getLibraryImage: (catalogNumber: string) => Promise<{ base64: string; mimeType: string } | null>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
   startCloudflareChallenge: (platform: CloudflarePlatform) => Promise<CloudflareChallengeResult>

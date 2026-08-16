@@ -72,7 +72,7 @@ describe('buildExportRows', () => {
       catalogNumbers: ['X-1'],
       resultsByCatalog: new Map([['X-1', results]]),
       enrichedDetailsByCatalog: new Map([['X-1', enriched]]),
-      formatPrice: usd => `$${usd.toFixed(2)}`,
+      usdToCnyRate: 7.2,
       t
     })
 
@@ -89,8 +89,10 @@ describe('buildExportRows', () => {
         '发行: 2024',
         '类型: Jazz'
       ].join('\n'),
-      lowestPrice: '$5.00',
-      highestPrice: '$9.00'
+      lowestPriceUsd: 5,
+      highestPriceUsd: 9,
+      lowestPriceCny: 36,
+      highestPriceCny: 64.8
     })
   })
 
@@ -109,7 +111,7 @@ describe('buildExportRows', () => {
       catalogNumbers: ['X-1'],
       resultsByCatalog: new Map([['X-1', [poor, rich]]]),
       enrichedDetailsByCatalog: new Map(),
-      formatPrice: usd => `$${usd.toFixed(2)}`,
+      usdToCnyRate: 7.2,
       t
     })
 

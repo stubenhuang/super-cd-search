@@ -5,8 +5,8 @@ export interface ExportDataOptions {
   catalogNumbers: string[]
   resultsByCatalog: Map<string, QueryResult[]>
   enrichedDetailsByCatalog: Map<string, CDDetails>
-  /** Formats a USD amount according to the currently selected currency. */
-  formatPrice: (usd: number) => string
+  /** Snapshot multiplier used to populate the CNY columns. */
+  usdToCnyRate: number
   /** Translation function, e.g. the app's useI18n().t. */
   t: (key: string) => string
 }
@@ -103,7 +103,9 @@ function buildDetailsText(catalogNumber: string, presentation: Presentation, t: 
 }
 
 export function buildExportRows(options: ExportDataOptions): ExcelExportRow[] {
-  const { catalogNumbers, resultsByCatalog, enrichedDetailsByCatalog, formatPrice, t } = options
+  const { catalogNumbers, resultsByCatalog, enrichedDetailsByCatalog, usdToCnyRate, t } = options
+
+  const roundPrice = (value: number): number => Math.round(value * 100) / 100
 
   return catalogNumbers.map(catalogNumber => {
     const results = resultsByCatalog.get(catalogNumber) || []
@@ -115,8 +117,10 @@ export function buildExportRows(options: ExportDataOptions): ExcelExportRow[] {
       catalogNumber,
       imageUrl: presentation.displayCover || '',
       details: buildDetailsText(catalogNumber, presentation, t),
-      lowestPrice: bounds.lowestPrice !== null ? formatPrice(bounds.lowestPrice) : '',
-      highestPrice: bounds.highestPrice !== null ? formatPrice(bounds.highestPrice) : ''
+      lowestPriceUsd: bounds.lowestPrice !== null ? roundPrice(bounds.lowestPrice) : null,
+      highestPriceUsd: bounds.highestPrice !== null ? roundPrice(bounds.highestPrice) : null,
+      lowestPriceCny: bounds.lowestPrice !== null ? roundPrice(bounds.lowestPrice * usdToCnyRate) : null,
+      highestPriceCny: bounds.highestPrice !== null ? roundPrice(bounds.highestPrice * usdToCnyRate) : null
     }
   })
 }

@@ -75,15 +75,30 @@ export async function buildExcelWorkbook(
     { header: payload.headers[0] || '编号', key: 'catalogNumber', width: 16 },
     { header: payload.headers[1] || '图片', key: 'image', width: 18 },
     { header: payload.headers[2] || '详情', key: 'details', width: 90 },
-    { header: payload.headers[3] || '最低价', key: 'lowestPrice', width: 12 },
-    { header: payload.headers[4] || '最高价', key: 'highestPrice', width: 12 }
+    { header: payload.headers[3] || '最低价($)', key: 'lowestPriceUsd', width: 14 },
+    { header: payload.headers[4] || '最高价($)', key: 'highestPriceUsd', width: 14 },
+    { header: payload.headers[5] || '最低价(￥)', key: 'lowestPriceCny', width: 14 },
+    { header: payload.headers[6] || '最高价(￥)', key: 'highestPriceCny', width: 14 }
   ]
   styleHeaderRow(worksheet.getRow(1))
 
   for (const row of payload.rows) {
-    const dataRow = worksheet.addRow([row.catalogNumber, '', row.details, row.lowestPrice, row.highestPrice])
+    const dataRow = worksheet.addRow([
+      row.catalogNumber,
+      '',
+      row.details,
+      row.lowestPriceUsd,
+      row.highestPriceUsd,
+      row.lowestPriceCny,
+      row.highestPriceCny
+    ])
     dataRow.height = DATA_ROW_HEIGHT
     dataRow.alignment = { vertical: 'top', wrapText: true }
+
+    dataRow.getCell(4).numFmt = '$0.00'
+    dataRow.getCell(5).numFmt = '$0.00'
+    dataRow.getCell(6).numFmt = '¥0.00'
+    dataRow.getCell(7).numFmt = '¥0.00'
 
     const detailCell = dataRow.getCell(3)
     detailCell.alignment = { vertical: 'top', wrapText: true }

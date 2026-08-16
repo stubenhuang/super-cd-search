@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, ExportProgress, LanCatalogAddedEvent } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, ExportProgress, LanCatalogAddedEvent, CDLibraryRecordInput } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
@@ -11,6 +11,7 @@ import { QueryEvents } from '../../shared/events'
 import { useCoverImage } from './hooks/useCoverImage'
 import { useI18n } from './i18n'
 import { buildExportRows } from './exportData'
+import { CDLibrary } from './CDLibrary'
 import './App.css'
 
 type SearchMode = 'standard' | 'deep'
@@ -265,6 +266,7 @@ function playCompletionSound(): void {
 
 function App() {
   const { t } = useI18n()
+  const [activeTab, setActiveTab] = useState<'search' | 'library'>('search')
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [mobileNotice, setMobileNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
@@ -296,6 +298,8 @@ function App() {
   const [exportProgressText, setExportProgressText] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
   const exportResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [libraryRefreshVersion, setLibraryRefreshVersion] = useState(0)
+  const [librarySyncError, setLibrarySyncError] = useState<string | null>(null)
 
   // Platforms queried by the currently running search. Resolved from the
   // latest settings each time a search starts (see handleSearch).
@@ -307,6 +311,35 @@ function App() {
   }, [])
 
   const MAX_SEARCH_INPUT_CATALOGS = 10
+
+  const persistCatalogsToLibrary = useCallback(async (
+    targets: string[],
+    workingResults: Map<string, QueryResult[]>,
+    workingEnriched: Map<string, CDDetails>
+  ) => {
+    const foundTargets = targets.filter(catalogNumber =>
+      (workingResults.get(catalogNumber) || []).some(result => result.status === 'found')
+    )
+    if (foundTargets.length === 0) return
+    try {
+      const rate = usdToCnyRate ?? await window.electronAPI.getUsdToDisplayRate('CNY')
+      const rows = buildExportRows({
+        catalogNumbers: foundTargets,
+        resultsByCatalog: workingResults,
+        enrichedDetailsByCatalog: workingEnriched,
+        usdToCnyRate: rate,
+        t: t as (key: string) => string
+      })
+      const records: CDLibraryRecordInput[] = rows.map(row => ({ ...row }))
+      await window.electronAPI.upsertLibraryRecords(records)
+      setLibrarySyncError(null)
+      setLibraryRefreshVersion(version => version + 1)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      window.electronAPI.log('warn', 'app.library', 'failed to persist search results', { error: message })
+      setLibrarySyncError(t('library.storageError', { error: message }))
+    }
+  }, [t, usdToCnyRate])
 
   const handleInputChange = useCallback((nextInput: string) => {
     const nextCount = parseCatalogNumbers(nextInput).length
@@ -364,14 +397,13 @@ function App() {
     try {
       const batchResults = await window.electronAPI.executeBatchQuery(catalogNumbers, platforms)
       window.electronAPI.log('debug', 'app.search', 'search finished', { resultCount: batchResults.length })
-      setResults(prev => {
-        const merged = new Map(prev)
-        for (const batch of batchResults) {
-          const existing = merged.get(batch.catalogNumber) || []
-          merged.set(batch.catalogNumber, mergePlatformResults(existing, batch.results))
-        }
-        return merged
-      })
+      const completedResults = applyBatchResults(new Map(), batchResults)
+      setResults(prev => applyBatchResults(prev, batchResults))
+      await persistCatalogsToLibrary(
+        batchResults.map(batch => batch.catalogNumber),
+        completedResults,
+        new Map()
+      )
     } catch (err) {
       if (!cancelledRef.current) {
         window.electronAPI.log('warn', 'app.search', 'search failed', { error: err instanceof Error ? err.message : String(err) })
@@ -381,7 +413,7 @@ function App() {
       setIsLoading(false)
       setIsCancelling(false)
     }
-  }, [input, parseCatalogNumbers, searchMode, t])
+  }, [input, parseCatalogNumbers, persistCatalogsToLibrary, searchMode, t])
 
   const handleCancel = useCallback(async () => {
     window.electronAPI.log('debug', 'app.search', 'cancel requested')
@@ -589,14 +621,13 @@ function App() {
     try {
       const batchResults = await window.electronAPI.executeBatchQuery(targets, deepPlatforms)
       window.electronAPI.log('debug', 'app.deepSearch', 'deep search finished', { resultCount: batchResults.length })
-      setResults((prev) => {
-        const merged = new Map(prev)
-        for (const batch of batchResults) {
-          const existing = merged.get(batch.catalogNumber) || []
-          merged.set(batch.catalogNumber, mergePlatformResults(existing, batch.results))
-        }
-        return merged
-      })
+      const merged = applyBatchResults(results, batchResults)
+      setResults(merged)
+      await persistCatalogsToLibrary(
+        batchResults.map(batch => batch.catalogNumber),
+        merged,
+        enrichedDetails
+      )
       deepSearchSucceededRef.current = true
     } catch (err) {
       window.electronAPI.log('warn', 'app.deepSearch', 'deep search failed', { error: err instanceof Error ? err.message : String(err) })
@@ -606,7 +637,7 @@ function App() {
       setDeepSearchTargets([])
       setDeepSearchPlatforms([])
     }
-  }, [emptyCatalogs, isDeepSearching, t])
+  }, [emptyCatalogs, enrichedDetails, isDeepSearching, persistCatalogsToLibrary, results, t])
 
   const handleTitleClick = useCallback((catalogNumber: string) => {
     window.electronAPI.log('debug', 'app.detail', 'detail modal opened', { catalogNumber })
@@ -616,12 +647,11 @@ function App() {
 
   const handleDetailsEnriched = useCallback((catalogNumber: string, details: CDDetails) => {
     window.electronAPI.log('info', 'app.detail', 'detail fields enriched', { catalogNumber })
-    setEnrichedDetails(prev => {
-      const next = new Map(prev)
-      next.set(catalogNumber, details)
-      return next
-    })
-  }, [])
+    const next = new Map(enrichedDetails)
+    next.set(catalogNumber, details)
+    setEnrichedDetails(next)
+    void persistCatalogsToLibrary([catalogNumber], results, next)
+  }, [enrichedDetails, persistCatalogsToLibrary, results])
 
   const handleExportCsv = useCallback(() => {
     if (isLoading || isDeepSearching || catalogOrder.length === 0) return
@@ -703,27 +733,25 @@ function App() {
 
       setExportProgressText(t('export.writing'))
 
-      const formatPrice = (usd: number): string => {
-        if (displayCurrency === 'CNY' && usdToCnyRate !== null) {
-          return `¥${(usd * usdToCnyRate).toFixed(2)}`
-        }
-        return `$${usd.toFixed(2)}`
-      }
-
       const headers = [
         t('export.catalogNumber'),
         t('export.image'),
         t('export.details'),
-        t('export.lowestPrice'),
-        t('export.highestPrice')
+        t('export.lowestPriceUsd'),
+        t('export.highestPriceUsd'),
+        t('export.lowestPriceCny'),
+        t('export.highestPriceCny')
       ]
+      const cnyRate = usdToCnyRate ?? await window.electronAPI.getUsdToDisplayRate('CNY')
       const rows = buildExportRows({
         catalogNumbers: catalogOrder,
         resultsByCatalog: workingResults,
         enrichedDetailsByCatalog: workingEnriched,
-        formatPrice,
+        usdToCnyRate: cnyRate,
         t: t as (key: string) => string
       })
+
+      await persistCatalogsToLibrary(catalogOrder, workingResults, workingEnriched)
 
       const now = new Date()
       const stamp = `${now.toISOString().slice(0, 10)}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
@@ -748,7 +776,7 @@ function App() {
     } finally {
       setExportBusy(false)
     }
-  }, [catalogOrder, displayCurrency, enrichedDetails, results, t, usdToCnyRate])
+  }, [catalogOrder, enrichedDetails, persistCatalogsToLibrary, results, t, usdToCnyRate])
 
   const handleCurrencyChange = useCallback((currency: DisplayCurrency) => {
     setDisplayCurrency(currency)
@@ -815,6 +843,12 @@ function App() {
           </button>
         </div>
       </header>
+      <nav className="app-tabs" aria-label="Main sections">
+        <button className={activeTab === 'search' ? 'active' : ''} onClick={() => setActiveTab('search')}>{t('tab.search')}</button>
+        <button className={activeTab === 'library' ? 'active' : ''} onClick={() => setActiveTab('library')}>{t('tab.library')}</button>
+      </nav>
+      {librarySyncError && <div className="library-sync-error">{librarySyncError}</div>}
+      {activeTab === 'search' ? (
       <main className="app-main">
         <aside className="left-panel">
           <div className="panel-header">
@@ -1009,6 +1043,11 @@ function App() {
           </div>
         </section>
       </main>
+      ) : (
+        <main className="app-main library-main">
+          <CDLibrary refreshVersion={libraryRefreshVersion} />
+        </main>
+      )}
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <ExportModal

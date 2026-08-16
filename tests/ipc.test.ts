@@ -285,7 +285,7 @@ describe('registerLoggingIpc', () => {
 describe('registerExportIpc', () => {
   const payload = {
     headers: ['编号', '图片', '详情', '最低价', '最高价'],
-    rows: [{ catalogNumber: 'X-1', imageUrl: '', details: '编号: X-1', lowestPrice: '$10.00', highestPrice: '$20.00' }]
+    rows: [{ catalogNumber: 'X-1', imageUrl: '', details: '编号: X-1', lowestPriceUsd: 10, highestPriceUsd: 20, lowestPriceCny: 72, highestPriceCny: 144 }]
   }
 
   it('writes the workbook through the selected save path', async () => {

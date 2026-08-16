@@ -8,6 +8,7 @@ import { registerCloudflareIpc } from './ipc/cloudflare'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
 import { registerExportIpc } from './ipc/export'
+import { registerLibraryIpc } from './ipc/library'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
 import { initCloudflareChrome, closeCloudflareChrome } from './cloudflare'
 import { browserPool } from './browser'
@@ -17,6 +18,7 @@ import { applyLanServer, closeLanServer } from './lan'
 import { initCachePersistence, flushCacheToDisk } from './queries/cache'
 import { prewarmExchangeRates } from './currency'
 import { isAllowedRendererNavigation, isSafeExternalUrl } from './security/urls'
+import { initCDLibrary, closeCDLibrary } from './library'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -84,6 +86,7 @@ app.whenReady().then(async () => {
   logger.info('main', 'application ready', { logLevel: getLogLevel() })
 
   initCachePersistence(app.getPath('userData'))
+  initCDLibrary(app.getPath('userData'))
   initCloudflareChrome(app.getPath('userData'))
   prewarmExchangeRates()
   registerSettingsIpc()
@@ -91,6 +94,7 @@ app.whenReady().then(async () => {
   registerEnrichmentIpc()
   registerLoggingIpc()
   registerExportIpc()
+  registerLibraryIpc()
   registerImageIpc()
   registerThrottleIpc()
   registerLanIpc()
@@ -139,5 +143,6 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   logger.debug('main', 'before-quit: flushing cache and stopping LAN server')
   flushCacheToDisk()
+  closeCDLibrary()
   void closeLanServer()
 })

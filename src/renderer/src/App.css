@@ -252,11 +252,42 @@ html[data-platform='win32'] .app-header {
 }
 
 /* === Main Layout === */
+.app-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+}
+
+.app-tabs button {
+  padding: 10px 18px 9px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-tabs button:hover { color: var(--text-primary); }
+.app-tabs button.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+
+.library-sync-error {
+  padding: 8px 20px;
+  color: #b23b3b;
+  background: rgba(210, 70, 70, 0.1);
+  border-bottom: 1px solid rgba(210, 70, 70, 0.2);
+  font-size: 13px;
+}
+
 .app-main {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
+
+.library-main { width: 100%; }
 
 /* === Left Panel (Input) === */
 .left-panel {

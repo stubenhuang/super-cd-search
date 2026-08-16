@@ -10,7 +10,7 @@ const PNG_1PX = Buffer.from(
   'base64'
 )
 
-const headers = ['编号', '图片', '详情', '最低价', '最高价']
+const headers = ['编号', '图片', '详情', '最低价($)', '最高价($)', '最低价(￥)', '最高价(￥)']
 
 function payload(rows: ExcelExportPayload['rows']): ExcelExportPayload {
   return { headers, rows }
@@ -19,7 +19,7 @@ function payload(rows: ExcelExportPayload['rows']): ExcelExportPayload {
 describe('buildExcelWorkbook', () => {
   it('builds headers and data rows, filling image placeholders for missing URLs', async () => {
     const workbook = await buildExcelWorkbook(payload([
-      { catalogNumber: 'X-1', imageUrl: '', details: '编号: X-1\n专辑: Album', lowestPrice: '$5.00', highestPrice: '$9.00' }
+      { catalogNumber: 'X-1', imageUrl: '', details: '编号: X-1\n专辑: Album', lowestPriceUsd: 5, highestPriceUsd: 9, lowestPriceCny: 36, highestPriceCny: 64.8 }
     ]))
 
     const sheet = workbook.getWorksheet('Search Results')
@@ -29,6 +29,10 @@ describe('buildExcelWorkbook', () => {
     expect(sheet!.getCell('A2').value).toBe('X-1')
     expect(sheet!.getCell('B2').value).toBe('无图')
     expect(sheet!.getCell('C2').value).toBe('编号: X-1\n专辑: Album')
+    expect(sheet!.getCell('D2').value).toBe(5)
+    expect(sheet!.getCell('D2').numFmt).toBe('$0.00')
+    expect(sheet!.getCell('F2').value).toBe(36)
+    expect(sheet!.getCell('F2').numFmt).toBe('¥0.00')
   })
 
   it('embeds an actual image for a URL and marks failures', async () => {
@@ -38,8 +42,8 @@ describe('buildExcelWorkbook', () => {
     }
 
     const workbook = await buildExcelWorkbook(payload([
-      { catalogNumber: 'X-1', imageUrl: 'ok', details: 'd', lowestPrice: '', highestPrice: '' },
-      { catalogNumber: 'X-2', imageUrl: 'fail', details: 'd', lowestPrice: '', highestPrice: '' }
+      { catalogNumber: 'X-1', imageUrl: 'ok', details: 'd', lowestPriceUsd: null, highestPriceUsd: null, lowestPriceCny: null, highestPriceCny: null },
+      { catalogNumber: 'X-2', imageUrl: 'fail', details: 'd', lowestPriceUsd: null, highestPriceUsd: null, lowestPriceCny: null, highestPriceCny: null }
     ]), fetcher)
 
     const sheet = workbook.getWorksheet('Search Results')!
@@ -53,8 +57,8 @@ describe('buildExcelWorkbook', () => {
     const fetcher: ImageFetcher = async () => ({ buffer: PNG_1PX, extension: 'png' })
 
     await buildExcelWorkbook(payload([
-      { catalogNumber: 'X-1', imageUrl: 'ok', details: 'd', lowestPrice: '', highestPrice: '' },
-      { catalogNumber: 'X-2', imageUrl: '', details: 'd', lowestPrice: '', highestPrice: '' }
+      { catalogNumber: 'X-1', imageUrl: 'ok', details: 'd', lowestPriceUsd: null, highestPriceUsd: null, lowestPriceCny: null, highestPriceCny: null },
+      { catalogNumber: 'X-2', imageUrl: '', details: 'd', lowestPriceUsd: null, highestPriceUsd: null, lowestPriceCny: null, highestPriceCny: null }
     ]), fetcher, (current, total) => progress.push([current, total]))
 
     expect(progress).toEqual([[1, 2], [2, 2]])
@@ -75,7 +79,7 @@ describe('writeExcelFile', () => {
   it('writes a real xlsx file for rows without images', async () => {
     const filePath = join(dir, 'export.xlsx')
     await writeExcelFile(payload([
-      { catalogNumber: 'X-1', imageUrl: '', details: 'd', lowestPrice: '$1.00', highestPrice: '$2.00' }
+      { catalogNumber: 'X-1', imageUrl: '', details: 'd', lowestPriceUsd: 1, highestPriceUsd: 2, lowestPriceCny: 7.2, highestPriceCny: 14.4 }
     ]), filePath)
 
     expect(existsSync(filePath)).toBe(true)
