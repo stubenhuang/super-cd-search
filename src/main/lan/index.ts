@@ -17,6 +17,8 @@ import type {
   BarcodeCatalogCandidate,
   LanBarcodeLookupResponse,
   LanCatalogAddedEvent,
+  LanSearchState,
+  LanSearchStatusResponse,
   LanServerStatus,
   PublishPlatform
 } from '../../shared/types'
@@ -48,6 +50,35 @@ export function setLanSearchCatalogCount(count: number): void {
 }
 
 const MAX_SEARCH_INPUT_CATALOGS = 10
+
+function defaultLanSearchState(): LanSearchState {
+  return {
+    phase: 'idle',
+    input: '',
+    busy: false,
+    searchMode: 'standard',
+    catalogs: [],
+    platforms: [],
+    total: 0,
+    completed: 0,
+    percent: 0,
+    progress: [],
+    inserted: 0,
+    updated: 0,
+    error: null
+  }
+}
+
+/** Latest search state machine snapshot pushed by the desktop renderer. */
+let currentSearchState: LanSearchState = defaultLanSearchState()
+
+export function setLanSearchState(state: LanSearchState): void {
+  currentSearchState = state
+}
+
+export function getLanSearchState(): LanSearchState {
+  return currentSearchState
+}
 
 function canAcceptLanBarcodeLookup(): boolean {
   return (
@@ -258,6 +289,102 @@ export async function handleLanBarcodeSelection(
   }
 }
 
+const MAX_REMOTE_INPUT_LENGTH = 500
+
+/** Phone edits are accepted while the desktop search controls are idle. */
+function canAcceptLanSearchControl(): boolean {
+  return (
+    httpServer.running &&
+    BrowserWindow.getAllWindows().length > 0 &&
+    !isBatchQueryRunning() &&
+    rendererSearchAvailable
+  )
+}
+
+/**
+ * Replace the desktop search box text from the phone. The renderer owns the
+ * input state (including the 10-catalog limit and error text), so the text is
+ * forwarded as-is; any validation result comes back through the search state
+ * snapshot the renderer pushes.
+ */
+export function handleLanSearchInput(text: string): LanSearchStatusResponse {
+  if (text.length > MAX_REMOTE_INPUT_LENGTH) {
+    return { status: 'error', message: '输入内容过长' }
+  }
+  if (!canAcceptLanSearchControl()) {
+    return { status: 'unavailable', message: '桌面端正在搜索，请稍后再试' }
+  }
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('lan:input-changed', text)
+    }
+  }
+  logger.debug('lan.search', 'search box text updated from phone', { length: text.length })
+  return { status: 'ok' }
+}
+
+/** Start the desktop search pipeline from the phone. */
+export async function handleLanSearchRun(): Promise<LanSearchStatusResponse> {
+  if (!canAcceptLanSearchControl()) {
+    return { status: 'unavailable', message: '桌面端正在搜索，请稍后再试' }
+  }
+  if (rendererCatalogCount === 0) {
+    // A phone edit synced over /api/search/input may not have reached the
+    // renderer yet; give it a moment before declaring the box empty.
+    await new Promise(resolve => setTimeout(resolve, 150))
+    if (rendererCatalogCount === 0) {
+      return { status: 'error', message: '搜索框为空，请先在搜索框输入目录号' }
+    }
+  }
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('lan:search-requested')
+    }
+  }
+  logger.info('lan.search', 'search triggered from phone')
+  return { status: 'ok' }
+}
+
+/** Switch the desktop search mode (standard / deep) from the phone. */
+export function handleLanSearchMode(mode: string): LanSearchStatusResponse {
+  if (mode !== 'standard' && mode !== 'deep') {
+    return { status: 'error', message: '无效的搜索模式' }
+  }
+  if (!canAcceptLanSearchControl()) {
+    return { status: 'unavailable', message: '桌面端正在搜索，请稍后再试' }
+  }
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('lan:mode-changed', mode)
+    }
+  }
+  logger.debug('lan.search', 'search mode updated from phone', { mode })
+  return { status: 'ok' }
+}
+
+/**
+ * Drive a post-search dialog (deep dig / smart generation) from the phone.
+ * The renderer's flow handlers re-check the current dialog kind, so a stale
+ * action from a phone that is behind on snapshots is a safe no-op.
+ */
+export function handleLanFlowAction(action: 'confirm' | 'skip' | 'close'): LanSearchStatusResponse {
+  if (!canAcceptLanSearchControl()) {
+    return { status: 'unavailable', message: '桌面端正在搜索，请稍后再试' }
+  }
+  const channel = action === 'confirm'
+    ? 'lan:flow-confirm'
+    : action === 'skip'
+      ? 'lan:flow-skip'
+      : 'lan:flow-close'
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(channel)
+    }
+  }
+  logger.info('lan.search', 'search flow action from phone', { action })
+  return { status: 'ok' }
+}
+
 function configuredPort(): number {
   return getSetting('lanPort') ?? DEFAULT_LAN_PORT
 }
@@ -307,6 +434,7 @@ export async function applyLanServer(): Promise<LanServerStatus> {
     await httpServer.stop()
     lastStart = null
     currentStatus = disabledStatus()
+    currentSearchState = defaultLanSearchState()
     return currentStatus
   }
 
@@ -359,7 +487,14 @@ export async function applyLanServer(): Promise<LanServerStatus> {
       token,
       handleBarcodeLookup: handleLanBarcodeLookup,
       handleBarcodeSelection: handleLanBarcodeSelection,
-      publishHandlers: lanPublishHandlers
+      publishHandlers: lanPublishHandlers,
+      searchHandlers: {
+        getState: getLanSearchState,
+        setInput: handleLanSearchInput,
+        run: handleLanSearchRun,
+        setMode: handleLanSearchMode,
+        flow: handleLanFlowAction
+      }
     })
     lastStart = { host, port, token }
     currentStatus = runningStatus()
@@ -389,6 +524,7 @@ export function getLanServerStatus(): LanServerStatus {
 export async function closeLanServer(): Promise<void> {
   await httpServer.stop()
   lastStart = null
+  currentSearchState = defaultLanSearchState()
 }
 
 export { listLanCandidates }

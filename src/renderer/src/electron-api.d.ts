@@ -20,6 +20,10 @@ import type {
   LanCandidate,
   LanServerStatus,
   LanCatalogAddedEvent,
+  LanSearchMode,
+  LanSearchPhase,
+  LanSearchState,
+  LanSearchStatusResponse,
   BarcodeProvider,
   BarcodeCatalogCandidate,
   CDLibraryRecord,
@@ -56,6 +60,10 @@ export type {
   LanCandidate,
   LanServerStatus,
   LanCatalogAddedEvent,
+  LanSearchMode,
+  LanSearchPhase,
+  LanSearchState,
+  LanSearchStatusResponse,
   BarcodeProvider,
   BarcodeCatalogCandidate,
   CDLibraryRecord,
@@ -129,6 +137,7 @@ export interface IElectronAPI {
   regenerateLanToken: () => Promise<LanServerStatus>
   setLanSearchAvailability: (available: boolean) => Promise<void>
   setLanSearchCatalogCount: (count: number) => Promise<void>
+  setLanSearchState: (state: LanSearchState) => Promise<void>
 }
 
 declare global {

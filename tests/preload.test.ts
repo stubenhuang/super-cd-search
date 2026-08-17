@@ -48,9 +48,15 @@ describe('preload API', () => {
     api.receive('detail:enrich-progress', fn)
     api.receive('export:progress', fn)
     api.receive('lan:catalog-added', fn)
+    api.receive('lan:input-changed', fn)
+    api.receive('lan:search-requested', fn)
+    api.receive('lan:mode-changed', fn)
+    api.receive('lan:flow-confirm', fn)
+    api.receive('lan:flow-skip', fn)
+    api.receive('lan:flow-close', fn)
     api.receive('library:publish-updated', fn)
     api.receive('danger', fn)
-    expect(ipcRenderer.on).toHaveBeenCalledTimes(6)
+    expect(ipcRenderer.on).toHaveBeenCalledTimes(12)
   })
 
   it('forwards settings calls to ipcRenderer.invoke', async () => {
@@ -120,6 +126,10 @@ describe('preload API', () => {
 
     await api.setLanSearchCatalogCount(10)
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:setCatalogCount', 10)
+
+    const state = { phase: 'searching', input: 'X-1', busy: true }
+    await api.setLanSearchState(state)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:setSearchState', state)
   })
 
   it('forwards CD library calls to ipcRenderer.invoke', async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { PassThrough } from 'stream'
 import type { IncomingMessage, ServerResponse } from 'http'
 import {
@@ -8,8 +8,10 @@ import {
   extractRequestHost,
   isAllowedRequestHost,
   LanHttpServer,
-  type LanPublishHandlers
+  type LanPublishHandlers,
+  type LanSearchHandlers
 } from '../src/main/lan/server'
+import type { LanSearchState } from '../src/shared/types'
 
 class MockResponse {
   statusCode = 200
@@ -143,12 +145,19 @@ describe('createLanRequestHandler', () => {
     expect(res.headers['Set-Cookie']).toContain('super_cd_lan=token')
   })
 
-  it('serves the scan page and local scanner assets', () => {
+  it('serves the search page and local scanner assets', () => {
     const handler = createLanRequestHandler('192.168.1.5', 'token')
 
     const page = callHandler(handler, '192.168.1.5', '/?token=token')
-    expect(page.body).toContain('快速添加 CD 编号')
+    expect(page.body).toContain('远程搜索')
+    expect(page.body).toContain('search-input')
+    expect(page.body).toContain('tab-search')
+    expect(page.body).toContain('mode-standard')
+    expect(page.body).toContain('flow-dialog')
     expect(page.body).toContain('file-input')
+    // Manual barcode entry was removed; only camera scanning remains.
+    expect(page.body).not.toContain('barcode-input')
+    expect(page.body).not.toContain('手动输入条码')
 
     const zxing = callHandler(handler, '192.168.1.5', '/zxing.js?token=token')
     expect(zxing.statusCode).toBe(200)
@@ -157,6 +166,11 @@ describe('createLanRequestHandler', () => {
     const app = callHandler(handler, '192.168.1.5', '/mobile.js?token=token')
     expect(app.statusCode).toBe(200)
     expect(app.body).toContain('decodeBarcodeFile')
+    expect(app.body).toContain('/api/search/input')
+    expect(app.body).toContain('/api/search/state')
+    expect(app.body).toContain('/api/search/mode')
+    expect(app.body).toContain('/api/search/flow/')
+    expect(app.body).not.toContain('barcode-input')
   })
 
   it('serves health checks and 404s unknown paths', () => {
@@ -287,6 +301,34 @@ function mockPublishHandlers(overrides: Partial<LanPublishHandlers> = {}): LanPu
   }
 }
 
+function mockSearchState(overrides: Partial<LanSearchState> = {}): LanSearchState {
+  return {
+    phase: 'idle',
+    input: '',
+    busy: false,
+    searchMode: 'standard',
+    catalogs: [],
+    platforms: [],
+    total: 0,
+    completed: 0,
+    percent: 0,
+    progress: [],
+    inserted: 0,
+    updated: 0,
+    error: null,
+    ...overrides
+  }
+}
+
+function mockSearchHandlers(overrides: Partial<LanSearchHandlers> = {}): LanSearchHandlers {
+  return {
+    getState: () => mockSearchState(),
+    setInput: async () => ({ status: 'ok' }),
+    run: async () => ({ status: 'ok' }),
+    ...overrides
+  }
+}
+
 describe('createLanRequestHandler publish routes', () => {
   it('requires authentication for publish endpoints', () => {
     const handler = createLanRequestHandler('192.168.1.5', 'token', undefined, undefined, mockPublishHandlers())
@@ -382,6 +424,197 @@ describe('createLanRequestHandler publish routes', () => {
     expect((await callGetHandler(handler, '/publish/image')).statusCode).toBe(400)
     expect((await callGetHandler(handler, '/publish/image?catalog=')).statusCode).toBe(400)
     expect((await callGetHandler(handler, '/publish/image?catalog=TOCP-1')).statusCode).toBe(404)
+  })
+})
+
+describe('createLanRequestHandler search routes', () => {
+  it('requires authentication for search endpoints', () => {
+    const handler = createLanRequestHandler('192.168.1.5', 'token', undefined, undefined, undefined, mockSearchHandlers())
+    expect(callHandler(handler, '192.168.1.5', '/api/search/state').statusCode).toBe(401)
+    expect(callHandler(handler, '192.168.1.5', '/api/search/input').statusCode).toBe(401)
+    expect(callHandler(handler, '192.168.1.5', '/api/search/run').statusCode).toBe(401)
+    expect(callHandler(handler, '192.168.1.5', '/api/search/mode').statusCode).toBe(401)
+    expect(callHandler(handler, '192.168.1.5', '/api/search/flow/confirm').statusCode).toBe(401)
+    expect(callHandler(handler, '192.168.1.5', '/api/search/flow/skip').statusCode).toBe(401)
+    expect(callHandler(handler, '192.168.1.5', '/api/search/flow/close').statusCode).toBe(401)
+  })
+
+  it('rejects search routes when no handlers are configured', async () => {
+    const handler = createLanRequestHandler('192.168.1.5', 'token')
+    expect(callHandler(handler, '192.168.1.5', '/api/search/state?token=token').statusCode).toBe(404)
+    expect((await callPostHandler(handler, JSON.stringify({ text: 'x' }), undefined, undefined, '/api/search/input')).statusCode).toBe(404)
+    expect((await callPostHandler(handler, null, undefined, undefined, '/api/search/run')).statusCode).toBe(404)
+    expect((await callPostHandler(handler, JSON.stringify({ mode: 'deep' }), undefined, undefined, '/api/search/mode')).statusCode).toBe(404)
+    expect((await callPostHandler(handler, null, undefined, undefined, '/api/search/flow/confirm')).statusCode).toBe(404)
+  })
+
+  it('serves the stored search state snapshot', async () => {
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      undefined,
+      mockSearchHandlers({
+        getState: () => mockSearchState({
+          phase: 'searching',
+          input: 'TOCP-1',
+          busy: true,
+          total: 1,
+          completed: 1,
+          percent: 100,
+          inserted: 2,
+          updated: 1
+        })
+      })
+    )
+    const res = await callGetHandler(handler, '/api/search/state')
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body).state).toMatchObject({
+      phase: 'searching',
+      input: 'TOCP-1',
+      busy: true,
+      total: 1,
+      percent: 100,
+      inserted: 2,
+      updated: 1
+    })
+  })
+
+  it('validates search-input bodies and forwards the text', async () => {
+    const calls: string[] = []
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      undefined,
+      mockSearchHandlers({
+        setInput: async (text: string) => {
+          calls.push(text)
+          return { status: 'ok' }
+        }
+      })
+    )
+
+    const ok = await callPostHandler(handler, JSON.stringify({ text: 'TOCP-1\nVICP-2' }), undefined, undefined, '/api/search/input')
+    expect(ok.statusCode).toBe(200)
+    expect(JSON.parse(ok.body).status).toBe('ok')
+    expect(calls).toEqual(['TOCP-1\nVICP-2'])
+
+    expect((await callPostHandler(handler, 'not-json', undefined, undefined, '/api/search/input')).statusCode).toBe(400)
+    expect((await callPostHandler(handler, JSON.stringify({}), undefined, undefined, '/api/search/input')).statusCode).toBe(400)
+    expect((await callPostHandler(handler, JSON.stringify({ text: 42 }), undefined, undefined, '/api/search/input')).statusCode).toBe(400)
+  })
+
+  it('maps search-control rejections to the right status codes', async () => {
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      undefined,
+      mockSearchHandlers({
+        setInput: async () => ({ status: 'unavailable', message: 'busy' }),
+        run: async () => ({ status: 'error', message: 'empty box' })
+      })
+    )
+
+    const input = await callPostHandler(handler, JSON.stringify({ text: 'x' }), undefined, undefined, '/api/search/input')
+    expect(input.statusCode).toBe(409)
+    expect(JSON.parse(input.body)).toEqual({ status: 'unavailable', message: 'busy' })
+
+    const run = await callPostHandler(handler, null, undefined, undefined, '/api/search/run')
+    expect(run.statusCode).toBe(400)
+    expect(JSON.parse(run.body)).toEqual({ status: 'error', message: 'empty box' })
+  })
+
+  it('starts a remote search', async () => {
+    const run = vi.fn(async () => ({ status: 'ok' }))
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      undefined,
+      mockSearchHandlers({ run })
+    )
+    const res = await callPostHandler(handler, null, undefined, undefined, '/api/search/run')
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body).status).toBe('ok')
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('validates search-mode bodies and forwards the mode', async () => {
+    const calls: string[] = []
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      undefined,
+      mockSearchHandlers({
+        setMode: async (mode: string) => {
+          calls.push(mode)
+          return { status: 'ok' }
+        }
+      })
+    )
+
+    const ok = await callPostHandler(handler, JSON.stringify({ mode: 'deep' }), undefined, undefined, '/api/search/mode')
+    expect(ok.statusCode).toBe(200)
+    expect(JSON.parse(ok.body).status).toBe('ok')
+    expect(calls).toEqual(['deep'])
+
+    expect((await callPostHandler(handler, JSON.stringify({}), undefined, undefined, '/api/search/mode')).statusCode).toBe(400)
+    expect((await callPostHandler(handler, JSON.stringify({ mode: 'bogus' }), undefined, undefined, '/api/search/mode')).statusCode).toBe(400)
+    expect((await callPostHandler(handler, JSON.stringify({ mode: 1 }), undefined, undefined, '/api/search/mode')).statusCode).toBe(400)
+  })
+
+  it('drives post-search flow actions', async () => {
+    const actions: string[] = []
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      undefined,
+      mockSearchHandlers({
+        flow: async (action: 'confirm' | 'skip' | 'close') => {
+          actions.push(action)
+          return { status: 'ok' }
+        }
+      })
+    )
+
+    for (const action of ['confirm', 'skip', 'close']) {
+      const res = await callPostHandler(handler, null, undefined, undefined, '/api/search/flow/' + action)
+      expect(res.statusCode).toBe(200)
+      expect(JSON.parse(res.body).status).toBe('ok')
+    }
+    expect(actions).toEqual(['confirm', 'skip', 'close'])
+  })
+
+  it('maps unavailable search-control rejections to 409', async () => {
+    const handler = createLanRequestHandler(
+      '192.168.1.5',
+      'token',
+      undefined,
+      undefined,
+      undefined,
+      mockSearchHandlers({
+        setMode: async () => ({ status: 'unavailable', message: 'busy' }),
+        flow: async () => ({ status: 'unavailable', message: 'busy' })
+      })
+    )
+
+    const mode = await callPostHandler(handler, JSON.stringify({ mode: 'deep' }), undefined, undefined, '/api/search/mode')
+    expect(mode.statusCode).toBe(409)
+    expect(JSON.parse(mode.body)).toEqual({ status: 'unavailable', message: 'busy' })
+
+    const flow = await callPostHandler(handler, null, undefined, undefined, '/api/search/flow/confirm')
+    expect(flow.statusCode).toBe(409)
+    expect(JSON.parse(flow.body)).toEqual({ status: 'unavailable', message: 'busy' })
   })
 })
 

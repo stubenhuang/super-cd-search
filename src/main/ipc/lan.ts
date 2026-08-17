@@ -1,11 +1,13 @@
 import { ipcMain } from 'electron'
+import type { LanSearchState } from '../../shared/types'
 import {
   applyLanServer,
   getLanServerStatus,
   listLanCandidates,
   regenerateLanToken,
   setLanSearchAvailability,
-  setLanSearchCatalogCount
+  setLanSearchCatalogCount,
+  setLanSearchState
 } from '../lan'
 
 export function registerLanIpc(): void {
@@ -23,5 +25,9 @@ export function registerLanIpc(): void {
 
   ipcMain.handle('lan:setCatalogCount', (_event, count: number) => {
     setLanSearchCatalogCount(Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0)
+  })
+
+  ipcMain.handle('lan:setSearchState', (_event, state: LanSearchState) => {
+    setLanSearchState(state)
   })
 }

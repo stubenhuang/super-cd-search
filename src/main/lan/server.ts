@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { timingSafeEqual } from 'crypto'
 import type { AddressInfo } from 'net'
-import type { PublishPlatform, PublishSnapshot, LanBarcodeLookupResponse } from '../../shared/types'
+import type { PublishPlatform, PublishSnapshot, LanBarcodeLookupResponse, LanSearchState, LanSearchStatusResponse } from '../../shared/types'
 import { MOBILE_APP_JS, MOBILE_PAGE_HTML, MOBILE_ZXING_JS } from './mobile'
 
 export type LanBarcodeLookupHandler = (barcode: string) => Promise<LanBarcodeLookupResponse>
@@ -34,6 +34,22 @@ export interface LanPublishHandlers {
   subscribe: (listener: (kind: PublishChangeKind) => void) => () => void
 }
 
+/**
+ * Phone-facing remote-search API backed by the desktop search state machine.
+ * `setInput` replaces the desktop search box text; `run` starts the desktop
+ * search pipeline with whatever the desktop box currently holds; `setMode`
+ * switches the desktop search mode; `flow` drives the post-search dialogs
+ * (deep dig / smart generation confirm, skip, close).
+ */
+export interface LanSearchHandlers {
+  /** Latest search state machine snapshot pushed by the desktop renderer. */
+  getState: () => LanSearchState
+  setInput: (text: string) => LanSearchStatusResponse | Promise<LanSearchStatusResponse>
+  run: () => LanSearchStatusResponse | Promise<LanSearchStatusResponse>
+  setMode: (mode: string) => LanSearchStatusResponse | Promise<LanSearchStatusResponse>
+  flow: (action: 'confirm' | 'skip' | 'close') => LanSearchStatusResponse | Promise<LanSearchStatusResponse>
+}
+
 export interface LanServerBindOptions {
   /** IPv4 address to bind to. The manager only passes private/loopback IPs. */
   host: string
@@ -46,6 +62,8 @@ export interface LanServerBindOptions {
   handleBarcodeSelection?: LanBarcodeSelectionHandler
   /** Publish batch API for the phone "发布" tab. */
   publishHandlers?: LanPublishHandlers
+  /** Remote-search API for the phone "搜索" tab. */
+  searchHandlers?: LanSearchHandlers
 }
 
 function securityHeaders(res: ServerResponse): void {
@@ -161,6 +179,7 @@ export function createLanRequestHandler(
   handleBarcodeLookup?: LanBarcodeLookupHandler,
   handleBarcodeSelection?: LanBarcodeSelectionHandler,
   publishHandlers?: LanPublishHandlers,
+  searchHandlers?: LanSearchHandlers,
   sseConnections: Set<ServerResponse> = new Set()
 ): (req: IncomingMessage, res: ServerResponse) => void {
   return (req, res) => {
@@ -365,6 +384,101 @@ export function createLanRequestHandler(
           return
         }
 
+        if (url.pathname === '/api/search/state' && (req.method ?? 'GET') === 'GET') {
+          if (!searchHandlers) {
+            sendJson(res, 404, { status: 'error', message: 'Remote search is disabled' })
+            return
+          }
+          sendJson(res, 200, { status: 'ok', state: searchHandlers.getState() })
+          return
+        }
+
+        if (url.pathname === '/api/search/input' && req.method === 'POST') {
+          if (!searchHandlers) {
+            sendJson(res, 404, { status: 'error', message: 'Remote search is disabled' })
+            return
+          }
+
+          let body: Record<string, unknown>
+          try {
+            body = await readJsonBody(req)
+          } catch {
+            sendJson(res, 400, { status: 'error', message: 'Invalid JSON body' })
+            return
+          }
+
+          const text = typeof body.text === 'string' ? body.text : null
+          if (text === null) {
+            sendJson(res, 400, { status: 'error', message: 'Missing text' })
+            return
+          }
+
+          const response = await searchHandlers.setInput(text)
+          const status = response.status === 'unavailable' ? 409 : response.status === 'error' ? 400 : 200
+          sendJson(res, status, response)
+          return
+        }
+
+        if (url.pathname === '/api/search/run' && req.method === 'POST') {
+          if (!searchHandlers) {
+            sendJson(res, 404, { status: 'error', message: 'Remote search is disabled' })
+            return
+          }
+
+          const response = await searchHandlers.run()
+          const status = response.status === 'unavailable' ? 409 : response.status === 'error' ? 400 : 200
+          sendJson(res, status, response)
+          return
+        }
+
+        if (url.pathname === '/api/search/mode' && req.method === 'POST') {
+          if (!searchHandlers) {
+            sendJson(res, 404, { status: 'error', message: 'Remote search is disabled' })
+            return
+          }
+
+          let body: Record<string, unknown>
+          try {
+            body = await readJsonBody(req)
+          } catch {
+            sendJson(res, 400, { status: 'error', message: 'Invalid JSON body' })
+            return
+          }
+
+          const mode = typeof body.mode === 'string' ? body.mode : ''
+          if (mode !== 'standard' && mode !== 'deep') {
+            sendJson(res, 400, { status: 'error', message: 'Invalid mode' })
+            return
+          }
+
+          const response = await searchHandlers.setMode(mode)
+          const status = response.status === 'unavailable' ? 409 : response.status === 'error' ? 400 : 200
+          sendJson(res, status, response)
+          return
+        }
+
+        if (
+          (url.pathname === '/api/search/flow/confirm' ||
+            url.pathname === '/api/search/flow/skip' ||
+            url.pathname === '/api/search/flow/close') &&
+          req.method === 'POST'
+        ) {
+          if (!searchHandlers) {
+            sendJson(res, 404, { status: 'error', message: 'Remote search is disabled' })
+            return
+          }
+
+          const action = url.pathname === '/api/search/flow/confirm'
+            ? 'confirm'
+            : url.pathname === '/api/search/flow/skip'
+              ? 'skip'
+              : 'close'
+          const response = await searchHandlers.flow(action)
+          const status = response.status === 'unavailable' ? 409 : response.status === 'error' ? 400 : 200
+          sendJson(res, status, response)
+          return
+        }
+
         sendText(res, 404, 'Not Found')
       } catch {
         if (!res.headersSent) sendText(res, 500, 'Internal Server Error')
@@ -394,6 +508,7 @@ export class LanHttpServer {
       options.handleBarcodeLookup,
       options.handleBarcodeSelection,
       options.publishHandlers,
+      options.searchHandlers,
       sseConnections
     )
     const server = createServer(handler)

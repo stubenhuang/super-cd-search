@@ -37,13 +37,14 @@ const { mockLogFromRenderer } = vi.hoisted(() => ({
   mockLogFromRenderer: vi.fn()
 }))
 
-const { mockGetLanStatus, mockGetLanCandidates, mockApplyLanServer, mockRegenerateLanToken, mockSetLanSearchAvailability, mockSetLanSearchCatalogCount } = vi.hoisted(() => ({
+const { mockGetLanStatus, mockGetLanCandidates, mockApplyLanServer, mockRegenerateLanToken, mockSetLanSearchAvailability, mockSetLanSearchCatalogCount, mockSetLanSearchState } = vi.hoisted(() => ({
   mockGetLanStatus: vi.fn(),
   mockGetLanCandidates: vi.fn(),
   mockApplyLanServer: vi.fn(),
   mockRegenerateLanToken: vi.fn(),
   mockSetLanSearchAvailability: vi.fn(),
-  mockSetLanSearchCatalogCount: vi.fn()
+  mockSetLanSearchCatalogCount: vi.fn(),
+  mockSetLanSearchState: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({
@@ -84,7 +85,8 @@ vi.mock('../src/main/lan', () => ({
   listLanCandidates: mockGetLanCandidates,
   regenerateLanToken: mockRegenerateLanToken,
   setLanSearchAvailability: mockSetLanSearchAvailability,
-  setLanSearchCatalogCount: mockSetLanSearchCatalogCount
+  setLanSearchCatalogCount: mockSetLanSearchCatalogCount,
+  setLanSearchState: mockSetLanSearchState
 }))
 
 vi.mock('../src/main/logger', () => ({
@@ -167,6 +169,9 @@ describe('registerLanIpc', () => {
 
     await handler('lan:setCatalogCount')(null, 10)
     expect(mockSetLanSearchCatalogCount).toHaveBeenCalledWith(10)
+
+    await handler('lan:setSearchState')(null, { phase: 'searching', input: 'TOCP-1' })
+    expect(mockSetLanSearchState).toHaveBeenCalledWith({ phase: 'searching', input: 'TOCP-1' })
   })
 })
 

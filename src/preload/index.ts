@@ -14,6 +14,7 @@ import type {
   CDDetails,
   LanCandidate,
   LanServerStatus,
+  LanSearchState,
   CDLibraryRecord,
   CDLibraryRecordInput,
   CDLibraryListQuery,
@@ -32,6 +33,12 @@ const validReceiveChannels = [
   'detail:enrich-progress',
   'export:progress',
   'lan:catalog-added',
+  'lan:input-changed',
+  'lan:search-requested',
+  'lan:mode-changed',
+  'lan:flow-confirm',
+  'lan:flow-skip',
+  'lan:flow-close',
   'library:publish-updated'
 ] as const
 
@@ -132,5 +139,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLanSearchAvailability: (available: boolean): Promise<void> =>
     ipcRenderer.invoke('lan:setAvailability', available),
   setLanSearchCatalogCount: (count: number): Promise<void> =>
-    ipcRenderer.invoke('lan:setCatalogCount', count)
+    ipcRenderer.invoke('lan:setCatalogCount', count),
+  setLanSearchState: (state: LanSearchState): Promise<void> =>
+    ipcRenderer.invoke('lan:setSearchState', state)
 })

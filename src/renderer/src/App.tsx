@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, CDLibraryRecordInput } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, CDLibraryRecordInput, LanSearchState, LanSearchPhase } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
@@ -302,6 +302,9 @@ function App() {
   const [libraryNewCatalogs, setLibraryNewCatalogs] = useState<Set<string>>(new Set())
   const [libraryToast, setLibraryToast] = useState<string | null>(null)
   const libraryToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Copy of the pipeline upsert counts that triggers re-renders (the ref does
+  // not), so the LAN search-state snapshot can report them to the phone.
+  const [lanUpsertCounts, setLanUpsertCounts] = useState({ inserted: 0, updated: 0 })
 
   // Platforms queried by the currently running search. Resolved from the
   // latest settings each time a search starts (see handleSearch).
@@ -336,6 +339,12 @@ function App() {
       const upsert = await window.electronAPI.upsertLibraryRecords(records)
       for (const cn of upsert.inserted) pipelineUpsertRef.current.inserted.add(cn)
       for (const cn of upsert.updated) pipelineUpsertRef.current.updated.add(cn)
+      // Mirror the accumulated totals into state so the LAN snapshot reports
+      // them to the phone ("新增 X 条、更新 Y 条已保存到 CD 库").
+      setLanUpsertCounts({
+        inserted: pipelineUpsertRef.current.inserted.size,
+        updated: pipelineUpsertRef.current.updated.size
+      })
       if (upsert.inserted.length > 0 || upsert.updated.length > 0) {
         setLibraryNewCatalogs(prev => {
           const next = new Set(prev)
@@ -431,6 +440,7 @@ function App() {
     void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     setAutoFlow(null)
     pipelineUpsertRef.current = { inserted: new Set(), updated: new Set() }
+    setLanUpsertCounts({ inserted: 0, updated: 0 })
     setIsLoading(true)
     setProgressStatus(new Map())
     setCompletedCatalogs(new Set())
@@ -528,6 +538,33 @@ function App() {
 
     return window.electronAPI.receive('lan:catalog-added', handleCatalogAdded)
   }, [parseCatalogNumbers, t])
+
+  // Phone edits to the search box replace the desktop input. The desktop keeps
+  // owning validation (10-catalog limit, error text); the outcome is reflected
+  // back to the phone through the search state snapshot.
+  useEffect(() => {
+    return window.electronAPI.receive('lan:input-changed', (...args: unknown[]) => {
+      const text = typeof args[0] === 'string' ? args[0] : ''
+      handleInputChange(text)
+    })
+  }, [handleInputChange])
+
+  // Phone-triggered remote search runs the exact same pipeline as the desktop
+  // search button (state machine, progress, CD 库 auto-save included).
+  useEffect(() => {
+    return window.electronAPI.receive('lan:search-requested', () => {
+      void handleSearch()
+    })
+  }, [handleSearch])
+
+  // Phone-driven search mode switch (标准 / 深度), mirroring the desktop
+  // selector. The snapshot echoes the mode back to the phone.
+  useEffect(() => {
+    return window.electronAPI.receive('lan:mode-changed', (...args: unknown[]) => {
+      const mode = typeof args[0] === 'string' ? args[0] : 'standard'
+      setSearchMode(mode === 'deep' ? 'deep' : 'standard')
+    })
+  }, [])
 
   useEffect(() => {
     // Phone-side publish state changes (published flag, platform checkmarks)
@@ -647,6 +684,64 @@ function App() {
 
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
+  // Snapshot of the desktop search state machine, pushed to the LAN server so
+  // the phone can mirror the search box and follow a remotely triggered run.
+  const lanSearchState = useMemo<LanSearchState>(() => {
+    let phase: LanSearchPhase = 'idle'
+    if (autoFlow?.kind === 'deep-dig-prompt') phase = 'deep-dig-prompt'
+    else if (isDeepSearching) phase = 'deep-search'
+    else if (autoFlow?.kind === 'smart-prompt') phase = 'smart-prompt'
+    else if (autoFlow?.kind === 'smart-running') phase = 'smart-running'
+    else if (autoFlow?.kind === 'smart-done') phase = 'smart-done'
+    else if (isLoading || isCancelling) phase = 'searching'
+    else if (results.size > 0) phase = 'done'
+
+    const progress = progressCatalogs.map(catalogNumber => ({
+      catalogNumber,
+      platforms: progressPlatforms.map(platform => ({
+        platform,
+        status: progressByCatalog.get(catalogNumber)?.get(platform) ?? 'pending'
+      }))
+    }))
+
+    return {
+      phase,
+      input,
+      busy: isLoading || isCancelling || isDeepSearching,
+      searchMode,
+      catalogs: progressCatalogs,
+      platforms: progressPlatforms,
+      total: totalCount,
+      completed: completedCount,
+      percent: progressPercent,
+      progress,
+      inserted: lanUpsertCounts.inserted,
+      updated: lanUpsertCounts.updated,
+      error,
+      stageIndex: autoFlow?.kind === 'smart-running' ? autoFlow.current : undefined,
+      stageTotal: autoFlow?.kind === 'smart-running' ? autoFlow.total : undefined,
+      stageCatalog: autoFlow?.kind === 'smart-running' ? autoFlow.catalogNumber : undefined,
+      flowCount: autoFlow && (autoFlow.kind === 'deep-dig-prompt' || autoFlow.kind === 'smart-prompt')
+        ? autoFlow.catalogs.length
+        : undefined,
+      flowPlatforms: autoFlow?.kind === 'deep-dig-prompt' ? autoFlow.platforms : undefined,
+      flowFailed: autoFlow?.kind === 'smart-done' ? autoFlow.failed : undefined
+    }
+  }, [
+    autoFlow, isDeepSearching, isLoading, isCancelling, input, searchMode, results.size,
+    progressCatalogs, progressPlatforms, progressByCatalog, totalCount,
+    completedCount, progressPercent, lanUpsertCounts, error
+  ])
+
+  // Mirror the snapshot to the main process. Debounced so bursts of progress
+  // events coalesce into one push.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void window.electronAPI.setLanSearchState(lanSearchState).catch(() => {})
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [lanSearchState])
+
   // Deep dig pass over catalogs that produced no "found" result. Merges the
   // extra platform results into the given working copies (state updates race
   // with query:progress events otherwise) and returns the merged map, or null
@@ -754,6 +849,29 @@ function App() {
     setAutoFlow(null)
     showLibraryToast()
   }, [autoFlow, showLibraryToast])
+
+  // Remote actions on the post-search dialogs (deep dig / smart generation).
+  // Each handler re-checks the current dialog kind, so stale actions from a
+  // phone that is behind on snapshots are safe no-ops.
+  useEffect(() => {
+    return window.electronAPI.receive('lan:flow-confirm', () => {
+      void handleDeepDigConfirm()
+      void handleSmartConfirm()
+    })
+  }, [handleDeepDigConfirm, handleSmartConfirm])
+
+  useEffect(() => {
+    return window.electronAPI.receive('lan:flow-skip', () => {
+      void handleDeepDigSkip()
+      void handleSmartSkip()
+    })
+  }, [handleDeepDigSkip, handleSmartSkip])
+
+  useEffect(() => {
+    return window.electronAPI.receive('lan:flow-close', () => {
+      handleFlowClose()
+    })
+  }, [handleFlowClose])
 
   const handleNewCatalogsViewed = useCallback(() => {
     setLibraryNewCatalogs(new Set())

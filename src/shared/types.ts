@@ -139,6 +139,74 @@ export interface LanCatalogAddedEvent {
   title?: string
 }
 
+/**
+ * Stages of the desktop search state machine as mirrored to the phone.
+ * `deep-dig-prompt` / `smart-prompt` are desktop-side confirmation dialogs;
+ * the phone shows a "waiting for the desktop" message.
+ */
+export type LanSearchPhase =
+  | 'idle'
+  | 'searching'
+  | 'deep-dig-prompt'
+  | 'deep-search'
+  | 'smart-prompt'
+  | 'smart-running'
+  | 'smart-done'
+  | 'done'
+
+/** Search mode of the desktop pipeline, mirrored to the phone. */
+export type LanSearchMode = 'standard' | 'deep'
+
+/** Per-platform status of one catalog number during a desktop search run. */
+export interface LanSearchCatalogProgress {
+  catalogNumber: string
+  platforms: Array<{ platform: string; status: string }>
+}
+
+/**
+ * Snapshot of the desktop search state machine, pushed from the renderer to
+ * the main process and polled by the phone. The `input` field is the sync
+ * channel for the phone/desktop search box.
+ */
+export interface LanSearchState {
+  phase: LanSearchPhase
+  /** Desktop search box text (phone edits replace it; desktop edits mirror back). */
+  input: string
+  /** Matches the desktop search box disabled condition (isLoading / isCancelling / isDeepSearching). */
+  busy: boolean
+  /** Search mode currently selected on the desktop. */
+  searchMode: LanSearchMode
+  /** Catalog numbers shown in the current progress panel. */
+  catalogs: string[]
+  /** Platforms shown in the current progress panel. */
+  platforms: string[]
+  total: number
+  completed: number
+  percent: number
+  progress: LanSearchCatalogProgress[]
+  /** Library upserts accumulated across the whole pipeline (standard + deep + smart). */
+  inserted: number
+  updated: number
+  error: string | null
+  /** Smart-generation stage counter (phase `smart-running`). */
+  stageIndex?: number
+  stageTotal?: number
+  /** Catalog number being processed by the smart-generation stage. */
+  stageCatalog?: string
+  /** Catalog count shown in the deep-dig / smart-generation confirmation dialogs. */
+  flowCount?: number
+  /** Platforms offered in the deep-dig confirmation dialog (phase `deep-dig-prompt`). */
+  flowPlatforms?: string[]
+  /** Failed generation count shown in the smart-generation done dialog. */
+  flowFailed?: number
+}
+
+/** Result of a phone-side search control action (input sync / run trigger). */
+export interface LanSearchStatusResponse {
+  status: 'ok' | 'error' | 'unavailable'
+  message?: string
+}
+
 export interface Settings {
   discogsToken?: string
   ebayClientId?: string

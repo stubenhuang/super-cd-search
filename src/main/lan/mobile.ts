@@ -55,8 +55,8 @@ export const MOBILE_PAGE_HTML = `<!doctype html>
   @media (prefers-color-scheme: dark) {
     .card { background: #312a22; border-color: rgba(245,238,227,.12); }
   }
-  h1 { margin: 0 0 10px; font-size: 22px; }
-  .intro { margin: 0 0 24px; line-height: 1.7; opacity: .72; font-size: 14px; }
+  h1 { margin: 0 0 4px; font-size: 18px; }
+  .intro { margin: 0 0 10px; line-height: 1.5; opacity: .6; font-size: 12px; }
   button {
     font: inherit; font-weight: 600; cursor: pointer; transition: opacity .15s ease;
   }
@@ -67,34 +67,69 @@ export const MOBILE_PAGE_HTML = `<!doctype html>
     box-shadow: 0 8px 22px rgba(184,134,11,.28);
   }
   .primary:active { transform: scale(.98); }
-  .scan-hint { margin: 12px 4px 18px; font-size: 12px; line-height: 1.6; opacity: .6; }
-  .manual-panel {
-    margin-top: 4px; border: 1px solid rgba(44,37,32,.15); border-radius: 12px;
-    background: transparent; text-align: left;
+  textarea {
+    width: 100%; min-height: 220px; padding: 11px 12px; border: 1px solid rgba(44,37,32,.25); border-radius: 12px;
+    font: inherit; font-size: 15px; text-align: left; background: #f5f0e8; color: inherit;
+    resize: none;
   }
   @media (prefers-color-scheme: dark) {
-    .manual-panel { border-color: rgba(245,238,227,.18); }
+    textarea { background: #26211a; border-color: rgba(245,238,227,.25); }
   }
-  .manual-panel summary {
-    list-style: none; cursor: pointer; padding: 12px 14px;
-    font-size: 14px; font-weight: 600; opacity: .78;
+  .search-card { padding: 16px 14px 12px; }
+  .search-controls { display: flex; align-items: stretch; gap: 8px; margin-top: 10px; }
+  .mode-switch {
+    flex-shrink: 0; display: flex; gap: 2px; padding: 3px;
+    border-radius: 12px; background: rgba(44,37,32,.08);
   }
-  .manual-panel summary::-webkit-details-marker { display: none; }
-  .manual-panel summary .chevron { float: right; transition: transform .15s ease; }
-  .manual-panel[open] summary .chevron { transform: rotate(180deg); }
-  .manual-body { padding: 0 14px 14px; }
-  .secondary { width: 100%; margin-top: 10px; padding: 13px 14px; border-radius: 12px; background: transparent; border: 1px solid rgba(44,37,32,.2); color: inherit; font-size: 15px; }
+  @media (prefers-color-scheme: dark) { .mode-switch { background: rgba(245,238,227,.08); } }
+  .mode-btn {
+    padding: 9px 14px; border: none; border-radius: 10px;
+    background: transparent; color: inherit; font-size: 14px; cursor: pointer;
+  }
+  .mode-btn.active { background: #fefefe; color: #2c2520; box-shadow: 0 1px 6px rgba(44,37,32,.14); }
+  @media (prefers-color-scheme: dark) { .mode-btn.active { background: #3a3228; color: #f5eee3; } }
+  .search-run { flex: 1; padding: 11px 12px; font-size: 16px; border-radius: 12px; }
+  .scan-row {
+    width: 100%; margin-top: 12px; padding: 14px; border-radius: 14px; font-size: 16px;
+    background: #5d7a4a; color: #f5f0e8; border: 1px solid transparent;
+    box-shadow: 0 6px 18px rgba(93,122,74,.3);
+  }
+  .scan-row:active { transform: scale(.98); }
+  @media (prefers-color-scheme: dark) { .scan-row { background: #6b8a56; color: #f5eee3; } }
+  .search-progress { margin-top: 10px; text-align: left; }
+  .search-progress-track {
+    height: 6px; border-radius: 999px; background: rgba(44,37,32,.1); overflow: hidden;
+  }
+  @media (prefers-color-scheme: dark) { .search-progress-track { background: rgba(245,238,227,.1); } }
+  .search-progress-fill { height: 100%; border-radius: 999px; background: #b8860b; transition: width .3s ease; }
+  .search-progress-summary { margin-top: 6px; font-size: 12px; font-weight: 600; opacity: .8; }
+  .search-catalogs {
+    display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+    max-height: 34vh; overflow-y: auto;
+  }
+  .search-catalog {
+    padding: 8px 10px; border: 1px solid rgba(44,37,32,.12); border-radius: 10px;
+    background: rgba(44,37,32,.03);
+  }
   @media (prefers-color-scheme: dark) {
-    .secondary { border-color: rgba(245,238,227,.25); }
+    .search-catalog { border-color: rgba(245,238,227,.12); background: rgba(245,238,227,.04); }
   }
-  input[type="text"] {
-    width: 100%; padding: 13px 14px; border: 1px solid rgba(44,37,32,.25); border-radius: 12px;
-    font: inherit; font-size: 16px; text-align: center; background: #f5f0e8; color: inherit;
+  .search-catalog-name {
+    display: block; margin-bottom: 5px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 14px; font-weight: 700; overflow-wrap: anywhere;
   }
-  @media (prefers-color-scheme: dark) {
-    input[type="text"] { background: #26211a; border-color: rgba(245,238,227,.25); }
+  .search-catalog-platforms { display: flex; flex-wrap: wrap; gap: 5px; }
+  .search-chip {
+    display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px;
+    font-size: 10px; background: rgba(44,37,32,.06); opacity: .75;
   }
-  .status { margin-top: 18px; padding: 12px 14px; border-radius: 12px; font-size: 14px; line-height: 1.6; text-align: center; }
+  @media (prefers-color-scheme: dark) { .search-chip { background: rgba(245,238,227,.07); } }
+  .search-chip.complete { background: rgba(93,122,74,.14); color: #5d7a4a; opacity: 1; }
+  .search-chip.not_found { opacity: .55; }
+  .search-chip.error { background: rgba(166,61,64,.12); color: #a63d40; opacity: 1; }
+  .search-chip.challenge { background: rgba(184,134,11,.16); color: #9a7209; opacity: 1; }
+  @media (prefers-color-scheme: dark) { .search-chip.challenge { color: #f0ce68; } }
+  .status { margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.6; text-align: center; }
   .status[hidden] { display: none; }
   .loading { background: rgba(184,134,11,.1); color: #9a7209; }
   @media (prefers-color-scheme: dark) { .loading { color: #f0ce68; } }
@@ -247,6 +282,36 @@ export const MOBILE_PAGE_HTML = `<!doctype html>
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---- post-search flow dialogs (deep dig / smart generation) ---- */
+  .flow-dialog {
+    position: fixed; inset: 0; z-index: 40;
+    display: grid; place-items: center; padding: 20px;
+    background: rgba(0,0,0,.45);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  .flow-dialog[hidden] { display: none; }
+  .flow-dialog-card {
+    width: 100%; max-width: 380px; padding: 18px 16px;
+    background: #fefefe; border: 1px solid rgba(44,37,32,.12); border-radius: 16px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.24);
+  }
+  @media (prefers-color-scheme: dark) {
+    .flow-dialog-card { background: #312a22; border-color: rgba(245,238,227,.12); }
+  }
+  .flow-dialog-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+  .flow-dialog-body { font-size: 13px; line-height: 1.7; opacity: .88; overflow-wrap: anywhere; }
+  .flow-dialog-hint { margin: 6px 0 0; font-size: 12px; opacity: .7; }
+  .flow-dialog-platforms { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .flow-dialog-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .flow-dialog-actions button {
+    flex: 1; padding: 11px 10px; border-radius: 10px; font-size: 14px;
+  }
+  .flow-btn-secondary { background: transparent; border: 1px solid rgba(44,37,32,.25); color: inherit; }
+  @media (prefers-color-scheme: dark) { .flow-btn-secondary { border-color: rgba(245,238,227,.3); } }
+  .flow-btn-primary {
+    background: #b8860b; color: #2c2520; border: 1px solid transparent;
+  }
 </style>
 </head>
 <body>
@@ -256,26 +321,32 @@ export const MOBILE_PAGE_HTML = `<!doctype html>
       <span class="badge"><span class="dot"></span>LAN · 已连接</span>
     </div>
     <nav class="tabs">
-      <button id="tab-scan" class="tab active" type="button">📷 扫描</button>
+      <button id="tab-search" class="tab active" type="button">🔍 搜索</button>
       <button id="tab-publish" class="tab" type="button">📋 发布</button>
     </nav>
   </div>
 </header>
 <main class="page">
-  <section id="panel-scan" class="panel">
-    <div class="card">
-      <h1>快速添加 CD 编号</h1>
-      <p class="intro">拍摄 CD 盒上的条形码，识别后会自动添加到电脑搜索框。</p>
-      <button id="scan-btn" class="primary" type="button">📷 扫描 CD 条码</button>
-      <input id="file-input" type="file" accept="image/*" capture="environment" hidden>
-      <div class="scan-hint">点击按钮调起相机，对条码拍照即可自动识别</div>
-      <details class="manual-panel">
-        <summary>⌨️ 手动输入条码<span class="chevron">▾</span></summary>
-        <div class="manual-body">
-          <input id="barcode-input" type="text" inputmode="numeric" autocomplete="off" placeholder="输入 8–14 位条码数字">
-          <button id="submit-btn" class="secondary" type="button">添加编号</button>
+  <section id="panel-search" class="panel">
+    <div class="card search-card">
+      <h1>远程搜索</h1>
+      <p class="intro">与电脑端搜索框同步，由电脑端执行并保存到 CD 库</p>
+      <textarea id="search-input" rows="10" placeholder="输入目录号，多个用逗号或换行分隔（最多 10 个）" autocomplete="off" enterkeyhint="done"></textarea>
+      <div class="search-controls">
+        <div class="mode-switch" role="group" aria-label="搜索模式">
+          <button id="mode-standard" class="mode-btn active" type="button">标准</button>
+          <button id="mode-deep" class="mode-btn" type="button">深度</button>
         </div>
-      </details>
+        <button id="search-run" class="primary search-run" type="button">🔍 搜索</button>
+      </div>
+      <div id="search-status" class="status" hidden></div>
+      <div id="search-progress" class="search-progress" hidden>
+        <div class="search-progress-track"><div id="search-progress-fill" class="search-progress-fill"></div></div>
+        <div id="search-progress-summary" class="search-progress-summary"></div>
+        <div id="search-catalogs" class="search-catalogs"></div>
+      </div>
+      <button id="scan-btn" class="scan-row" type="button" title="对 CD 条码拍照，自动识别后加入搜索框">📷 扫码添加编号</button>
+      <input id="file-input" type="file" accept="image/*" capture="environment" hidden>
       <div id="status" class="status" hidden></div>
     </div>
   </section>
@@ -290,6 +361,13 @@ export const MOBILE_PAGE_HTML = `<!doctype html>
     <div id="publish-content" class="publish-empty">正在加载发布内容…</div>
   </section>
 </main>
+<div id="flow-dialog" class="flow-dialog" hidden>
+  <div class="flow-dialog-card" role="dialog" aria-modal="true" aria-labelledby="flow-dialog-title">
+    <div id="flow-dialog-title" class="flow-dialog-title"></div>
+    <div id="flow-dialog-body" class="flow-dialog-body"></div>
+    <div id="flow-dialog-actions" class="flow-dialog-actions"></div>
+  </div>
+</div>
 <div id="toast" class="toast"></div>
 <script src="/zxing.js"></script>
 <script src="/mobile.js"></script>
@@ -303,31 +381,337 @@ export const MOBILE_APP_JS = `(function () {
 
   var scanBtn = byId('scan-btn');
   var fileInput = byId('file-input');
-  var barcodeInput = byId('barcode-input');
-  var submitBtn = byId('submit-btn');
   var status = byId('status');
   var busy = false;
 
   /* ---------- tabs ---------- */
 
-  var tabScan = byId('tab-scan');
+  var tabSearch = byId('tab-search');
   var tabPublish = byId('tab-publish');
-  var panelScan = byId('panel-scan');
+  var panelSearch = byId('panel-search');
   var panelPublish = byId('panel-publish');
-  var activeTab = 'scan';
+  var activeTab = 'search';
 
   function switchTab(name) {
     activeTab = name;
-    var isScan = name === 'scan';
-    tabScan.classList.toggle('active', isScan);
-    tabPublish.classList.toggle('active', !isScan);
-    panelScan.hidden = !isScan;
-    panelPublish.hidden = isScan;
-    if (!isScan) loadPublishList(false);
+    var isSearch = name === 'search';
+    tabSearch.classList.toggle('active', isSearch);
+    tabPublish.classList.toggle('active', !isSearch);
+    panelSearch.hidden = !isSearch;
+    panelPublish.hidden = isSearch;
+    if (isSearch) pollSearchState();
+    else loadPublishList(false);
   }
 
-  tabScan.addEventListener('click', function () { switchTab('scan'); });
+  tabSearch.addEventListener('click', function () { switchTab('search'); });
   tabPublish.addEventListener('click', function () { switchTab('publish'); });
+
+  /* ---------- search tab: remote control of the desktop search ---------- */
+
+  var searchInput = byId('search-input');
+  var searchRun = byId('search-run');
+  var searchStatus = byId('search-status');
+  var searchProgress = byId('search-progress');
+  var searchProgressFill = byId('search-progress-fill');
+  var searchProgressSummary = byId('search-progress-summary');
+  var searchCatalogs = byId('search-catalogs');
+  var modeStandard = byId('mode-standard');
+  var modeDeep = byId('mode-deep');
+
+  var flowDialog = byId('flow-dialog');
+  var flowDialogTitle = byId('flow-dialog-title');
+  var flowDialogBody = byId('flow-dialog-body');
+  var flowDialogActions = byId('flow-dialog-actions');
+  var flowBusy = false;
+
+  var QUERY_PLATFORM_LABELS = {
+    discogs: 'Discogs', ebay: 'eBay', kojima: 'Kojima', hmv: 'HMV',
+    yahoo: 'Yahoo', cdjapan: 'CDJapan', tower: 'Tower',
+    surugaya: 'Suruga-ya', zenmarket: 'ZenMarket'
+  };
+  var STATUS_ICONS = { loading: '⏳', complete: '✓', not_found: '−', challenge: '⚠', error: '✗', pending: '○' };
+
+  var searchInputTimer = null;
+  var searchPollTimer = null;
+  var searchGotState = false;
+
+  function showSearch(kind, html) {
+    searchStatus.hidden = false;
+    searchStatus.className = 'status ' + kind;
+    searchStatus.innerHTML = html;
+  }
+
+  function hideSearchStatus() {
+    searchStatus.hidden = true;
+    searchStatus.className = 'status';
+    searchStatus.innerHTML = '';
+  }
+
+  function setModeButtons(mode) {
+    var isDeep = mode === 'deep';
+    modeStandard.classList.toggle('active', !isDeep);
+    modeDeep.classList.toggle('active', isDeep);
+  }
+
+  function postSearchMode(mode) {
+    return fetch('/api/search/mode', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: mode })
+    }).then(function (response) {
+      return response.json().catch(function () { return null; }).then(function (data) {
+        if (response.status === 409 && data) data.status = 'unavailable';
+        if (!response.ok || !data || data.status !== 'ok') {
+          throw new Error((data && data.message) || '模式切换失败，请重试');
+        }
+      });
+    });
+  }
+
+  modeStandard.addEventListener('click', function () {
+    setModeButtons('standard');
+    postSearchMode('standard').catch(function (err) {
+      toast(err.message || '模式切换失败，请重试');
+    });
+  });
+
+  modeDeep.addEventListener('click', function () {
+    setModeButtons('deep');
+    postSearchMode('deep').catch(function (err) {
+      toast(err.message || '模式切换失败，请重试');
+    });
+  });
+
+  /* ---------- post-search flow dialogs (deep dig / smart generation) ---------- */
+
+  function showFlowDialog(title, bodyHtml, actionsHtml) {
+    flowDialogTitle.textContent = title;
+    flowDialogBody.innerHTML = bodyHtml;
+    flowDialogActions.innerHTML = actionsHtml;
+    flowDialog.hidden = false;
+  }
+
+  function hideFlowDialog() {
+    flowDialog.hidden = true;
+    flowDialogTitle.textContent = '';
+    flowDialogBody.innerHTML = '';
+    flowDialogActions.innerHTML = '';
+  }
+
+  function postFlowAction(action) {
+    if (flowBusy) return;
+    flowBusy = true;
+    var buttons = flowDialogActions.querySelectorAll('button');
+    buttons.forEach(function (button) { button.disabled = true; });
+    fetch('/api/search/flow/' + action, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    }).then(function (response) {
+      return response.json().catch(function () { return null; }).then(function (data) {
+        if (response.status === 409 && data) data.status = 'unavailable';
+        if (!response.ok || !data || data.status !== 'ok') {
+          throw new Error((data && data.message) || '操作失败，请重试');
+        }
+        pollSearchState();
+      });
+    }).catch(function (err) {
+      toast(err.message || '无法连接电脑，请检查手机与电脑是否在同一局域网');
+    }).finally(function () {
+      flowBusy = false;
+    });
+  }
+
+  flowDialogActions.addEventListener('click', function (event) {
+    var button = event.target.closest('button[data-flow]');
+    if (!button) return;
+    postFlowAction(button.getAttribute('data-flow'));
+  });
+
+  function renderFlowDialog(state) {
+    var phase = state.phase;
+    if (phase === 'deep-dig-prompt') {
+      var platformNames = (state.flowPlatforms || []).map(function (p) {
+        return QUERY_PLATFORM_LABELS[p] || p;
+      }).join(' / ');
+      showFlowDialog(
+        '深挖',
+        '有 ' + (Number(state.flowCount) || 0) + ' 个编号在标准搜索中未找到结果。深挖将对这些编号追加查询更多平台（' + escapeHtml(platformNames) + '），结果更全但耗时更长。',
+        '<button type="button" class="flow-btn-secondary" data-flow="skip">跳过</button>' +
+        '<button type="button" class="flow-btn-primary" data-flow="confirm">执行深挖</button>'
+      );
+    } else if (phase === 'smart-prompt') {
+      showFlowDialog(
+        '智能生成',
+        '检测到 ' + (Number(state.flowCount) || 0) + ' 个编号的详情字段不完整（厂牌 / 格式 / 国家 / 发行日期 / 类型）。智能生成将逐个访问平台商品页并调用已配置的 LLM 补齐缺失字段；多个编号时耗时较长，并会消耗 LLM API 额度。',
+        '<button type="button" class="flow-btn-secondary" data-flow="skip">跳过</button>' +
+        '<button type="button" class="flow-btn-primary" data-flow="confirm">开始智能生成</button>'
+      );
+    } else if (phase === 'smart-running') {
+      var stageIndex = Number(state.stageIndex) || 0;
+      var stageTotal = Number(state.stageTotal) || 0;
+      var stageCatalog = state.stageCatalog || '';
+      showFlowDialog(
+        '智能生成',
+        '<span class="spinner"></span>正在智能生成（' + stageIndex + '/' + stageTotal + '）：' + escapeHtml(stageCatalog) + '…',
+        ''
+      );
+    } else if (phase === 'smart-done') {
+      var failed = Number(state.flowFailed) || 0;
+      var failedHint = failed > 0
+        ? '<p class="flow-dialog-hint">' + failed + ' 个编号生成失败</p>'
+        : '';
+      showFlowDialog(
+        '智能生成',
+        '<p>✓ 智能生成完成</p>' + failedHint,
+        '<button type="button" class="flow-btn-primary" data-flow="close">关闭</button>'
+      );
+    } else {
+      hideFlowDialog();
+    }
+  }
+
+  function postSearchInput(text) {
+    if (searchInputTimer) { clearTimeout(searchInputTimer); searchInputTimer = null; }
+    return fetch('/api/search/input', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    }).then(function (response) {
+      return response.json().catch(function () { return null; }).then(function (data) {
+        if (!response.ok || !data || data.status !== 'ok') {
+          throw new Error((data && data.message) || '同步失败，请重试');
+        }
+      });
+    });
+  }
+
+  // Phone edits are pushed to the desktop search box, debounced while typing.
+  searchInput.addEventListener('input', function () {
+    if (searchInputTimer) clearTimeout(searchInputTimer);
+    searchInputTimer = setTimeout(function () {
+      searchInputTimer = null;
+      postSearchInput(searchInput.value).catch(function (err) {
+        toast(err.message || '同步失败，请重试');
+      });
+    }, 300);
+  });
+
+  searchInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      triggerSearch();
+    }
+  });
+
+  function triggerSearch() {
+    // Flush a pending input sync first so the desktop searches the latest text.
+    var flush = searchInputTimer ? postSearchInput(searchInput.value) : Promise.resolve();
+    flush.then(function () {
+      return fetch('/api/search/run', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}'
+      });
+    }).then(function (response) {
+      return response.json().catch(function () { return null; }).then(function (data) {
+        if (response.status === 409 && data) data.status = 'unavailable';
+        if (!response.ok || !data || data.status !== 'ok') {
+          throw new Error((data && data.message) || '触发搜索失败，请重试');
+        }
+        showSearch('loading', '<span class="spinner"></span>已在电脑端开始搜索');
+        pollSearchState();
+      });
+    }).catch(function (err) {
+      showSearch('error', err.message || '无法连接电脑，请检查手机与电脑是否在同一局域网');
+    });
+  }
+
+  searchRun.addEventListener('click', triggerSearch);
+
+  function pollSearchState() {
+    if (activeTab !== 'search' || document.hidden) return;
+    fetch('/api/search/state', { credentials: 'same-origin' })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (!data || data.status !== 'ok' || !data.state) throw new Error('bad state');
+        renderSearchState(data.state);
+      })
+      .catch(function () {
+        if (!searchGotState) {
+          showSearch('error', '无法连接电脑，请检查手机与电脑是否在同一局域网');
+        }
+      });
+  }
+
+  function renderSearchState(state) {
+    searchGotState = true;
+    var busy = !!state.busy;
+    searchInput.disabled = busy;
+    searchRun.disabled = busy;
+    modeStandard.disabled = busy;
+    modeDeep.disabled = busy;
+    setModeButtons(state.searchMode === 'deep' ? 'deep' : 'standard');
+
+    // Mirror the desktop search box, but never clobber what the user is typing.
+    if (document.activeElement !== searchInput && state.input !== searchInput.value) {
+      searchInput.value = state.input || '';
+    }
+
+    var phase = state.phase || 'idle';
+    var showProgress = phase === 'searching' || phase === 'deep-search';
+    searchProgress.hidden = !showProgress;
+    if (showProgress) {
+      var percent = Math.max(0, Math.min(100, Number(state.percent) || 0));
+      searchProgressFill.style.width = percent + '%';
+      var total = Number(state.total) || 0;
+      var completed = Math.min(Number(state.completed) || 0, total);
+      var summaryText = '已完成 ' + completed + ' / ' + total + '（' + percent + '%）';
+      if (phase === 'deep-search') summaryText = '深度搜索中 · ' + summaryText;
+      searchProgressSummary.textContent = summaryText;
+
+      var platformStatus = {};
+      (state.progress || []).forEach(function (item) {
+        var byCatalog = {};
+        (item.platforms || []).forEach(function (p) { byCatalog[p.platform] = p.status; });
+        platformStatus[item.catalogNumber] = byCatalog;
+      });
+      var catalogsHtml = (state.catalogs || []).map(function (catalogNumber) {
+        var statuses = platformStatus[catalogNumber] || {};
+        var chips = (state.platforms || []).map(function (platform) {
+          var chipStatus = statuses[platform] || 'pending';
+          var label = QUERY_PLATFORM_LABELS[platform] || platform;
+          return '<span class="search-chip ' + chipStatus + '">' + (STATUS_ICONS[chipStatus] || '○') + ' ' + escapeHtml(label) + '</span>';
+        }).join('');
+        return '<div class="search-catalog"><span class="search-catalog-name">' + escapeHtml(catalogNumber) + '</span>' +
+          '<span class="search-catalog-platforms">' + chips + '</span></div>';
+      }).join('');
+      searchCatalogs.innerHTML = catalogsHtml;
+    }
+
+    // Post-search dialogs (deep dig / smart generation) render as an overlay.
+    renderFlowDialog(state);
+
+    if (state.error) {
+      showSearch('error', escapeHtml(state.error));
+    } else if (phase === 'done' && !busy) {
+      showSearch('success', '搜索完成，结果已保存到 CD 库<span class="sub">新增 ' + (Number(state.inserted) || 0) + ' 条 · 更新 ' + (Number(state.updated) || 0) + ' 条</span>');
+    } else if (phase === 'searching' || phase === 'deep-search') {
+      // The progress panel above is the status display for running searches.
+      hideSearchStatus();
+    }
+    // Dialog phases and idle keep whatever status is already shown.
+  }
+
+  // Poll the desktop search state machine while the search tab is visible.
+  searchPollTimer = setInterval(function () {
+    pollSearchState();
+  }, 1000);
+  pollSearchState();
 
   /* ---------- toast & clipboard ---------- */
 
@@ -562,7 +946,9 @@ export const MOBILE_APP_JS = `(function () {
   connectPublishEvents();
 
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden && activeTab === 'publish') loadPublishList(false);
+    if (document.hidden) return;
+    if (activeTab === 'search') pollSearchState();
+    else loadPublishList(false);
   });
 
   publishRefresh.addEventListener('click', function () { loadPublishList(true); });
@@ -649,7 +1035,7 @@ export const MOBILE_APP_JS = `(function () {
     }
   }, true);
 
-  /* ---------- scan tab (unchanged behaviour) ---------- */
+  /* ---------- scan card: camera barcode recognition ---------- */
 
   function normalizeBarcode(value) {
     var normalized = String(value || '').replace(/[\\s-]/g, '');
@@ -668,8 +1054,6 @@ export const MOBILE_APP_JS = `(function () {
   function setBusy(next) {
     busy = next;
     scanBtn.disabled = next;
-    submitBtn.disabled = next;
-    barcodeInput.disabled = next;
   }
 
   function show(kind, html) {
@@ -688,7 +1072,6 @@ export const MOBILE_APP_JS = `(function () {
       var title = data.title ? '<span class="sub">' + escapeHtml(data.title) + '</span>' : '';
       var source = data.source ? '<span class="sub">来源：' + escapeHtml(SOURCE_LABELS[data.source] || data.source) + '</span>' : '';
       show('success', '已添加到电脑搜索框<span class="catalog">' + escapeHtml(data.catalogNumber) + '</span>' + title + source);
-      barcodeInput.value = '';
       return;
     }
 
@@ -800,15 +1183,7 @@ export const MOBILE_APP_JS = `(function () {
       submitBarcode(text);
     }).catch(function () {
       setBusy(false);
-      show('error', '无法识别条码，请拍清楚一些或改用下方手动输入');
+      show('error', '无法识别条码，请拍清楚一些后重试');
     });
-  });
-
-  submitBtn.addEventListener('click', function () {
-    submitBarcode(barcodeInput.value);
-  });
-
-  barcodeInput.addEventListener('keydown', function (event) {
-    if (event.key === 'Enter') submitBarcode(barcodeInput.value);
   });
 })();`
