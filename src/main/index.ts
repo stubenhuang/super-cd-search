@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, nativeTheme } from 'electron'
 import { join } from 'path'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerOrchestratorIpc } from './ipc/orchestrator'
@@ -18,8 +18,15 @@ import { initCachePersistence, flushCacheToDisk } from './queries/cache'
 import { prewarmExchangeRates } from './currency'
 import { isAllowedRendererNavigation, isSafeExternalUrl } from './security/urls'
 import { initCDLibrary, closeCDLibrary } from './library'
+import { getSetting } from './settings'
+import { TITLE_BAR_OVERLAY_COLORS, TITLE_BAR_OVERLAY_HEIGHT, resolveThemeMode } from '../shared/theme'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+
+function titleBarOverlayForSavedTheme() {
+  const resolved = resolveThemeMode(getSetting('theme'), nativeTheme.shouldUseDarkColors)
+  return { ...TITLE_BAR_OVERLAY_COLORS[resolved], height: TITLE_BAR_OVERLAY_HEIGHT }
+}
 
 function createWindow() {
   logger.debug('main', 'creating main window')
@@ -37,15 +44,20 @@ function createWindow() {
     },
     // Frameless title bar styling per platform.
     // - macOS: hiddenInset keeps the native traffic lights.
-    // - Windows: hidden removes the system title bar but keeps native window
-    //   controls overlaid at the top-right; the renderer reserves space for them.
+    // - Windows: hidden removes the system title bar; the Window Controls
+    //   Overlay (titleBarOverlay) is required to draw the native minimize/
+    //   maximize/close buttons on top of the page, whose reserved space is
+    //   in the renderer header.
     ...(process.platform === 'darwin'
       ? {
           titleBarStyle: 'hiddenInset' as const,
           trafficLightPosition: { x: 15, y: 10 }
         }
       : process.platform === 'win32'
-        ? { titleBarStyle: 'hidden' as const }
+        ? {
+            titleBarStyle: 'hidden' as const,
+            titleBarOverlay: titleBarOverlayForSavedTheme()
+          }
         : {})
   })
 
@@ -108,6 +120,19 @@ app.whenReady().then(async () => {
     }
     logger.debug('main', 'openExternal called', { url })
     await shell.openExternal(url)
+  })
+
+  // The Windows window-controls strip colors follow the app theme; the
+  // renderer pushes an update whenever the resolved theme changes.
+  ipcMain.handle('window:setTitleBarOverlay', (event, options) => {
+    if (process.platform !== 'win32') return false
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return false
+    const overlay: { color?: string; symbolColor?: string } = {}
+    if (typeof options?.color === 'string') overlay.color = options.color
+    if (typeof options?.symbolColor === 'string') overlay.symbolColor = options.symbolColor
+    win.setTitleBarOverlay(overlay)
+    return true
   })
 
   // Start the LAN server (when enabled) before the window appears so the

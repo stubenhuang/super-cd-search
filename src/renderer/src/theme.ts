@@ -1,6 +1,7 @@
 import type { ThemeMode } from '../../shared/types'
+import { TITLE_BAR_OVERLAY_COLORS, resolveThemeMode, type ResolvedTheme } from '../../shared/theme'
 
-export type ResolvedTheme = 'light' | 'dark'
+export type { ResolvedTheme } from '../../shared/theme'
 
 const STORAGE_KEY = 'super-cd-search:theme'
 const DARK_QUERY = '(prefers-color-scheme: dark)'
@@ -10,16 +11,23 @@ const DARK_QUERY = '(prefers-color-scheme: dark)'
 let currentMode: ThemeMode = 'light'
 
 export function resolveTheme(mode: ThemeMode): ResolvedTheme {
-  if (mode === 'system') {
-    return window.matchMedia(DARK_QUERY).matches ? 'dark' : 'light'
-  }
-  return mode === 'dark' ? 'dark' : 'light'
+  return resolveThemeMode(mode, window.matchMedia(DARK_QUERY).matches)
+}
+
+// On Windows the frameless title bar draws its native window controls with
+// app-provided colors, so keep them in sync with the resolved theme.
+function syncWindowControlsOverlay(resolved: ResolvedTheme): void {
+  if (window.electronAPI?.platform !== 'win32') return
+  void window.electronAPI.setTitleBarOverlay(TITLE_BAR_OVERLAY_COLORS[resolved]).catch(() => {
+    // Cosmetic only; ignore failures (e.g. overlay unavailable).
+  })
 }
 
 export function applyTheme(mode: ThemeMode): void {
   currentMode = mode
   const resolved = resolveTheme(mode)
   document.documentElement.setAttribute('data-theme', resolved)
+  syncWindowControlsOverlay(resolved)
   try {
     localStorage.setItem(STORAGE_KEY, resolved)
   } catch {

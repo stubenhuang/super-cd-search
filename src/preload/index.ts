@@ -46,6 +46,8 @@ const validLogLevels = new Set(['debug', 'info', 'warn', 'error'])
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
+  setTitleBarOverlay: (overlay: { color?: string; symbolColor?: string; height?: number }): Promise<boolean> =>
+    ipcRenderer.invoke('window:setTitleBarOverlay', overlay),
   send: (channel: string, data: unknown) => {
     if (validSendChannels.includes(channel as typeof validSendChannels[number])) {
       ipcRenderer.send(channel, data)

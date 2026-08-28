@@ -89,6 +89,8 @@ export type { BatchQueryProgress }
 export interface IElectronAPI {
   /** The host platform (e.g. 'darwin', 'win32', 'linux'). */
   platform: string
+  /** Update the native window-controls overlay colors (Windows only). */
+  setTitleBarOverlay: (overlay: { color?: string; symbolColor?: string; height?: number }) => Promise<boolean>
   send: (channel: string, data: unknown) => void
   receive: (channel: string, func: (...args: unknown[]) => void) => () => void
   log: (level: string, tag: string, message: string, meta?: Record<string, unknown>) => void
