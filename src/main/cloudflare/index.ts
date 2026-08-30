@@ -6,6 +6,7 @@ export {
   acquireCloudflarePage,
   isCloudflareChromeRunning,
   closeCloudflareChrome,
-  type AcquiredCloudflarePage
+  type AcquiredCloudflarePage,
+  type ChromeSessionMode
 } from './chrome'
 export { isCloudflareChallenge } from './detect'

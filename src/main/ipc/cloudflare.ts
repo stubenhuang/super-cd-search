@@ -5,10 +5,10 @@ import {
   getCloudflareStatus,
   closeCloudflareChrome
 } from '../cloudflare'
-import type { CloudflarePlatform } from '../../shared/types'
+import type { LoginPlatform } from '../../shared/types'
 
 export function registerCloudflareIpc(): void {
-  ipcMain.handle('cloudflare:startChallenge', async (_event, platform: CloudflarePlatform) => {
+  ipcMain.handle('cloudflare:startChallenge', async (_event, platform: LoginPlatform) => {
     return startCloudflareChallenge(platform)
   })
 
@@ -16,7 +16,7 @@ export function registerCloudflareIpc(): void {
     cancelCloudflareChallenge()
   })
 
-  ipcMain.handle('cloudflare:getStatus', async (_event, platform: CloudflarePlatform) => {
+  ipcMain.handle('cloudflare:getStatus', async (_event, platform: LoginPlatform) => {
     return getCloudflareStatus(platform)
   })
 

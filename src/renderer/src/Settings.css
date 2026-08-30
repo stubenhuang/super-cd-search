@@ -662,6 +662,36 @@
   color: var(--st-accent);
 }
 
+/* QR-login badge on marketplace-channel checkboxes; clicking it opens the
+   login section instead of toggling the checkbox. */
+.st-check-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--st-font-body);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--st-text-muted);
+  background: var(--st-bg-tertiary);
+  border: 1px solid var(--st-border);
+  cursor: pointer;
+  transition: color var(--st-transition), border-color var(--st-transition);
+}
+
+.st-check-badge:hover {
+  color: var(--st-text-primary);
+  border-color: var(--st-border-medium);
+}
+
+.st-check-badge.st-check-badge-ok {
+  color: var(--st-success);
+  background: transparent;
+  border-color: var(--st-success);
+}
+
 /* === Theme options === */
 .st-theme-options {
   display: grid;

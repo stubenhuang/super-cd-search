@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { Settings, Platform, CloudflarePlatform, CloudflareSessionStatus, ThemeMode, Language, BarcodeProvider } from './electron-api'
-import { PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
+import type { Settings, Platform, LoginPlatform, CloudflareSessionStatus, ThemeMode, Language, BarcodeProvider } from './electron-api'
+import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { applyTheme } from './theme'
 import { useI18n } from './i18n'
 import './Settings.css'
@@ -35,9 +35,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [llmPlatformTower, setLlmPlatformTower] = useState(true)
   const [llmPlatformSurugaya, setLlmPlatformSurugaya] = useState(true)
   const [llmPlatformZenmarket, setLlmPlatformZenmarket] = useState(true)
-  const [cfSurugaya, setCfSurugaya] = useState<CloudflareSessionStatus>({ state: 'not_started' })
-  const [cfZenmarket, setCfZenmarket] = useState<CloudflareSessionStatus>({ state: 'not_started' })
-  const [cfBusy, setCfBusy] = useState<{ surugaya: boolean; zenmarket: boolean }>({ surugaya: false, zenmarket: false })
+  const [loginStatus, setLoginStatus] = useState<Record<LoginPlatform, CloudflareSessionStatus>>({
+    surugaya: { state: 'not_started' },
+    zenmarket: { state: 'not_started' },
+    xianyu: { state: 'not_started' },
+    taobao: { state: 'not_started' }
+  })
+  const [loginBusy, setLoginBusy] = useState<Partial<Record<LoginPlatform, boolean>>>({})
   const [standardPlatforms, setStandardPlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
   const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
   const [fastMode, setFastMode] = useState(false)
@@ -53,39 +57,43 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     }
   }, [isOpen])
 
-  const refreshCloudflareStatus = useCallback(async () => {
-    const [s, z] = await Promise.all([
+  const refreshLoginStatus = useCallback(async () => {
+    const [surugaya, zenmarket, xianyu, taobao] = await Promise.all([
       window.electronAPI.getCloudflareStatus('surugaya'),
-      window.electronAPI.getCloudflareStatus('zenmarket')
+      window.electronAPI.getCloudflareStatus('zenmarket'),
+      window.electronAPI.getCloudflareStatus('xianyu'),
+      window.electronAPI.getCloudflareStatus('taobao')
     ])
-    setCfSurugaya(s)
-    setCfZenmarket(z)
+    setLoginStatus({ surugaya, zenmarket, xianyu, taobao })
   }, [])
 
-  const handleCloudflareChallenge = async (platform: CloudflarePlatform) => {
-    setCfBusy(prev => ({ ...prev, [platform]: true }))
+  const handleLoginChallenge = async (platform: LoginPlatform) => {
+    setLoginBusy(prev => ({ ...prev, [platform]: true }))
     try {
       const result = await window.electronAPI.startCloudflareChallenge(platform)
+      const isChannel = platform === 'xianyu' || platform === 'taobao'
       if (result.status === 'done') {
-        setToast({ kind: 'success', text: t('cloudflare.toastSuccess') })
+        setToast({ kind: 'success', text: isChannel ? t('channels.toastSuccess') : t('cloudflare.toastSuccess') })
       } else if (result.status === 'cancelled') {
-        setToast({ kind: 'success', text: t('cloudflare.toastCancelled') })
+        setToast({ kind: 'success', text: isChannel ? t('channels.toastCancelled') : t('cloudflare.toastCancelled') })
       } else {
-        setToast({ kind: 'error', text: t('cloudflare.toastFailed', { error: result.error || t('cloudflare.unknownError') }) })
+        setToast({ kind: 'error', text: isChannel
+          ? t('channels.toastFailed', { error: result.error || t('cloudflare.unknownError') })
+          : t('cloudflare.toastFailed', { error: result.error || t('cloudflare.unknownError') }) })
       }
       setTimeout(() => setToast(null), 4000)
     } catch {
       setToast({ kind: 'error', text: t('cloudflare.toastFailedUnknown') })
       setTimeout(() => setToast(null), 4000)
     } finally {
-      setCfBusy(prev => ({ ...prev, [platform]: false }))
-      void refreshCloudflareStatus()
+      setLoginBusy(prev => ({ ...prev, [platform]: false }))
+      void refreshLoginStatus()
     }
   }
 
   const handleCloseCloudflare = async () => {
     await window.electronAPI.closeCloudflareSession()
-    void refreshCloudflareStatus()
+    void refreshLoginStatus()
   }
 
   const handleClearCache = async () => {
@@ -121,7 +129,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setLlmPlatformTower(llm?.platformEnabled?.tower ?? true)
     setLlmPlatformSurugaya(llm?.platformEnabled?.surugaya ?? true)
     setLlmPlatformZenmarket(llm?.platformEnabled?.zenmarket ?? true)
-    void refreshCloudflareStatus()
+    void refreshLoginStatus()
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
@@ -131,7 +139,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setLanguage(savedLanguage, false)
     savedThemeRef.current = savedTheme
     savedLanguageRef.current = savedLanguage
-  }, [refreshCloudflareStatus])
+  }, [refreshLoginStatus])
 
   const handleSave = async () => {
     setSaving(true)
@@ -213,7 +221,44 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       return list.filter(p => p !== platform)
     }
     // Keep the canonical platform order when adding a platform back.
-    return PLATFORMS.filter(p => list.includes(p) || p === platform)
+    return SELECTABLE_PLATFORMS.filter(p => list.includes(p) || p === platform)
+  }
+
+  // One checkbox cell for the standard/deep platform grids. Marketplace
+  // channels additionally show their QR-login state; clicking the badge opens
+  // the login section instead of toggling the checkbox.
+  const platformCheckItem = (p: Platform, checked: boolean, onToggle: () => void) => {
+    const isChannel = CHANNEL_PLATFORMS.includes(p)
+    const label = p === 'xianyu'
+      ? t('sources.channelXianyu')
+      : p === 'taobao'
+        ? t('sources.channelTaobao')
+        : PLATFORM_LABELS[p]
+    const verified = isChannel && loginStatus[p as LoginPlatform]?.state === 'verified'
+    return (
+      <label key={p} className={`st-check-item ${checked ? 'checked' : ''}`}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+        />
+        <span className="st-check-box"></span>
+        <span className="st-check-name">{label}</span>
+        {isChannel && (
+          <span
+            className={`st-check-badge ${verified ? 'st-check-badge-ok' : ''}`}
+            role="button"
+            title={verified ? t('sources.channelVerified') : t('sources.channelNotVerified')}
+            onClick={e => {
+              e.preventDefault()
+              setActiveSection('cloudflare')
+            }}
+          >
+            {verified ? t('sources.channelVerified') : t('sources.channelNotVerified')}
+          </span>
+        )}
+      </label>
+    )
   }
 
   if (!isOpen) return null
@@ -364,7 +409,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     <span className="st-provider-order">{index + 1}</span>
                     <div className="st-provider-info">
                       <span className="st-provider-name">{BARCODE_PROVIDER_LABELS[provider]}</span>
-                      {provider === 'surugaya' && cfSurugaya.state !== 'verified' && (
+                      {provider === 'surugaya' && loginStatus.surugaya.state !== 'verified' && (
                         <span className="st-provider-hint">{t('lan.surugayaHint')}</span>
                       )}
                     </div>
@@ -445,16 +490,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 <span className="st-icon">◆</span> {t('sources.standard')}
               </div>
               <div className="st-platform-grid">
-                {PLATFORMS.map(p => (
-                  <label key={p} className={`st-check-item ${standardPlatforms.includes(p) ? 'checked' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={standardPlatforms.includes(p)}
-                      onChange={() => setStandardPlatforms(togglePlatform(standardPlatforms, p))}
-                    />
-                    <span className="st-check-box"></span>
-                    <span className="st-check-name">{PLATFORM_LABELS[p]}</span>
-                  </label>
+                {SELECTABLE_PLATFORMS.map(p => platformCheckItem(
+                  p,
+                  standardPlatforms.includes(p),
+                  () => setStandardPlatforms(togglePlatform(standardPlatforms, p))
                 ))}
               </div>
             </div>
@@ -463,16 +502,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 <span className="st-icon">◆</span> {t('sources.deep')}
               </div>
               <div className="st-platform-grid">
-                {PLATFORMS.map(p => (
-                  <label key={p} className={`st-check-item ${deepPlatforms.includes(p) ? 'checked' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={deepPlatforms.includes(p)}
-                      onChange={() => setDeepPlatforms(togglePlatform(deepPlatforms, p))}
-                    />
-                    <span className="st-check-box"></span>
-                    <span className="st-check-name">{PLATFORM_LABELS[p]}</span>
-                  </label>
+                {SELECTABLE_PLATFORMS.map(p => platformCheckItem(
+                  p,
+                  deepPlatforms.includes(p),
+                  () => setDeepPlatforms(togglePlatform(deepPlatforms, p))
                 ))}
               </div>
             </div>
@@ -649,18 +682,22 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 <span className="st-icon">◈</span> {t('cloudflare.status')}
               </div>
               {([
-                { platform: 'surugaya' as CloudflarePlatform, label: 'Suruga-ya', status: cfSurugaya, busy: cfBusy.surugaya },
-                { platform: 'zenmarket' as CloudflarePlatform, label: 'ZenMarket', status: cfZenmarket, busy: cfBusy.zenmarket }
-              ]).map(row => {
-                const statusText = row.busy
-                  ? t('cloudflare.stateVerifying')
-                  : row.status.state === 'verified'
-                    ? (row.status.expiresAt ? t('cloudflare.stateVerified', { expires: new Date(row.status.expiresAt).toLocaleString() }) : t('cloudflare.stateVerifiedShort'))
-                    : row.status.state === 'expired'
+                { platform: 'surugaya' as const, label: 'Suruga-ya', kind: 'cloudflare' },
+                { platform: 'zenmarket' as const, label: 'ZenMarket', kind: 'cloudflare' },
+                { platform: 'xianyu' as const, label: t('channels.xianyu'), kind: 'channel' },
+                { platform: 'taobao' as const, label: t('channels.taobao'), kind: 'channel' }
+              ] as const).map(row => {
+                const busy = !!loginBusy[row.platform]
+                const status = loginStatus[row.platform]
+                const statusText = busy
+                  ? (row.kind === 'channel' ? t('channels.loggingIn') : t('cloudflare.stateVerifying'))
+                  : status.state === 'verified'
+                    ? (status.expiresAt ? t('cloudflare.stateVerified', { expires: new Date(status.expiresAt).toLocaleString() }) : t('cloudflare.stateVerifiedShort'))
+                    : status.state === 'expired'
                       ? t('cloudflare.stateExpired')
-                      : row.status.state === 'unverified'
+                      : status.state === 'unverified'
                         ? t('cloudflare.stateUnverified')
-                        : row.status.state === 'starting'
+                        : status.state === 'starting'
                           ? t('cloudflare.stateStarting')
                           : t('cloudflare.stateNotStarted')
                 return (
@@ -673,10 +710,12 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                       <button
                         type="button"
                         className="st-btn-save"
-                        onClick={() => void handleCloudflareChallenge(row.platform)}
-                        disabled={row.busy}
+                        onClick={() => void handleLoginChallenge(row.platform)}
+                        disabled={busy}
                       >
-                        {row.busy ? t('cloudflare.verifying') : t('cloudflare.verify')}
+                        {busy
+                          ? (row.kind === 'channel' ? t('channels.loggingIn') : t('cloudflare.verifying'))
+                          : (row.kind === 'channel' ? t('channels.login') : t('cloudflare.verify'))}
                       </button>
                     </div>
                   </div>

@@ -11,7 +11,9 @@ const PLATFORM_NAMES: Record<Platform, string> = {
   cdjapan: 'CDJapan',
   tower: 'Tower Records Japan',
   surugaya: 'Suruga-ya',
-  zenmarket: 'ZenMarket'
+  zenmarket: 'ZenMarket',
+  xianyu: 'Xianyu',
+  taobao: 'Taobao'
 }
 
 const DETAIL_FIELD_NAMES: Record<keyof CDDetails, string> = {

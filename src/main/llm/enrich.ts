@@ -26,7 +26,19 @@ import { querySurugaya } from '../queries/surugaya'
 import { queryZenmarket } from '../queries/zenmarket'
 import { getCachedEnrichment, cacheEnrichment } from '../queries/cache'
 
-export type SmartFillPlatform = Exclude<Platform, 'discogs' | 'ebay'>
+/**
+ * Explicit list rather than derived from Platform: the marketplace channels
+ * (xianyu/taobao) are price-only sources with no structured release metadata,
+ * so they never participate in smart fill even though they are Platforms.
+ */
+export type SmartFillPlatform =
+  | 'kojima'
+  | 'hmv'
+  | 'yahoo'
+  | 'cdjapan'
+  | 'tower'
+  | 'surugaya'
+  | 'zenmarket'
 
 /**
  * On-demand LLM enrichment source order.
@@ -82,7 +94,7 @@ function isLLMConfigured(): boolean {
   return isLlmConfigured(getSetting('llm'))
 }
 
-function isPlatformEnabledForLLM(platform: Platform): boolean {
+function isPlatformEnabledForLLM(platform: SmartFillPlatform): boolean {
   const llm = getSetting('llm')
   if (!llm?.platformEnabled) return true
   return llm.platformEnabled[platform] !== false

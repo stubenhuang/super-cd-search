@@ -11,6 +11,7 @@ import type {
   ThemeMode,
   Language,
   CloudflarePlatform,
+  LoginPlatform,
   CloudflareChallengeResult,
   CloudflareSessionStatus,
   DetailEnrichProgress,
@@ -51,6 +52,7 @@ export type {
   ThemeMode,
   Language,
   CloudflarePlatform,
+  LoginPlatform,
   CloudflareChallengeResult,
   CloudflareSessionStatus,
   DetailEnrichProgress,
@@ -129,9 +131,9 @@ export interface IElectronAPI {
   setPublishPlatforms: (catalogNumber: string, platforms: PublishPlatform[]) => Promise<void>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
-  startCloudflareChallenge: (platform: CloudflarePlatform) => Promise<CloudflareChallengeResult>
+  startCloudflareChallenge: (platform: LoginPlatform) => Promise<CloudflareChallengeResult>
   cancelCloudflareChallenge: () => Promise<void>
-  getCloudflareStatus: (platform: CloudflarePlatform) => Promise<CloudflareSessionStatus>
+  getCloudflareStatus: (platform: LoginPlatform) => Promise<CloudflareSessionStatus>
   closeCloudflareSession: () => Promise<void>
   getLanStatus: () => Promise<LanServerStatus>
   getLanCandidates: () => Promise<LanCandidate[]>

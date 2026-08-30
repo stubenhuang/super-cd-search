@@ -103,7 +103,7 @@ const ENRICHMENT_CACHE_MAX = 500
  * previously cached results incomplete. Old entries are ignored and get
  * dropped on the next disk write.
  */
-export const QUERY_CACHE_VERSION = 4
+export const QUERY_CACHE_VERSION = 5
 const QUERY_CACHE_KEY_PREFIX = `v${QUERY_CACHE_VERSION}:`
 
 const queryResultCache = createTtlCache<string, QueryResult>(CACHE_TTL, QUERY_CACHE_MAX)

@@ -16,6 +16,8 @@ export type Platform =
   | 'tower'
   | 'surugaya'
   | 'zenmarket'
+  | 'xianyu'
+  | 'taobao'
 
 export interface CDDetails {
   label: string | null
@@ -40,6 +42,13 @@ export interface QueryResult {
 
 /** Platforms that require a manual Cloudflare verification step. */
 export type CloudflarePlatform = 'surugaya' | 'zenmarket'
+
+/**
+ * Platforms that require a manual login/verification in the shared real-Chrome
+ * window before their queries can run. Cloudflare platforms verify via the
+ * cf_clearance cookie; taobao/xianyu verify via a QR-code login.
+ */
+export type LoginPlatform = CloudflarePlatform | 'xianyu' | 'taobao'
 
 /** Result of a manual Cloudflare challenge run (IPC-facing). */
 export interface CloudflareChallengeResult {

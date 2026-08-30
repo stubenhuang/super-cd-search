@@ -101,7 +101,7 @@ const zh = {
   'input.searchMode': '搜索模式',
   'searchMode.standard': '标准搜索',
   'searchMode.deep': '深度搜索',
-  'searchMode.deepWarning': '深度搜索会查询全部平台（7 个数据源），速度较慢',
+  'searchMode.deepWarning': '深度搜索会查询所有勾选的平台，速度较慢',
   'searchMode.deepWarningShort': '深度搜索速度较慢',
   'search.button': '搜索',
   'search.searching': '搜索中...',
@@ -154,7 +154,7 @@ const zh = {
   'nav.barcodeProviders': '条码解析供应商',
   'nav.sources': '搜索源',
   'nav.llm': 'LLM 配置',
-  'nav.cloudflare': 'Cloudflare 验证',
+  'nav.cloudflare': '特殊渠道（手动验证）',
 
   // Appearance
   'appearance.desc': '选择应用外观与显示语言。「跟随系统」会随操作系统的深色 / 浅色模式自动切换。',
@@ -216,11 +216,15 @@ const zh = {
   'lan.tokenRegenerateFailed': '更换访问令牌失败',
 
   // Search sources
-  'sources.desc': '选择每种搜索模式查询的平台。标准模式默认 Discogs + eBay；深度模式默认全部平台。',
+  'sources.desc': '选择每种搜索模式查询的平台。标准模式默认 Discogs + eBay；深度模式默认全部平台。闲鱼 / 淘宝渠道需扫码登录，且仅在勾选后参与搜索。',
   'sources.fastMode': 'Fast Mode（跳过详情页）',
   'sources.fastModeDesc': '跳过商品详情页导航，以更少请求换取更快速度（详情字段可能缺失）',
   'sources.standard': '标准搜索',
   'sources.deep': '深度搜索',
+  'sources.channelXianyu': '闲鱼',
+  'sources.channelTaobao': '淘宝图搜',
+  'sources.channelVerified': '已登录',
+  'sources.channelNotVerified': '未登录',
 
   // Search cache
   'cache.label': '搜索缓存',
@@ -241,7 +245,7 @@ const zh = {
   'llm.smartSourcesHint': '智能生成固定排除 Discogs 与 eBay；只会逐个分析能搜索到商品的来源。',
 
   // Cloudflare
-  'cloudflare.desc': 'Suruga-ya 与 ZenMarket 使用 Cloudflare 反爬。点击「验证」会启动一个真实 Chrome 窗口，请在里面手动完成验证；验证通过后，搜索会直接在这个 Chrome 里进行。',
+  'cloudflare.desc': '特殊渠道共用一个真实 Chrome 会话：Suruga-ya / ZenMarket 需手动通过 Cloudflare 验证，闲鱼 / 淘宝需扫码登录。渠道需在「数据源」中勾选、且登录有效才会参与搜索；验证与搜索都在这个 Chrome 窗口里进行。',
   'cloudflare.status': '平台状态',
   'cloudflare.stateVerifying': '验证中…（请在打开的 Chrome 窗口完成验证）',
   'cloudflare.stateVerified': '已验证（有效期至 {expires}）',
@@ -259,6 +263,13 @@ const zh = {
   'cloudflare.toastFailed': '验证失败: {error}',
   'cloudflare.toastFailedUnknown': '验证失败',
   'cloudflare.unknownError': '未知错误',
+  'channels.xianyu': '闲鱼（goofish 网页）',
+  'channels.taobao': '淘宝图搜（拍立淘）',
+  'channels.login': '扫码登录',
+  'channels.loggingIn': '登录中…（请在打开的 Chrome 窗口完成扫码）',
+  'channels.toastSuccess': '登录成功，可正常搜索了',
+  'channels.toastCancelled': '已取消登录',
+  'channels.toastFailed': '登录失败: {error}',
 
   // Detail modal
   'detail.catalogNumber': '目录号',
@@ -371,7 +382,7 @@ const en: Record<keyof typeof zh, string> = {
   'input.searchMode': 'Search Mode',
   'searchMode.standard': 'Standard Search',
   'searchMode.deep': 'Deep Search',
-  'searchMode.deepWarning': 'Deep search queries all platforms (7 data sources) and is slower',
+  'searchMode.deepWarning': 'Deep search queries all checked platforms and is slower',
   'searchMode.deepWarningShort': 'Deep search is slower',
   'search.button': 'Search',
   'search.searching': 'Searching...',
@@ -420,7 +431,7 @@ const en: Record<keyof typeof zh, string> = {
   'nav.barcodeProviders': 'Barcode Providers',
   'nav.sources': 'Search Sources',
   'nav.llm': 'LLM Config',
-  'nav.cloudflare': 'Cloudflare Verification',
+  'nav.cloudflare': 'Special Channels (Manual Login)',
 
   'appearance.desc': 'Choose the app appearance and display language. "Follow System" tracks your OS dark / light mode.',
   'appearance.theme': 'Theme',
@@ -477,11 +488,15 @@ const en: Record<keyof typeof zh, string> = {
   'lan.tokenRegenerated': 'Access token regenerated; the old QR code is now invalid',
   'lan.tokenRegenerateFailed': 'Failed to regenerate access token',
 
-  'sources.desc': 'Choose which platforms each search mode queries. Standard mode defaults to Discogs + eBay; deep mode defaults to every platform.',
+  'sources.desc': 'Choose which platforms each search mode queries. Standard mode defaults to Discogs + eBay; deep mode defaults to every platform. Xianyu / Taobao channels need a QR-code login and only run while checked.',
   'sources.fastMode': 'Fast Mode (Skip Detail Pages)',
   'sources.fastModeDesc': 'Skip product-detail page visits for a faster, lower-traffic search (details may be omitted)',
   'sources.standard': 'Standard Search',
   'sources.deep': 'Deep Search',
+  'sources.channelXianyu': 'Xianyu',
+  'sources.channelTaobao': 'Taobao Image',
+  'sources.channelVerified': 'Logged in',
+  'sources.channelNotVerified': 'Not logged in',
 
   // Search cache
   'cache.label': 'Search Cache',
@@ -500,7 +515,7 @@ const en: Record<keyof typeof zh, string> = {
   'llm.platformSelection': 'Smart-fill Sources',
   'llm.smartSourcesHint': 'Smart generation always excludes Discogs and eBay; it only analyzes sources where a product was found.',
 
-  'cloudflare.desc': 'Suruga-ya and ZenMarket use Cloudflare anti-bot protection. Clicking "Verify" opens a real Chrome window — complete the verification there manually; once verified, searches run inside that Chrome.',
+  'cloudflare.desc': 'Special channels share one real Chrome session: Suruga-ya / ZenMarket need a manual Cloudflare verification, Xianyu / Taobao need a QR-code login. A channel only joins the search while it is checked in Sources and its login is verified; login and searches all run inside that Chrome window.',
   'cloudflare.status': 'Platform Status',
   'cloudflare.stateVerifying': 'Verifying… (complete verification in the opened Chrome window)',
   'cloudflare.stateVerified': 'Verified (valid until {expires})',
@@ -518,6 +533,13 @@ const en: Record<keyof typeof zh, string> = {
   'cloudflare.toastFailed': 'Verification failed: {error}',
   'cloudflare.toastFailedUnknown': 'Verification failed',
   'cloudflare.unknownError': 'Unknown error',
+  'channels.xianyu': 'Xianyu (goofish web)',
+  'channels.taobao': 'Taobao Image Search (Pailitao)',
+  'channels.login': 'Scan QR to Log In',
+  'channels.loggingIn': 'Logging in… (scan the QR in the opened Chrome window)',
+  'channels.toastSuccess': 'Login successful — searching is now available',
+  'channels.toastCancelled': 'Login cancelled',
+  'channels.toastFailed': 'Login failed: {error}',
 
   'detail.catalogNumber': 'Catalog Number',
   'detail.album': 'Album',

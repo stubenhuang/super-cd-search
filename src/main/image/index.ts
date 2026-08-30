@@ -50,6 +50,9 @@ function getReferer(url: string): string {
   if (hostname.includes('ebay')) return 'https://www.ebay.com/'
   if (hostname.includes('cdjapan.co.jp')) return 'https://www.cdjapan.co.jp/'
   if (hostname.includes('tower.jp')) return 'https://tower.jp/'
+  if (hostname.includes('goofish.com')) return 'https://www.goofish.com/'
+  // alicdn hosts both taobao and goofish product images.
+  if (hostname.includes('alicdn.com')) return 'https://www.taobao.com/'
 
   return ''
 }

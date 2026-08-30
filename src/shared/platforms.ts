@@ -13,7 +13,9 @@ export const PLATFORMS: Platform[] = [
   'cdjapan',
   'tower',
   'surugaya',
-  'zenmarket'
+  'zenmarket',
+  'xianyu',
+  'taobao'
 ]
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -25,8 +27,27 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   cdjapan: 'CDJapan',
   tower: 'Tower Records Japan',
   surugaya: 'Suruga-ya',
-  zenmarket: 'ZenMarket'
+  zenmarket: 'ZenMarket',
+  xianyu: 'Xianyu',
+  taobao: 'Taobao'
 }
+
+/**
+ * Text-search platforms. The marketplace channels (xianyu/taobao) are not part
+ * of this list: they are special channels that need a QR-code login and only
+ * run while they are both checked and verified (see SELECTABLE_PLATFORMS).
+ */
+export const SEARCH_PLATFORMS: Platform[] = PLATFORMS.filter(p => p !== 'xianyu' && p !== 'taobao')
+
+/** Marketplace channels driven by the special-channel login flow. */
+export const CHANNEL_PLATFORMS: Platform[] = ['xianyu', 'taobao']
+
+/**
+ * Everything the user can tick for the standard/deep search modes in the
+ * settings panel: text platforms plus the marketplace channels. A checked
+ * channel still only joins a search while its QR login is verified.
+ */
+export const SELECTABLE_PLATFORMS: Platform[] = [...SEARCH_PLATFORMS, ...CHANNEL_PLATFORMS]
 
 /** Default platform set for the standard search mode. */
 export const DEFAULT_STANDARD_PLATFORMS: Platform[] = ['discogs', 'ebay']

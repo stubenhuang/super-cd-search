@@ -8,8 +8,14 @@ import { queryCdjapan } from '../queries/cdjapan'
 import { queryTower } from '../queries/tower'
 import { querySurugaya } from '../queries/surugaya'
 import { queryZenmarket } from '../queries/zenmarket'
+import { queryXianyu } from '../queries/xianyu'
+import { queryTaobaoImage } from '../queries/taobao'
+import { notFound } from '../queries/types'
+import { getEmbeddedLibraryImage } from '../library'
+import { downloadImage } from '../image'
+import { throwIfAborted } from '../browser/abort'
 import { normalizeCatalogNumber } from '../../shared/utils'
-import { PLATFORMS } from '../../shared/platforms'
+import { SEARCH_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { logger } from '../logger'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult, Platform } from '../../shared/types'
@@ -34,6 +40,84 @@ function emitProgress(event: string, data: BatchQueryProgress): void {
   }
 }
 
+/**
+ * Shared per-platform wrapper: progress events, abort checks and error
+ * containment so one platform's failure never takes down the batch.
+ */
+async function runPlatformQuery(
+  catalogNumber: string,
+  signal: AbortSignal,
+  name: Platform,
+  query: () => Promise<QueryResult>
+): Promise<QueryResult> {
+  const platformStartedAt = Date.now()
+  if (signal.aborted) {
+    logger.debug('orchestrator', 'platform query aborted', { catalogNumber, platform: name })
+    emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
+    throw new Error('Aborted')
+  }
+
+  logger.debug('orchestrator', 'platform query start', { catalogNumber, platform: name })
+  emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: 'loading' })
+  try {
+    const result = await query()
+    if (signal.aborted) {
+      logger.debug('orchestrator', 'platform query aborted after completion', { catalogNumber, platform: name })
+      emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
+      throw new Error('Aborted')
+    }
+    logger.debug('orchestrator', 'platform query done', {
+      catalogNumber,
+      platform: name,
+      status: result.status,
+      durationMs: Date.now() - platformStartedAt,
+      hasName: !!result.name,
+      hasPrice: result.priceMin !== null
+    })
+    emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
+    emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: result.status, results: [result] })
+    return result
+  } catch (err) {
+    if (signal.aborted) {
+      emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
+      throw new Error('Aborted')
+    }
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    logger.warn('orchestrator', 'platform query threw', { catalogNumber, platform: name, error: message, durationMs: Date.now() - platformStartedAt })
+    emitProgress(QueryEvents.ERROR, { catalogNumber, platform: name, status: 'error' })
+    const errorResult: QueryResult = { platform: name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
+    emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: 'error', results: [errorResult] })
+    return errorResult
+  }
+}
+
+/**
+ * Cover art for the Taobao image-search channel: the library's embedded cover
+ * wins; otherwise fall back to the first cover URL returned by the text
+ * platforms (downloaded and resized through the image cache).
+ */
+async function resolveTaobaoSearchImage(
+  catalogNumber: string,
+  textResults: QueryResult[],
+  signal: AbortSignal
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  throwIfAborted(signal)
+  const embedded = getEmbeddedLibraryImage(catalogNumber)
+  if (embedded) {
+    logger.debug('orchestrator', 'taobao image source: library', { catalogNumber })
+    return { buffer: embedded.buffer, mimeType: embedded.mimeType }
+  }
+  for (const result of textResults) {
+    if (!result.coverUrl) continue
+    const downloaded = await downloadImage(result.coverUrl, 500, true)
+    if (!downloaded) continue
+    logger.debug('orchestrator', 'taobao image source: search cover', { catalogNumber, platform: result.platform })
+    return { buffer: Buffer.from(downloaded.base64, 'base64'), mimeType: downloaded.mimeType }
+  }
+  logger.debug('orchestrator', 'taobao image source: none', { catalogNumber })
+  return null
+}
+
 async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, enabledPlatforms: Platform[]): Promise<QueryResult[]> {
   const catalogStartedAt = Date.now()
   if (signal.aborted) {
@@ -54,7 +138,8 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     { name: 'cdjapan', query: () => queryCdjapan(catalogNumber, signal) },
     { name: 'tower', query: () => queryTower(catalogNumber, signal) },
     { name: 'surugaya', query: () => querySurugaya(catalogNumber, signal) },
-    { name: 'zenmarket', query: () => queryZenmarket(catalogNumber, signal) }
+    { name: 'zenmarket', query: () => queryZenmarket(catalogNumber, signal) },
+    { name: 'xianyu', query: () => queryXianyu(catalogNumber, signal) }
   ]
 
   const platforms = registry.filter(p => enabledPlatforms.includes(p.name))
@@ -62,47 +147,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
   // Run every platform concurrently; the browser pool and per-domain throttles
   // act as natural concurrency limits.
   const settled = await Promise.allSettled(
-    platforms.map(async ({ name, query }) => {
-      const platformStartedAt = Date.now()
-      if (signal.aborted) {
-        logger.debug('orchestrator', 'platform query aborted', { catalogNumber, platform: name })
-        emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
-        throw new Error('Aborted')
-      }
-
-      logger.debug('orchestrator', 'platform query start', { catalogNumber, platform: name })
-      emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: 'loading' })
-      try {
-        const result = await query()
-        if (signal.aborted) {
-          logger.debug('orchestrator', 'platform query aborted after completion', { catalogNumber, platform: name })
-          emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
-          throw new Error('Aborted')
-        }
-        logger.debug('orchestrator', 'platform query done', {
-          catalogNumber,
-          platform: name,
-          status: result.status,
-          durationMs: Date.now() - platformStartedAt,
-          hasName: !!result.name,
-          hasPrice: result.priceMin !== null
-        })
-        emitProgress(QueryEvents.PROGRESS, { catalogNumber, platform: name, status: result.status === 'found' ? 'complete' : result.status })
-        emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: result.status, results: [result] })
-        return result
-      } catch (err) {
-        if (signal.aborted) {
-          emitProgress(QueryEvents.CANCELLED, { catalogNumber, platform: name, status: 'error' })
-          throw new Error('Aborted')
-        }
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        logger.warn('orchestrator', 'platform query threw', { catalogNumber, platform: name, error: message, durationMs: Date.now() - platformStartedAt })
-        emitProgress(QueryEvents.ERROR, { catalogNumber, platform: name, status: 'error' })
-        const errorResult: QueryResult = { platform: name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
-        emitProgress(QueryEvents.RESULT, { catalogNumber, platform: name, status: 'error', results: [errorResult] })
-        return errorResult
-      }
-    })
+    platforms.map(({ name, query }) => runPlatformQuery(catalogNumber, signal, name, query))
   )
 
   if (signal.aborted) {
@@ -122,6 +167,19 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     return { platform: platform.name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
   })
 
+  // Phase two: the Taobao image-search channel needs the cover art collected
+  // by the text platforms above, so it runs after them, still abort-aware.
+  if (enabledPlatforms.includes('taobao')) {
+    const taobaoResult = await runPlatformQuery(catalogNumber, signal, 'taobao', async () => {
+      const image = await resolveTaobaoSearchImage(catalogNumber, results, signal)
+      if (!image) {
+        return { ...notFound('taobao'), error: '无可用封面图，无法执行淘宝图搜' }
+      }
+      return queryTaobaoImage(catalogNumber, image, signal)
+    })
+    results.push(taobaoResult)
+  }
+
   logger.debug('orchestrator', 'query all platforms complete', {
     catalogNumber,
     durationMs: Date.now() - catalogStartedAt,
@@ -140,7 +198,7 @@ export function cancelBatchQuery(): void {
   }
 }
 
-export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = PLATFORMS): Promise<BatchQueryResult[]> {
+export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = SEARCH_PLATFORMS): Promise<BatchQueryResult[]> {
   const batchStartedAt = Date.now()
   logger.debug('orchestrator', 'execute batch query start', { requestedCatalogNumbers: catalogNumbers, platforms })
   if (abortController) {

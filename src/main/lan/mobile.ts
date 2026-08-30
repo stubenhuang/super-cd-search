@@ -428,7 +428,8 @@ export const MOBILE_APP_JS = `(function () {
   var QUERY_PLATFORM_LABELS = {
     discogs: 'Discogs', ebay: 'eBay', kojima: 'Kojima', hmv: 'HMV',
     yahoo: 'Yahoo', cdjapan: 'CDJapan', tower: 'Tower',
-    surugaya: 'Suruga-ya', zenmarket: 'ZenMarket'
+    surugaya: 'Suruga-ya', zenmarket: 'ZenMarket',
+    xianyu: '闲鱼', taobao: '淘宝'
   };
   var STATUS_ICONS = { loading: '⏳', complete: '✓', not_found: '−', challenge: '⚠', error: '✗', pending: '○' };
 

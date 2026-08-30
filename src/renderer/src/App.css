@@ -33,6 +33,8 @@
   --tower: #5C6BC0;
   --surugaya: #43A047;
   --zenmarket: #D81B60;
+  --xianyu: #E8B411;
+  --taobao: #FF5000;
 
   /* Status colors */
   --success: #5D7A4A;
@@ -104,6 +106,8 @@
   --tower: #9FA8DA;
   --surugaya: #81C784;
   --zenmarket: #F06292;
+  --xianyu: #F5D327;
+  --taobao: #FF7A45;
 
   --success: #8FBF6B;
   --warning: #D4A72C;
@@ -1020,6 +1024,14 @@ html[data-platform='win32'] .app-header {
 
 .platform-card[data-platform="zenmarket"] .brand-bar {
   background: var(--zenmarket);
+}
+
+.platform-card[data-platform="xianyu"] .brand-bar {
+  background: var(--xianyu);
+}
+
+.platform-card[data-platform="taobao"] .brand-bar {
+  background: var(--taobao);
 }
 
 .platform-card.not_found .brand-bar,

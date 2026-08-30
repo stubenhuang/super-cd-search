@@ -6,6 +6,7 @@ import type {
   Platform,
   DisplayCurrency,
   CloudflarePlatform,
+  LoginPlatform,
   CloudflareChallengeResult,
   CloudflareSessionStatus,
   DetailEnrichmentResult,
@@ -122,11 +123,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),
-  startCloudflareChallenge: (platform: CloudflarePlatform): Promise<CloudflareChallengeResult> =>
+  startCloudflareChallenge: (platform: LoginPlatform): Promise<CloudflareChallengeResult> =>
     ipcRenderer.invoke('cloudflare:startChallenge', platform),
   cancelCloudflareChallenge: (): Promise<void> =>
     ipcRenderer.invoke('cloudflare:cancelChallenge'),
-  getCloudflareStatus: (platform: CloudflarePlatform): Promise<CloudflareSessionStatus> =>
+  getCloudflareStatus: (platform: LoginPlatform): Promise<CloudflareSessionStatus> =>
     ipcRenderer.invoke('cloudflare:getStatus', platform),
   closeCloudflareSession: (): Promise<void> =>
     ipcRenderer.invoke('cloudflare:close'),
