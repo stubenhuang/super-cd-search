@@ -60,7 +60,8 @@ jobs:
           # 如需签名，在此配置以下 secrets（可选）：
           # CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           # CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-        run: npm run dist:win
+        # --publish=never 关闭 electron-builder 的隐式发布（上传交由下方 softprops 步骤处理）
+        run: npm run dist:win -- --publish=never
 
       - name: Upload Windows artifacts
         uses: softprops/action-gh-release@v2
@@ -99,7 +100,8 @@ jobs:
           # APPLE_ID: ${{ secrets.APPLE_ID }}
           # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npm run dist -- --mac
+        # --publish=never 关闭 electron-builder 的隐式发布（上传交由下方 softprops 步骤处理）
+        run: npm run dist -- --mac --publish=never
 
       - name: Upload macOS artifacts
         uses: softprops/action-gh-release@v2
