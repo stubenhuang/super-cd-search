@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { Settings, Platform, LoginPlatform, CloudflareSessionStatus, ThemeMode, Language, BarcodeProvider } from './electron-api'
+import type { Settings, Platform, LoginPlatform, CloudflareSessionStatus, ThemeMode, Language, BarcodeProvider, SettingsTransferResult } from './electron-api'
 import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { applyTheme } from './theme'
 import { useI18n } from './i18n'
@@ -10,7 +10,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'cloudflare' | 'appearance'
+type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'cloudflare' | 'appearance' | 'backup'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const { t, language, setLanguage } = useI18n()
@@ -48,6 +48,11 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [theme, setTheme] = useState<ThemeMode>('light')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [backupExportPassword, setBackupExportPassword] = useState('')
+  const [backupExportConfirm, setBackupExportConfirm] = useState('')
+  const [backupImportPassword, setBackupImportPassword] = useState('')
+  const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null)
+  const [backupImportError, setBackupImportError] = useState<string | null>(null)
   const savedThemeRef = useRef<ThemeMode>('light')
   const savedLanguageRef = useRef<Language>('zh')
 
@@ -136,10 +141,63 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     const savedTheme = settings.theme || 'light'
     const savedLanguage = settings.language || 'zh'
     setTheme(savedTheme)
+    applyTheme(savedTheme)
     setLanguage(savedLanguage, false)
     savedThemeRef.current = savedTheme
     savedLanguageRef.current = savedLanguage
   }, [refreshLoginStatus])
+
+  const backupErrorMessage = (result: SettingsTransferResult): string | null => {
+    switch (result.errorCode) {
+      case 'weak_password': return t('backup.error.weak')
+      case 'bad_password': return t('backup.error.badPassword')
+      case 'corrupt_file': return t('backup.error.corrupt')
+      case 'unsupported_version': return t('backup.error.unsupported')
+      case 'io_error': return t('backup.error.io')
+      default: return null
+    }
+  }
+
+  const handleExportBackup = async () => {
+    setBackupBusy('export')
+    try {
+      const result = await window.electronAPI.exportSettingsBackup(backupExportPassword)
+      if (result.status === 'ok') {
+        setBackupExportPassword('')
+        setBackupExportConfirm('')
+        setToast({ kind: 'success', text: t('backup.exportDone') })
+      } else if (result.status === 'error') {
+        setToast({ kind: 'error', text: backupErrorMessage(result) ?? t('backup.error.io') })
+      }
+    } catch {
+      setToast({ kind: 'error', text: t('backup.error.io') })
+    } finally {
+      setBackupBusy(null)
+      setTimeout(() => setToast(null), 4000)
+    }
+  }
+
+  const handleImportBackup = async () => {
+    setBackupBusy('import')
+    setBackupImportError(null)
+    try {
+      const result = await window.electronAPI.importSettingsBackup(backupImportPassword)
+      if (result.status === 'ok') {
+        setBackupImportPassword('')
+        await loadSettings()
+        setToast({ kind: 'success', text: t('backup.importDone') })
+      } else if (result.status === 'error') {
+        const message = backupErrorMessage(result) ?? t('backup.error.io')
+        setToast({ kind: 'error', text: message })
+        if (result.errorCode === 'bad_password') setBackupImportError(message)
+      }
+    } catch {
+      setToast({ kind: 'error', text: t('backup.error.io') })
+    } finally {
+      setBackupBusy(null)
+      setTimeout(() => setToast(null), 4000)
+    }
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -270,7 +328,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     { key: 'barcode', icon: '▣', label: t('nav.barcodeProviders') },
     { key: 'sources', icon: '◎', label: t('nav.sources') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
-    { key: 'cloudflare', icon: '◈', label: t('nav.cloudflare') }
+    { key: 'cloudflare', icon: '◈', label: t('nav.cloudflare') },
+    { key: 'backup', icon: '⇅', label: t('nav.backup') }
   ]
 
   const renderContent = () => {
@@ -795,6 +854,97 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     <span className="st-theme-label">{option.label}</span>
                   </label>
                 ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'backup':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc st-backup-desc">
+              {t('backup.desc')}
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">⇅</span> {t('backup.export')}
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">⇅</span> {t('backup.password')}
+                </label>
+                <input
+                  type="password"
+                  className="st-input"
+                  value={backupExportPassword}
+                  onChange={e => setBackupExportPassword(e.target.value)}
+                  placeholder={t('backup.passwordHint')}
+                  disabled={backupBusy !== null}
+                />
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">⇅</span> {t('backup.confirmPassword')}
+                </label>
+                <input
+                  type="password"
+                  className="st-input"
+                  value={backupExportConfirm}
+                  onChange={e => setBackupExportConfirm(e.target.value)}
+                  placeholder={t('backup.confirmPassword')}
+                  disabled={backupBusy !== null}
+                />
+              </div>
+              {backupExportPassword.length > 0 && backupExportPassword.length < 8 && (
+                <div className="st-field-error">{t('backup.error.weak')}</div>
+              )}
+              {backupExportConfirm.length > 0 && backupExportPassword !== backupExportConfirm && (
+                <div className="st-field-error">{t('backup.error.mismatch')}</div>
+              )}
+              <div className="st-cf-actions">
+                <button
+                  type="button"
+                  className="st-btn-save"
+                  onClick={() => void handleExportBackup()}
+                  disabled={backupBusy !== null || backupExportPassword.length < 8 || backupExportPassword !== backupExportConfirm}
+                >
+                  {backupBusy === 'export' ? t('backup.exporting') : t('backup.export')}
+                </button>
+              </div>
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">⇅</span> {t('backup.import')}
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">⇅</span> {t('backup.importPassword')}
+                </label>
+                <input
+                  type="password"
+                  className="st-input"
+                  value={backupImportPassword}
+                  onChange={e => {
+                    setBackupImportPassword(e.target.value)
+                    setBackupImportError(null)
+                  }}
+                  placeholder={t('backup.importPassword')}
+                  disabled={backupBusy !== null}
+                />
+              </div>
+              {backupImportError && <div className="st-field-error">{backupImportError}</div>}
+              <div className="st-cf-actions">
+                <button
+                  type="button"
+                  className="st-btn-cancel"
+                  onClick={() => void handleImportBackup()}
+                  disabled={backupBusy !== null || backupImportPassword.length === 0}
+                >
+                  {backupBusy === 'import' ? t('backup.importing') : t('backup.import')}
+                </button>
+              </div>
+              <div className="st-field-hint" style={{ marginTop: '10px' }}>
+                {t('backup.importHint')}
               </div>
             </div>
           </div>

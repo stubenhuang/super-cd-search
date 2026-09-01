@@ -857,6 +857,25 @@
   margin-bottom: 18px;
 }
 
+/* Backup & restore description (warm warning tone) */
+.st-section-desc.st-backup-desc {
+  padding: 10px 12px;
+  border: 1px solid var(--st-accent-border);
+  border-radius: var(--st-radius-md);
+  background: var(--st-accent-soft);
+  color: var(--st-text-secondary);
+  margin-bottom: 14px;
+}
+
+/* Inline field error */
+.st-field-error {
+  margin: -8px 0 14px;
+  font-family: var(--st-font-body);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--st-error);
+}
+
 /* === Decorative Divider === */
 .st-deco-divider {
   display: flex;

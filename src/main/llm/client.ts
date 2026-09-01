@@ -1,5 +1,6 @@
 import type { LLMSettings } from '../../shared/types'
 import type { ChatMessage, ChatOptions, LLMResponse } from './types'
+import { createAbortError, throwIfAborted } from '../browser/abort'
 import { logger } from '../logger'
 
 const DEFAULT_TIMEOUT = 60000
@@ -93,7 +94,14 @@ export class LLMClient {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
 
+    // The internal timeout and a caller's cancellation share one signal, so an
+    // abort can come from either side. They are told apart in the catch below.
+    const externalSignal = options?.signal
+    const onExternalAbort = () => controller.abort()
+    externalSignal?.addEventListener('abort', onExternalAbort, { once: true })
+
     try {
+      throwIfAborted(externalSignal)
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -104,7 +112,6 @@ export class LLMClient {
         signal: controller.signal
       })
 
-      clearTimeout(timeoutId)
       logger.debug('llm.client', 'chat request response', {
         model: this.settings.model,
         status: response.status,
@@ -161,11 +168,20 @@ export class LLMClient {
         } : undefined
       }
     } catch (err) {
-      clearTimeout(timeoutId)
+      if (externalSignal?.aborted) {
+        logger.debug('llm.client', 'chat request cancelled by caller', {
+          model: this.settings.model,
+          durationMs: Date.now() - startedAt
+        })
+        throw createAbortError()
+      }
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error('LLM API request timed out')
       }
       throw err
+    } finally {
+      clearTimeout(timeoutId)
+      externalSignal?.removeEventListener('abort', onExternalAbort)
     }
   }
 }

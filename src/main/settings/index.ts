@@ -249,6 +249,19 @@ export function updateSettings(values: Partial<Settings>): void {
   store.set(values)
 }
 
+/**
+ * Keys that are safe to expose and set via public IPC / settings backup.
+ * The LAN pairing token (`lanToken`) is deliberately absent: it is a local
+ * randomized credential and must never leave the machine.
+ */
+export const PUBLIC_SETTING_KEYS = new Set<keyof Settings>([
+  'discogsToken', 'ebayClientId', 'ebayClientSecret',
+  'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
+  'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
+  'theme', 'language', 'lanEnabled', 'lanHost', 'lanPort',
+  'barcodeProviders', 'lastExportDirectory'
+])
+
 export function deleteSetting<K extends keyof Settings>(key: K): void {
   store.delete(key)
 }

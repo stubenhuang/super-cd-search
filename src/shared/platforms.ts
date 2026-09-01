@@ -89,3 +89,33 @@ export const BARCODE_PROVIDER_LABELS: Record<BarcodeProvider, string> = {
 
 /** Marketplaces a published CD can be marked as listed on (user-maintained). */
 export const PUBLISH_PLATFORMS: PublishPlatform[] = ['taobao', 'xianyu', 'discogs']
+
+/**
+ * Platforms offered for the deep-dig pass after a standard search. Deep dig
+ * widens coverage to the deep-mode platform set instead of re-querying the
+ * (already exhausted) standard set. Falls back to the deep defaults when the
+ * setting is missing, and is deduplicated and ordered by the canonical
+ * PLATFORMS list so the progress column matches result/export ordering.
+ */
+export function resolveDeepDigPlatforms(
+  settings?: { deepPlatforms?: Platform[] } | null
+): Platform[] {
+  const configured = settings?.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS
+  const selected = new Set<Platform>(configured)
+  return PLATFORMS.filter(p => selected.has(p))
+}
+
+/**
+ * Collapse a platform list into a readable, shortened label for dialogs. When
+ * the list is longer than `max`, only the first `max` names are shown and the
+ * remainder is returned as a count so long lists don't stretch the modal.
+ */
+export function summarizePlatformNames(
+  platforms: readonly Platform[],
+  labels: Readonly<Partial<Record<Platform, string>>>,
+  max = 4
+): { shown: string; rest: number } {
+  const shownPlatforms = platforms.slice(0, max)
+  const shown = shownPlatforms.map(p => labels[p] ?? p).join(' / ')
+  return { shown, rest: platforms.length - shownPlatforms.length }
+}

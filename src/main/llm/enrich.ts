@@ -16,6 +16,7 @@ import { acquireCloudflarePage, isCloudflareChallenge } from '../cloudflare'
 import { compressHtml } from '../parser/readability'
 import { LLMClient } from './client'
 import { buildDetailFillPrompt } from './prompt'
+import { createAbortError, gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { logger } from '../logger'
 import { queryKojima } from '../queries/kojima'
 import { queryHmv } from '../queries/hmv'
@@ -66,7 +67,7 @@ export const SMART_FILL_PLATFORM_PRIORITY: SmartFillPlatform[] = [
   'zenmarket'
 ]
 
-const QUERY_FUNCTIONS: Record<SmartFillPlatform, (catalogNumber: string) => Promise<QueryResult>> = {
+const QUERY_FUNCTIONS: Record<SmartFillPlatform, (catalogNumber: string, signal?: AbortSignal) => Promise<QueryResult>> = {
   tower: queryTower,
   hmv: queryHmv,
   cdjapan: queryCdjapan,
@@ -90,6 +91,32 @@ function emitProgress(progress: DetailEnrichProgress): void {
   }
 }
 
+/**
+ * Controller of the enrichment currently in flight, if any.
+ *
+ * Mirrors the batch-query orchestrator: the caller asks the module to stop
+ * rather than owning an AbortSignal, so cancellation never has to be threaded
+ * through IPC.
+ */
+let abortController: AbortController | null = null
+
+/** Whether a smart-generation run is currently executing. */
+export function isEnrichmentRunning(): boolean {
+  return abortController !== null
+}
+
+/**
+ * Abort the enrichment currently in flight. A no-op when nothing is running,
+ * so a stale cancel from the renderer is harmless.
+ */
+export function cancelEnrichment(): void {
+  if (abortController) {
+    logger.debug('llm.enrich', 'cancel enrichment requested')
+    abortController.abort()
+    abortController = null
+  }
+}
+
 function isLLMConfigured(): boolean {
   return isLlmConfigured(getSetting('llm'))
 }
@@ -100,17 +127,23 @@ function isPlatformEnabledForLLM(platform: SmartFillPlatform): boolean {
   return llm.platformEnabled[platform] !== false
 }
 
-async function fetchProductHtml(platform: SmartFillPlatform, url: string): Promise<string | null> {
+async function fetchProductHtml(platform: SmartFillPlatform, url: string, signal?: AbortSignal): Promise<string | null> {
+  throwIfAborted(signal)
+  const navigation = { waitUntil: 'domcontentloaded' as const, timeout: 30000 }
+
   // Cloudflare-protected shops run through the user-verified real Chrome.
   if (platform === 'surugaya' || platform === 'zenmarket') {
     const acquired = await acquireCloudflarePage()
     if (!acquired) return null
     const { page, release } = acquired
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      // gotoWithAbort stops the document mid-navigation, so a cancelled run
+      // releases the shared Cloudflare page immediately.
+      await gotoWithAbort(page, url, navigation, signal)
       if (await isCloudflareChallenge(page)) return null
       return await page.content()
     } catch (err) {
+      if (signal?.aborted) throw createAbortError()
       logger.warn('llm.enrich', 'failed to fetch Cloudflare page', { platform, url, error: err instanceof Error ? err.message : String(err) })
       return null
     } finally {
@@ -125,9 +158,10 @@ async function fetchProductHtml(platform: SmartFillPlatform, url: string): Promi
       await page.setExtraHTTPHeaders(headers)
     }
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await gotoWithAbort(page, url, navigation, signal)
     return await page.content()
   } catch (err) {
+    if (signal?.aborted) throw createAbortError()
     logger.warn('llm.enrich', 'failed to fetch product page', { platform, url, error: err instanceof Error ? err.message : String(err) })
     return null
   } finally {
@@ -185,11 +219,17 @@ function parseLLMDetailResponse(content: string): CDDetails | null {
  * otherwise a fresh search), fetch the product detail page, and ask the LLM
  * only for the fields that are still missing. Processing stops as soon as all
  * detail fields are filled.
+ *
+ * Pass `signal` to own the cancellation lifetime; omit it (the IPC path does)
+ * to use the module controller driven by {@link cancelEnrichment}. A cancelled
+ * run resolves with `status: 'cancelled'` and never writes the enrichment
+ * cache, so a half-finished item is not mistaken for a completed one.
  */
 export async function enrichDetails(
   catalogNumber: string,
   existingResults: QueryResult[] = [],
-  knownDetails?: CDDetails | null
+  knownDetails?: CDDetails | null,
+  signal?: AbortSignal
 ): Promise<DetailEnrichmentResult> {
   const normalizedCatalog = normalizeCatalogNumber(catalogNumber)
   const safeResults = Array.isArray(existingResults) ? existingResults : []
@@ -240,6 +280,15 @@ export async function enrichDetails(
     }
   }
 
+  // Fall back to the module controller so `cancelEnrichment()` works for
+  // callers that do not manage their own signal (the IPC handler).
+  const ownsController = signal === undefined
+  if (ownsController) {
+    abortController?.abort()
+    abortController = new AbortController()
+  }
+  const runSignal = signal ?? abortController!.signal
+
   const llmSettings = getSetting('llm')!
   logger.debug('llm.enrich', 'LLM configured', { catalogNumber: normalizedCatalog, model: llmSettings.model })
   const client = new LLMClient(llmSettings)
@@ -248,106 +297,146 @@ export async function enrichDetails(
   const analyzedPlatforms: SmartFillPlatform[] = []
   const skippedPlatforms: Array<{ platform: Platform; reason: DetailEnrichSkipReason }> = []
 
+  /** Source being processed right now; used to report where a cancel landed. */
+  let activePlatform: Platform | null = null
+
+  const cancelledResult = (): DetailEnrichmentResult => ({
+    status: 'cancelled',
+    llmConfigured: true,
+    usedCache: !!cached,
+    details: { ...working },
+    missingFields: missingDetailKeys(working),
+    analyzedPlatforms: [...analyzedPlatforms],
+    attemptedPlatforms: [...attemptedPlatforms],
+    skippedPlatforms: [...skippedPlatforms]
+  })
+
   const skip = (platform: Platform, reason: DetailEnrichSkipReason): void => {
     skippedPlatforms.push({ platform, reason })
     emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'skipped', reason })
   }
 
-  for (const platform of SMART_FILL_PLATFORM_PRIORITY) {
-    if (hasAllDetailFields(working)) break
+  try {
+    for (const platform of SMART_FILL_PLATFORM_PRIORITY) {
+      throwIfAborted(runSignal)
+      activePlatform = platform
+      if (hasAllDetailFields(working)) break
 
-    logger.debug('llm.enrich', 'source iteration start', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
+      logger.debug('llm.enrich', 'source iteration start', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
 
-    if (!isPlatformEnabledForLLM(platform)) {
-      logger.debug('llm.enrich', 'source disabled in LLM settings', { catalogNumber: normalizedCatalog, platform })
-      skip(platform, 'platform_disabled')
-      continue
-    }
-
-    // 1. Resolve the product URL. Existing not_found/challenge results are
-    //    trusted and skipped — sources that can't find the item never reach LLM.
-    let result = existingByPlatform.get(platform)
-    if (result && result.status === 'found' && result.link) {
-      // Reuse the search result the renderer already has.
-    } else if (result && result.status !== 'found') {
-      skip(platform, result.status === 'challenge' ? 'cloudflare_challenge' : 'not_found')
-      continue
-    } else {
-      emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'searching' })
-      try {
-        result = await QUERY_FUNCTIONS[platform](normalizedCatalog)
-      } catch (err) {
-        logger.warn('llm.enrich', 'source search failed', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
-        skip(platform, 'not_found')
+      if (!isPlatformEnabledForLLM(platform)) {
+        logger.debug('llm.enrich', 'source disabled in LLM settings', { catalogNumber: normalizedCatalog, platform })
+        skip(platform, 'platform_disabled')
         continue
       }
-    }
 
-    attemptedPlatforms.push(platform)
-    logger.debug('llm.enrich', 'source search resolved', {
-      catalogNumber: normalizedCatalog,
-      platform,
-      status: result?.status ?? 'missing',
-      hasLink: !!result?.link
-    })
+      // 1. Resolve the product URL. Existing not_found/challenge results are
+      //    trusted and skipped — sources that can't find the item never reach LLM.
+      let result = existingByPlatform.get(platform)
+      if (result && result.status === 'found' && result.link) {
+        // Reuse the search result the renderer already has.
+      } else if (result && result.status !== 'found') {
+        skip(platform, result.status === 'challenge' ? 'cloudflare_challenge' : 'not_found')
+        continue
+      } else {
+        emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'searching' })
+        try {
+          result = await QUERY_FUNCTIONS[platform](normalizedCatalog, runSignal)
+        } catch (err) {
+          throwIfAborted(runSignal)
+          logger.warn('llm.enrich', 'source search failed', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
+          skip(platform, 'not_found')
+          continue
+        }
+      }
 
-    if (!result || result.status !== 'found') {
-      skip(platform, result?.status === 'challenge' ? 'cloudflare_challenge' : 'not_found')
-      continue
-    }
-    if (!result.link) {
-      skip(platform, 'no_product_link')
-      continue
-    }
-
-    // 2. Reuse whatever deterministic scraper fields this source already has.
-    mergeMissingDetails(working, result.details)
-    logger.debug('llm.enrich', 'scraper fields merged', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
-    if (hasAllDetailFields(working)) {
-      logger.debug('llm.enrich', 'all fields complete from scraper data, stopping early', { catalogNumber: normalizedCatalog, platform })
-      emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'complete' })
-      break
-    }
-
-    // 3. Fetch the product detail page and ask the LLM for the missing fields.
-    emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'fetching' })
-    let html: string | null
-    try {
-      html = await fetchProductHtml(platform, result.link)
-    } catch (err) {
-      logger.warn('llm.enrich', 'page fetch threw', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
-      html = null
-    }
-    if (!html) {
-      skip(platform, platform === 'surugaya' || platform === 'zenmarket' ? 'cloudflare_challenge' : 'fetch_failed')
-      continue
-    }
-
-    emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'analyzing' })
-    const missing = missingDetailKeys(working)
-    const content = compressHtml(html, result.link)
-    const prompt = buildDetailFillPrompt(platform, normalizedCatalog, content, missing, working)
-
-    try {
-      const response = await client.chat([{ role: 'user', content: prompt }])
-      const parsed = parseLLMDetailResponse(response.content)
-      logger.debug('llm.enrich', 'LLM detail response parsed', {
+      throwIfAborted(runSignal)
+      attemptedPlatforms.push(platform)
+      logger.debug('llm.enrich', 'source search resolved', {
         catalogNumber: normalizedCatalog,
         platform,
-        parsedFieldCount: Object.values(parsed ?? {}).filter(Boolean).length
+        status: result?.status ?? 'missing',
+        hasLink: !!result?.link
       })
-      mergeMissingDetails(working, parsed)
-      analyzedPlatforms.push(platform)
-      logger.debug('llm.enrich', 'LLM fields merged', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
 
+      if (!result || result.status !== 'found') {
+        skip(platform, result?.status === 'challenge' ? 'cloudflare_challenge' : 'not_found')
+        continue
+      }
+      if (!result.link) {
+        skip(platform, 'no_product_link')
+        continue
+      }
+
+      // 2. Reuse whatever deterministic scraper fields this source already has.
+      mergeMissingDetails(working, result.details)
+      logger.debug('llm.enrich', 'scraper fields merged', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
       if (hasAllDetailFields(working)) {
-        logger.debug('llm.enrich', 'all fields complete, stopping', { catalogNumber: normalizedCatalog, platform })
+        logger.debug('llm.enrich', 'all fields complete from scraper data, stopping early', { catalogNumber: normalizedCatalog, platform })
         emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'complete' })
         break
       }
-    } catch (err) {
-      logger.warn('llm.enrich', 'LLM analysis failed', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
-      skip(platform, 'llm_failed')
+
+      // 3. Fetch the product detail page and ask the LLM for the missing fields.
+      emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'fetching' })
+      let html: string | null
+      try {
+        html = await fetchProductHtml(platform, result.link, runSignal)
+      } catch (err) {
+        throwIfAborted(runSignal)
+        logger.warn('llm.enrich', 'page fetch threw', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
+        html = null
+      }
+      if (!html) {
+        skip(platform, platform === 'surugaya' || platform === 'zenmarket' ? 'cloudflare_challenge' : 'fetch_failed')
+        continue
+      }
+
+      emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'analyzing' })
+      const missing = missingDetailKeys(working)
+      const content = compressHtml(html, result.link)
+      const prompt = buildDetailFillPrompt(platform, normalizedCatalog, content, missing, working)
+
+      try {
+        const response = await client.chat([{ role: 'user', content: prompt }], { signal: runSignal })
+        const parsed = parseLLMDetailResponse(response.content)
+        logger.debug('llm.enrich', 'LLM detail response parsed', {
+          catalogNumber: normalizedCatalog,
+          platform,
+          parsedFieldCount: Object.values(parsed ?? {}).filter(Boolean).length
+        })
+        mergeMissingDetails(working, parsed)
+        analyzedPlatforms.push(platform)
+        logger.debug('llm.enrich', 'LLM fields merged', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
+
+        if (hasAllDetailFields(working)) {
+          logger.debug('llm.enrich', 'all fields complete, stopping', { catalogNumber: normalizedCatalog, platform })
+          emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'complete' })
+          break
+        }
+      } catch (err) {
+        throwIfAborted(runSignal)
+        logger.warn('llm.enrich', 'LLM analysis failed', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
+        skip(platform, 'llm_failed')
+      }
+    }
+  } catch (err) {
+    if (runSignal.aborted) {
+      logger.debug('llm.enrich', 'enrichment cancelled', {
+        catalogNumber: normalizedCatalog,
+        platform: activePlatform,
+        analyzedPlatforms,
+        missingFields: missingDetailKeys(working)
+      })
+      if (activePlatform) {
+        emitProgress({ catalogNumber: normalizedCatalog, platform: activePlatform, status: 'cancelled' })
+      }
+      return cancelledResult()
+    }
+    throw err
+  } finally {
+    if (ownsController && abortController?.signal === runSignal) {
+      abortController = null
     }
   }
 

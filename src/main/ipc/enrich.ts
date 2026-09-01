@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import type { CDDetails, QueryResult } from '../../shared/types'
-import { enrichDetails } from '../llm/enrich'
+import { cancelEnrichment, enrichDetails, isEnrichmentRunning } from '../llm/enrich'
 import { logger } from '../logger'
 
 export function registerEnrichmentIpc(): void {
@@ -14,4 +14,9 @@ export function registerEnrichmentIpc(): void {
       return result
     }
   )
+
+  ipcMain.handle('detail:enrich-cancel', () => {
+    logger.debug('ipc.enrich', 'detail:enrich-cancel invoked', { running: isEnrichmentRunning() })
+    cancelEnrichment()
+  })
 }

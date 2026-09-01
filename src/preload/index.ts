@@ -24,7 +24,8 @@ import type {
   CDLibraryUpsertResult,
   PublishPlatform,
   PublishResult,
-  PublishSnapshot
+  PublishSnapshot,
+  SettingsTransferResult
 } from '../shared/types'
 
 const validSendChannels = ['toMain', 'renderer:log'] as const
@@ -76,6 +77,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteSetting: <K extends keyof Settings>(key: K): Promise<void> =>
     ipcRenderer.invoke('deleteSetting', key),
   clearSearchCache: (): Promise<void> => ipcRenderer.invoke('clearSearchCache'),
+  exportSettingsBackup: (password: string): Promise<SettingsTransferResult> =>
+    ipcRenderer.invoke('settings:export-backup', password),
+  importSettingsBackup: (password: string): Promise<SettingsTransferResult> =>
+    ipcRenderer.invoke('settings:import-backup', password),
   getThrottleStatus: (): Promise<ThrottleStatus> => ipcRenderer.invoke('getThrottleStatus'),
   getUsdToDisplayRate: (target: DisplayCurrency): Promise<number> =>
     ipcRenderer.invoke('getUsdToDisplayRate', target),
@@ -87,6 +92,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     knownDetails?: CDDetails | null
   ): Promise<DetailEnrichmentResult> =>
     ipcRenderer.invoke('detail:enrich', catalogNumber, existingResults, knownDetails),
+  cancelEnrichDetails: (): Promise<void> =>
+    ipcRenderer.invoke('detail:enrich-cancel'),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
   listLibraryRecords: (query: CDLibraryListQuery): Promise<CDLibraryListResult> =>

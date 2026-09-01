@@ -15,6 +15,7 @@ import type {
   CloudflareChallengeResult,
   CloudflareSessionStatus,
   DetailEnrichProgress,
+  DetailEnrichProgressStatus,
   DetailEnrichmentResult,
   ExportFileResult,
   ExcelExportRow,
@@ -37,7 +38,8 @@ import type {
   PublishItem,
   PublishPlatform,
   PublishResult,
-  PublishSnapshot
+  PublishSnapshot,
+  SettingsTransferResult
 } from '../../shared/types'
 
 export type {
@@ -56,6 +58,7 @@ export type {
   CloudflareChallengeResult,
   CloudflareSessionStatus,
   DetailEnrichProgress,
+  DetailEnrichProgressStatus,
   DetailEnrichmentResult,
   ExportFileResult,
   ExcelExportRow,
@@ -78,7 +81,8 @@ export type {
   PublishItem,
   PublishPlatform,
   PublishResult,
-  PublishSnapshot
+  PublishSnapshot,
+  SettingsTransferResult
 }
 
 // Extended progress type for received messages (includes event)
@@ -102,6 +106,8 @@ export interface IElectronAPI {
   updateSettings: (values: Partial<Settings>) => Promise<void>
   deleteSetting: <K extends keyof Settings>(key: K) => Promise<void>
   clearSearchCache: () => Promise<void>
+  exportSettingsBackup: (password: string) => Promise<SettingsTransferResult>
+  importSettingsBackup: (password: string) => Promise<SettingsTransferResult>
   getThrottleStatus: () => Promise<ThrottleStatus>
   getUsdToDisplayRate: (target: DisplayCurrency) => Promise<number>
   executeBatchQuery: (catalogNumbers: string[], platforms?: Platform[]) => Promise<BatchQueryResult[]>
@@ -110,6 +116,7 @@ export interface IElectronAPI {
     existingResults: QueryResult[],
     knownDetails?: CDDetails | null
   ) => Promise<DetailEnrichmentResult>
+  cancelEnrichDetails: () => Promise<void>
   cancelBatchQuery: () => Promise<void>
   listLibraryRecords: (query: CDLibraryListQuery) => Promise<CDLibraryListResult>
   createLibraryRecord: (input: CDLibraryRecordInput) => Promise<CDLibraryRecord>

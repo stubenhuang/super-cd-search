@@ -74,6 +74,12 @@ describe('preload API', () => {
 
     await api.deleteSetting('discogsToken')
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('deleteSetting', 'discogsToken')
+
+    await api.exportSettingsBackup('password-123')
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('settings:export-backup', 'password-123')
+
+    await api.importSettingsBackup('password-123')
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('settings:import-backup', 'password-123')
   })
 
   it('forwards query, image and external calls', async () => {
@@ -94,6 +100,9 @@ describe('preload API', () => {
 
     await api.cancelBatchQuery()
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('cancelBatchQuery')
+
+    await api.cancelEnrichDetails()
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('detail:enrich-cancel')
 
     await api.openExternal('https://example.com')
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('openExternal', 'https://example.com')

@@ -1,17 +1,10 @@
 import { ipcMain } from 'electron'
-import { getSettings, getSetting, setSetting, updateSettings, deleteSetting, type Settings } from '../settings'
+import { getSettings, getSetting, setSetting, updateSettings, deleteSetting, PUBLIC_SETTING_KEYS, type Settings } from '../settings'
 import { clearSearchCache } from '../queries/cache'
 import { clearReleaseCache, clearDiscogsBarcodeCache } from '../queries/discogs'
 import { clearItemDetailsCache } from '../queries/ebay'
 import { clearBarcodeResolutionCache } from '../barcode/resolver'
-
-const PUBLIC_SETTING_KEYS = new Set<keyof Settings>([
-  'discogsToken', 'ebayClientId', 'ebayClientSecret',
-  'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
-  'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
-  'theme', 'language', 'lanEnabled', 'lanHost', 'lanPort',
-  'barcodeProviders', 'lastExportDirectory'
-])
+import { exportSettingsBackup, importSettingsBackup } from '../settings/backup'
 
 function assertPublicSettingKey(key: string): asserts key is keyof Settings {
   if (!PUBLIC_SETTING_KEYS.has(key as keyof Settings)) throw new Error('Invalid settings key')
@@ -49,5 +42,19 @@ export function registerSettingsIpc(): void {
     clearDiscogsBarcodeCache()
     clearBarcodeResolutionCache()
     clearItemDetailsCache()
+  })
+
+  ipcMain.handle('settings:export-backup', async (_event, password: string) => {
+    if (typeof password !== 'string' || password.length === 0) {
+      return { status: 'error', errorCode: 'weak_password', message: 'invalid password' }
+    }
+    return exportSettingsBackup(password)
+  })
+
+  ipcMain.handle('settings:import-backup', async (_event, password: string) => {
+    if (typeof password !== 'string' || password.length === 0) {
+      return { status: 'error', errorCode: 'weak_password', message: 'invalid password' }
+    }
+    return importSettingsBackup(password)
   })
 }

@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react'
-import type { Platform } from './electron-api'
-import { PLATFORM_LABELS } from '../../shared/platforms'
+import type { DetailEnrichProgressStatus, Platform } from './electron-api'
+import { PLATFORM_LABELS, summarizePlatformNames } from '../../shared/platforms'
 import { useI18n } from './i18n'
+import type { TranslationKey } from './i18n'
 
 /**
  * Post-search auto flow: prompts that guide the user through deep dig and
@@ -10,7 +11,16 @@ import { useI18n } from './i18n'
 export type AutoFlowState =
   | { kind: 'deep-dig-prompt'; catalogs: string[]; platforms: Platform[] }
   | { kind: 'smart-prompt'; catalogs: string[] }
-  | { kind: 'smart-running'; current: number; total: number; catalogNumber: string }
+  | {
+      kind: 'smart-running'
+      current: number
+      total: number
+      catalogNumber: string
+      phase: DetailEnrichProgressStatus | null
+      platform: Platform | null
+      cancelling: boolean
+    }
+  | { kind: 'smart-cancelled'; completed: number; total: number }
   | { kind: 'smart-done'; failed: number }
   | null
 
@@ -20,7 +30,21 @@ interface FlowDialogProps {
   onDeepDigSkip: () => void
   onSmartConfirm: () => void
   onSmartSkip: () => void
+  onSmartCancel: () => void
   onClose: () => void
+}
+
+/** Human-readable phase label for the currently running smart generation. */
+function smartPhaseText(
+  phase: DetailEnrichProgressStatus | null,
+  platform: Platform | null,
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string
+): string {
+  if (!phase || !platform) return t('autoFlow.smartPhase.preparing')
+  if (phase === 'searching') return t('autoFlow.smartPhase.searching', { platform: PLATFORM_LABELS[platform] })
+  if (phase === 'fetching') return t('autoFlow.smartPhase.fetching', { platform: PLATFORM_LABELS[platform] })
+  if (phase === 'analyzing') return t('autoFlow.smartPhase.analyzing', { platform: PLATFORM_LABELS[platform] })
+  return t('autoFlow.smartPhase.preparing')
 }
 
 export function FlowDialog({
@@ -29,6 +53,7 @@ export function FlowDialog({
   onDeepDigSkip,
   onSmartConfirm,
   onSmartSkip,
+  onSmartCancel,
   onClose
 }: FlowDialogProps) {
   const { t } = useI18n()
@@ -60,7 +85,8 @@ export function FlowDialog({
   let actions: React.ReactNode = null
 
   if (flow.kind === 'deep-dig-prompt') {
-    const platformNames = flow.platforms.map(p => PLATFORM_LABELS[p] || p).join(' / ')
+    const { shown, rest } = summarizePlatformNames(flow.platforms, PLATFORM_LABELS)
+    const platformNames = rest > 0 ? `${shown} ${t('autoFlow.platformsMore', { count: rest })}` : shown
     title = t('autoFlow.deepDigTitle')
     body = (
       <p className="flow-modal-text">
@@ -95,10 +121,38 @@ export function FlowDialog({
   } else if (flow.kind === 'smart-running') {
     title = t('autoFlow.smartTitle')
     body = (
-      <div className="flow-modal-status" role="status" aria-live="polite">
-        <span className="flow-modal-spinner" aria-hidden="true" />
-        <span>{t('autoFlow.smartProgress', { current: flow.current, total: flow.total, catalogNumber: flow.catalogNumber })}</span>
-      </div>
+      <>
+        <div className="flow-modal-status" role="status" aria-live="polite">
+          <span className="flow-modal-spinner" aria-hidden="true" />
+          <span>{t('autoFlow.smartProgress', { current: flow.current, total: flow.total, catalogNumber: flow.catalogNumber })}</span>
+        </div>
+        <div className="flow-modal-phase">
+          <span className="flow-modal-phase-dot" aria-hidden="true" />
+          <span>{smartPhaseText(flow.phase, flow.platform, t)}</span>
+        </div>
+      </>
+    )
+    actions = (
+      <button
+        type="button"
+        className={`flow-modal-secondary-btn flow-modal-cancel-btn${flow.cancelling ? ' is-cancelling' : ''}`}
+        onClick={onSmartCancel}
+        disabled={flow.cancelling}
+      >
+        {flow.cancelling ? t('autoFlow.cancelling') : t('autoFlow.cancel')}
+      </button>
+    )
+  } else if (flow.kind === 'smart-cancelled') {
+    title = t('autoFlow.smartTitle')
+    body = (
+      <p className="flow-modal-text">
+        {t('autoFlow.smartCancelled', { completed: flow.completed, total: flow.total })}
+      </p>
+    )
+    actions = (
+      <button type="button" className="flow-modal-primary-btn" onClick={onClose}>
+        {t('autoFlow.close')}
+      </button>
     )
   } else {
     title = t('autoFlow.smartTitle')

@@ -160,6 +160,7 @@ export type LanSearchPhase =
   | 'deep-search'
   | 'smart-prompt'
   | 'smart-running'
+  | 'smart-cancelled'
   | 'smart-done'
   | 'done'
 
@@ -254,6 +255,42 @@ export interface Settings {
   lastExportDirectory?: string
 }
 
+/**
+ * On-disk shape of a password-protected settings backup.
+ *
+ * The plaintext payload is the JSON of the exported settings (never the LAN
+ * pairing token). Everything needed to re-derive the key except the password
+ * itself is stored in the clear; the GCM auth tag is what lets us tell a wrong
+ * password apart from a damaged file.
+ */
+export interface SettingsBackupEnvelope {
+  app: 'super-cd-search'
+  /** Bump only for breaking changes; unknown higher versions are rejected. */
+  formatVersion: 1
+  exportedAt: string
+  kdf: { algorithm: 'pbkdf2-sha512'; iterations: number; salt: string }
+  cipher: { algorithm: 'aes-256-gcm'; iv: string; authTag: string }
+  /** Base64 ciphertext of the settings JSON. */
+  ciphertext: string
+}
+
+export type SettingsTransferErrorCode =
+  | 'weak_password'
+  | 'bad_password'
+  | 'corrupt_file'
+  | 'unsupported_version'
+  | 'cancelled'
+  | 'io_error'
+
+export interface SettingsTransferResult {
+  status: 'ok' | 'cancelled' | 'error'
+  filePath?: string
+  /** Keys that were actually written by an import; empty means nothing changed. */
+  importedKeys?: string[]
+  errorCode?: SettingsTransferErrorCode
+  message?: string
+}
+
 export interface BatchQueryProgress {
   catalogNumber: string
   platform: string
@@ -277,6 +314,8 @@ export type DetailEnrichProgressStatus =
   | 'skipped'
   | 'complete'
   | 'error'
+  /** Emitted once when the running enrichment was aborted by the user. */
+  | 'cancelled'
 
 /** Live progress emitted while the detail modal enriches missing fields. */
 export interface DetailEnrichProgress {
@@ -286,7 +325,8 @@ export interface DetailEnrichProgress {
   reason?: DetailEnrichSkipReason
 }
 
-export type DetailEnrichmentStatus = 'complete' | 'partial' | 'not_configured' | 'error'
+/** 'cancelled' means the run was aborted; partial details may still be present. */
+export type DetailEnrichmentStatus = 'complete' | 'partial' | 'not_configured' | 'error' | 'cancelled'
 
 export interface DetailEnrichmentResult {
   status: DetailEnrichmentStatus

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, CDLibraryRecordInput, LanSearchState, LanSearchPhase, LoginPlatform } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, CDLibraryRecordInput, LanSearchState, LanSearchPhase, LoginPlatform, DetailEnrichProgress } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
@@ -7,7 +7,8 @@ import { FlowDialog, type AutoFlowState } from './FlowDialog'
 import { aggregateDetails, missingDetailKeys } from '../../shared/details'
 import { isLlmConfigured } from '../../shared/llm'
 import { normalizeCatalogNumber } from '../../shared/utils'
-import { PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, CHANNEL_PLATFORMS } from '../../shared/platforms'
+import { PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, CHANNEL_PLATFORMS, resolveDeepDigPlatforms } from '../../shared/platforms'
+import { makeProgressKey, buildProgressByCatalog, clearProgressEntries, countCompletedCatalogs } from '../../shared/progress'
 import { QueryEvents } from '../../shared/events'
 import { useCoverImage } from './hooks/useCoverImage'
 import { useI18n } from './i18n'
@@ -300,6 +301,8 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showLanPanel, setShowLanPanel] = useState(false)
   const cancelledRef = useRef(false)
+  const smartCancelRef = useRef(false)
+  const smartCurrentCatalogRef = useRef<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
   const [searchMode, setSearchMode] = useState<SearchMode>('standard')
   const [isDeepSearching, setIsDeepSearching] = useState(false)
@@ -488,7 +491,7 @@ function App() {
       // pass (deep mode already queries every platform). Otherwise go straight
       // to the completeness check for smart generation.
       if (!cancelledRef.current) {
-        const digPlatforms = searchMode === 'standard' ? await filterVerifiedChannels(modePlatforms) : []
+        const digPlatforms = searchMode === 'standard' ? await filterVerifiedChannels(resolveDeepDigPlatforms(settings)) : []
         const emptyTargets = digPlatforms.length > 0
           ? catalogNumbers.filter(cn => {
               const rs = completedResults.get(cn)
@@ -619,7 +622,7 @@ function App() {
       } else if (data.event !== QueryEvents.START && data.platform !== 'all') {
         setProgressStatus(prev => {
           const next = new Map(prev)
-          next.set(`${data.catalogNumber}:${data.platform}`, data.status)
+          next.set(makeProgressKey(data.catalogNumber, data.platform), data.status)
           return next
         })
       }
@@ -674,32 +677,12 @@ function App() {
     : (catalogOrder.length || catalogNumbers.length || 0)
 
   const progressByCatalog = useMemo(() => {
-    const map = new Map<string, Map<string, string>>()
-    for (const [key, status] of progressStatus) {
-      const separator = key.indexOf(':')
-      if (separator <= 0) continue
-      const catalogNumber = key.slice(0, separator)
-      const platform = key.slice(separator + 1)
-      if (!progressPlatforms.includes(platform as Platform)) continue
-      if (!map.has(catalogNumber)) {
-        map.set(catalogNumber, new Map())
-      }
-      map.get(catalogNumber)!.set(platform, status)
-    }
-    return map
+    return buildProgressByCatalog(progressStatus, progressPlatforms)
   }, [progressStatus, progressPlatforms])
 
   const completedCount = useMemo(() => {
     if (isDeepProgress) {
-      return deepSearchTargets.filter((cn) => {
-        const platforms = progressByCatalog.get(cn)
-        return platforms !== undefined &&
-          platforms.size === progressPlatforms.length &&
-          progressPlatforms.every((p) => {
-            const s = platforms.get(p)
-            return s === 'complete' || s === 'not_found' || s === 'error' || s === 'challenge'
-          })
-      }).length
+      return countCompletedCatalogs(progressByCatalog, deepSearchTargets, progressPlatforms)
     }
     return completedCatalogs.size
   }, [isDeepProgress, deepSearchTargets, progressByCatalog, progressPlatforms, completedCatalogs])
@@ -714,6 +697,7 @@ function App() {
     else if (isDeepSearching) phase = 'deep-search'
     else if (autoFlow?.kind === 'smart-prompt') phase = 'smart-prompt'
     else if (autoFlow?.kind === 'smart-running') phase = 'smart-running'
+    else if (autoFlow?.kind === 'smart-cancelled') phase = 'smart-cancelled'
     else if (autoFlow?.kind === 'smart-done') phase = 'smart-done'
     else if (isLoading || isCancelling) phase = 'searching'
     else if (results.size > 0) phase = 'done'
@@ -780,6 +764,11 @@ function App() {
     void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     cancelledRef.current = false
     deepSearchSucceededRef.current = false
+    // Clear leftover terminal statuses for the dig targets so the bar starts
+    // at 0% instead of flashing 100% from the standard-search pass. The rest
+    // of the map and completedCatalogs are left intact for the full view that
+    // returns once the dig finishes.
+    setProgressStatus(prev => clearProgressEntries(prev, targets, platforms))
     setDeepSearchTargets(targets)
     setDeepSearchPlatforms(platforms)
     setIsDeepSearching(true)
@@ -832,11 +821,24 @@ function App() {
     const targets = autoFlow.catalogs
     const workingResults = new Map(results)
     const workingEnriched = new Map(enrichedDetails)
+    const completedCatalogs: string[] = []
     let failed = 0
+    let cancelled = false
+
+    smartCancelRef.current = false
 
     for (let index = 0; index < targets.length; index++) {
       const catalogNumber = targets[index]
-      setAutoFlow({ kind: 'smart-running', current: index + 1, total: targets.length, catalogNumber })
+      smartCurrentCatalogRef.current = catalogNumber
+      setAutoFlow({
+        kind: 'smart-running',
+        current: index + 1,
+        total: targets.length,
+        catalogNumber,
+        phase: null,
+        platform: null,
+        cancelling: false
+      })
       window.electronAPI.log('info', 'app.smartGenerate', 'auto smart generation started', { catalogNumber })
       try {
         const enrichment = await window.electronAPI.enrichDetails(
@@ -844,9 +846,14 @@ function App() {
           workingResults.get(catalogNumber) || [],
           workingEnriched.get(catalogNumber)
         )
+        if (enrichment.status === 'cancelled') {
+          cancelled = true
+          break
+        }
         if (enrichment.status === 'error') failed++
         workingEnriched.set(catalogNumber, enrichment.details)
         setEnrichedDetails(new Map(workingEnriched))
+        completedCatalogs.push(catalogNumber)
       } catch (err) {
         failed++
         window.electronAPI.log('warn', 'app.smartGenerate', 'auto smart generation failed', {
@@ -856,9 +863,26 @@ function App() {
       }
     }
 
+    smartCurrentCatalogRef.current = null
+
+    if (cancelled) {
+      // Persist only the numbers that finished before the abort; the
+      // interrupted one is intentionally not saved.
+      await persistCatalogsToLibrary(completedCatalogs, workingResults, workingEnriched)
+      setAutoFlow({ kind: 'smart-cancelled', completed: completedCatalogs.length, total: targets.length })
+      return
+    }
+
     await persistCatalogsToLibrary(targets, workingResults, workingEnriched)
     setAutoFlow({ kind: 'smart-done', failed })
   }, [autoFlow, enrichedDetails, persistCatalogsToLibrary, results])
+
+  const handleSmartCancel = useCallback(() => {
+    if (autoFlow?.kind !== 'smart-running') return
+    smartCancelRef.current = true
+    setAutoFlow({ ...autoFlow, cancelling: true })
+    void window.electronAPI.cancelEnrichDetails()
+  }, [autoFlow])
 
   const handleSmartSkip = useCallback(() => {
     if (autoFlow?.kind !== 'smart-prompt') return
@@ -867,7 +891,7 @@ function App() {
   }, [autoFlow, showLibraryToast])
 
   const handleFlowClose = useCallback(() => {
-    if (autoFlow?.kind !== 'smart-done') return
+    if (autoFlow?.kind !== 'smart-done' && autoFlow?.kind !== 'smart-cancelled') return
     setAutoFlow(null)
     showLibraryToast()
   }, [autoFlow, showLibraryToast])
@@ -894,6 +918,20 @@ function App() {
       handleFlowClose()
     })
   }, [handleFlowClose])
+
+  // Live phase feed for the smart generation dialog. The main process
+  // broadcasts progress per catalog number; we only surface events that match
+  // the number currently being enriched so parallel runs never cross-talk.
+  useEffect(() => {
+    return window.electronAPI.receive('detail:enrich-progress', (...args: unknown[]) => {
+      const progress = args[0] as DetailEnrichProgress | undefined
+      if (!progress || progress.catalogNumber !== smartCurrentCatalogRef.current) return
+      setAutoFlow(prev => {
+        if (prev?.kind !== 'smart-running' || prev.catalogNumber !== progress.catalogNumber) return prev
+        return { ...prev, phase: progress.status, platform: progress.platform }
+      })
+    })
+  }, [])
 
   const handleNewCatalogsViewed = useCallback(() => {
     setLibraryNewCatalogs(new Set())
@@ -1008,7 +1046,7 @@ function App() {
                 onClick={handleSearch}
                 disabled={isLoading || isCancelling || isDeepSearching}
               >
-                {isCancelling ? t('search.cancelling') : isLoading ? t('search.searching') : t('search.button')}
+                {isCancelling ? t('search.cancelling') : isDeepSearching ? t('search.deepDigging') : isLoading ? t('search.searching') : t('search.button')}
               </button>
               {(isLoading || isDeepSearching) && (
                 <button
@@ -1024,9 +1062,10 @@ function App() {
                 </button>
               )}
             </div>
-            {(isLoading || hasProgress) && (
+            {(isLoading || isDeepSearching || hasProgress) && (
               <div className="run-progress">
                 <div className="progress-summary">
+                  {isDeepProgress && <span className="run-progress-badge">{t('progress.deepDig')}</span>}
                   <span className="progress-label">{t('progress.done', { done: completedCount, total: totalCount })}</span>
                   <span className="progress-percent">{progressPercent}%</span>
                 </div>
@@ -1162,6 +1201,7 @@ function App() {
         onDeepDigSkip={handleDeepDigSkip}
         onSmartConfirm={handleSmartConfirm}
         onSmartSkip={handleSmartSkip}
+        onSmartCancel={handleSmartCancel}
         onClose={handleFlowClose}
       />
       {showDetailModal && selectedCatalog && (

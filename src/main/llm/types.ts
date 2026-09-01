@@ -6,6 +6,12 @@ export interface ChatMessage {
 export interface ChatOptions {
   temperature?: number
   maxTokens?: number
+  /**
+   * Caller-owned cancellation signal. Distinct from the client's internal
+   * 60s timeout: when this aborts, the failure is reported as a cancellation
+   * rather than a timeout.
+   */
+  signal?: AbortSignal
 }
 
 export interface LLMResponse {

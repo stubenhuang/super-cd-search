@@ -29,8 +29,15 @@ const { mockGetUsdToDisplayRate } = vi.hoisted(() => ({
   mockGetUsdToDisplayRate: vi.fn()
 }))
 
-const { mockEnrichDetails } = vi.hoisted(() => ({
-  mockEnrichDetails: vi.fn()
+const { mockEnrichDetails, mockCancelEnrichment, mockIsEnrichmentRunning } = vi.hoisted(() => ({
+  mockEnrichDetails: vi.fn(),
+  mockCancelEnrichment: vi.fn(),
+  mockIsEnrichmentRunning: vi.fn()
+}))
+
+const { mockExportSettingsBackup, mockImportSettingsBackup } = vi.hoisted(() => ({
+  mockExportSettingsBackup: vi.fn(),
+  mockImportSettingsBackup: vi.fn()
 }))
 
 const { mockLogFromRenderer } = vi.hoisted(() => ({
@@ -52,7 +59,19 @@ vi.mock('../src/main/settings', () => ({
   getSetting: mockGetSetting,
   setSetting: mockSetSetting,
   updateSettings: mockUpdateSettings,
-  deleteSetting: mockDeleteSetting
+  deleteSetting: mockDeleteSetting,
+  PUBLIC_SETTING_KEYS: new Set([
+    'discogsToken', 'ebayClientId', 'ebayClientSecret',
+    'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
+    'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
+    'theme', 'language', 'lanEnabled', 'lanHost', 'lanPort',
+    'barcodeProviders', 'lastExportDirectory'
+  ])
+}))
+
+vi.mock('../src/main/settings/backup', () => ({
+  exportSettingsBackup: mockExportSettingsBackup,
+  importSettingsBackup: mockImportSettingsBackup
 }))
 
 vi.mock('../src/main/cloudflare', () => ({
@@ -76,7 +95,9 @@ vi.mock('../src/main/currency', () => ({
 }))
 
 vi.mock('../src/main/llm/enrich', () => ({
-  enrichDetails: mockEnrichDetails
+  enrichDetails: mockEnrichDetails,
+  cancelEnrichment: mockCancelEnrichment,
+  isEnrichmentRunning: mockIsEnrichmentRunning
 }))
 
 vi.mock('../src/main/lan', () => ({
@@ -145,6 +166,34 @@ describe('registerSettingsIpc', () => {
 
     expect(() => handler('getSetting')(null, 'lanToken')).toThrow('Invalid settings key')
     expect(() => handler('updateSettings')(null, { lanToken: 'secret' })).toThrow('Invalid settings key')
+  })
+
+  it('registers the settings backup handlers', async () => {
+    mockExportSettingsBackup.mockResolvedValue({ status: 'ok', filePath: '/tmp/backup.scdset' })
+    mockImportSettingsBackup.mockResolvedValue({ status: 'ok', filePath: '/tmp/backup.scdset', importedKeys: ['theme', 'language'] })
+
+    registerSettingsIpc()
+
+    expect(await handler('settings:export-backup')(null, 'password-123')).toEqual({ status: 'ok', filePath: '/tmp/backup.scdset' })
+    expect(mockExportSettingsBackup).toHaveBeenCalledWith('password-123')
+
+    expect(await handler('settings:import-backup')(null, 'password-123')).toEqual({ status: 'ok', filePath: '/tmp/backup.scdset', importedKeys: ['theme', 'language'] })
+    expect(mockImportSettingsBackup).toHaveBeenCalledWith('password-123')
+  })
+
+  it('rejects invalid backup passwords and surfaces dialog cancellation', async () => {
+    mockExportSettingsBackup.mockResolvedValue({ status: 'cancelled' })
+    mockImportSettingsBackup.mockResolvedValue({ status: 'cancelled' })
+
+    registerSettingsIpc()
+
+    expect(await handler('settings:export-backup')(null, '')).toEqual({ status: 'error', errorCode: 'weak_password', message: 'invalid password' })
+    expect(await handler('settings:import-backup')(null, 123)).toEqual({ status: 'error', errorCode: 'weak_password', message: 'invalid password' })
+    expect(mockExportSettingsBackup).not.toHaveBeenCalled()
+    expect(mockImportSettingsBackup).not.toHaveBeenCalled()
+
+    expect(await handler('settings:export-backup')(null, 'password-123')).toEqual({ status: 'cancelled' })
+    expect(await handler('settings:import-backup')(null, 'password-123')).toEqual({ status: 'cancelled' })
   })
 })
 
@@ -261,6 +310,9 @@ describe('registerEnrichmentIpc', () => {
 
     expect(await handler('detail:enrich')(null, 'X-1', [], undefined)).toEqual(enriched)
     expect(mockEnrichDetails).toHaveBeenCalledWith('X-1', [], undefined)
+
+    await handler('detail:enrich-cancel')()
+    expect(mockCancelEnrichment).toHaveBeenCalled()
   })
 })
 

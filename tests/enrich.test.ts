@@ -49,8 +49,8 @@ vi.mock('../src/main/cloudflare', () => ({
 vi.mock('../src/main/parser/readability', () => ({ compressHtml: mockCompressHtml }))
 vi.mock('../src/main/llm/client', () => ({
   LLMClient: class {
-    async chat() {
-      return mockChat()
+    async chat(_messages: unknown, options: unknown) {
+      return mockChat(options)
     }
   }
 }))
@@ -235,7 +235,7 @@ describe('enrichDetails', () => {
       released: '2024-01-01',
       genre: 'Jazz' // LLM fills only the missing field
     })
-    expect(mockQueryTower).toHaveBeenCalledWith('X-1')
+    expect(mockQueryTower).toHaveBeenCalledWith('X-1', expect.any(AbortSignal))
     expect(mockQueryHmv).not.toHaveBeenCalled()
     expect(mockChat).toHaveBeenCalledTimes(1)
   })
@@ -458,5 +458,13 @@ describe('enrichDetails', () => {
 
     const result = await enrichDetails('X-1', [])
     expect(result.skippedPlatforms.some(s => s.reason === 'platform_disabled')).toBe(false)
+  })
+
+  it('passes the caller signal to the LLM client so an in-flight request can be cancelled', async () => {
+    const controller = new AbortController()
+
+    await enrichDetails('X-1', [], null, controller.signal)
+
+    expect(mockChat).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }))
   })
 })
