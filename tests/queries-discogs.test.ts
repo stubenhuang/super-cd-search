@@ -203,9 +203,34 @@ describe('queryDiscogs', () => {
       expect(mockThrottledFetch).toHaveBeenCalledWith(
         'api.discogs.com',
         expect.stringContaining('/releases/21'),
-        undefined,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Discogs token=token-123' })
+        }),
         expect.anything()
       )
+    })
+
+    it('sends the token via the Authorization header and keeps it out of the URL', async () => {
+      mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
+        if (url.includes('/database/search')) {
+          return okJson({ results: [{ id: 21, title: 'Pink Floyd - Animals', catno: 'SICP 6480', uri: '/release/21' }] })
+        }
+        if (url.includes('/marketplace/stats')) return okJson({})
+        if (url.includes('/releases/')) return okJson({})
+        return { ok: false, status: 404 }
+      })
+
+      await queryDiscogs('SICP-6480')
+
+      const calls = mockThrottledFetch.mock.calls as Array<[string, string, RequestInit | undefined, unknown]>
+      expect(calls.length).toBeGreaterThan(0)
+      for (const [domain, url, init] of calls) {
+        expect(domain).toBe('api.discogs.com')
+        // throttledFetch logs the URL verbatim, so the token must never appear in it.
+        expect(url).not.toContain('token-123')
+        expect(url).not.toContain('token=')
+        expect((init?.headers as Record<string, string>).Authorization).toBe('Discogs token=token-123')
+      }
     })
 
     it('returns not_found when the API has no results', async () => {
@@ -305,6 +330,14 @@ describe('queryDiscogs', () => {
       })
 
       const lookup = await queryDiscogsByBarcode('4 988006 812345')
+
+      // Barcode lookups must carry the token in the header too, never in the URL.
+      const barcodeCalls = mockThrottledFetch.mock.calls as Array<[string, string, RequestInit | undefined, unknown]>
+      for (const [, url, init] of barcodeCalls) {
+        expect(url).not.toContain('token-123')
+        expect((init?.headers as Record<string, string>).Authorization).toBe('Discogs token=token-123')
+      }
+
       expect(lookup).toMatchObject({
         status: 'found',
         barcode: '4988006812345',

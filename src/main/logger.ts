@@ -47,12 +47,26 @@ let fileWriteFailed = false
 const SECRET_KEY_PATTERN = /(key|token|secret|password|cookie|authorization)/i
 
 const REDACT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  // JWTs are self-delimiting (three base64url segments), so match the whole
+  // token rather than a key=value prefix. Must run first: a later rule could
+  // otherwise mangle the dots and leave part of the payload readable.
+  { pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]*)?/g, replacement: '***' },
   { pattern: /(sk-[A-Za-z0-9_-]{4,})/gi, replacement: 'sk-***' },
   { pattern: /(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, replacement: '$1***' },
+  // Discogs' official header auth scheme.
+  { pattern: /(Discogs\s+token=)[A-Za-z0-9]+/gi, replacement: '$1***' },
   { pattern: /(\btoken\s*=\s*)[^&\s]+/gi, replacement: '$1***' },
+  // Underscored token variants. The `\b` in the rule above cannot match
+  // `access_token=` because `_` is a word character, so these need their own rule.
+  { pattern: /((?:access|refresh|id)[_-]?token["']?\s*[:=]\s*["']?)[^"',&\s]+/gi, replacement: '$1***' },
   { pattern: /(api[_-]?key["']?\s*[:=]\s*["']?)[^"',&\s]+/gi, replacement: '$1***' },
+  { pattern: /((?:api[_-]?secret|app[_-]?key|consumer[_-]?secret)["']?\s*[:=]\s*["']?)[^"',&\s]+/gi, replacement: '$1***' },
   { pattern: /(client[_-]?secret["']?\s*[:=]\s*["']?)[^"',&\s]+/gi, replacement: '$1***' },
-  { pattern: /(password["']?\s*[:=]\s*["']?)[^"',&\s]+/gi, replacement: '$1***' }
+  { pattern: /(password["']?\s*[:=]\s*["']?)[^"',&\s]+/gi, replacement: '$1***' },
+  // Tail-end catch-all for standalone `secret` / `signature` parameters. Runs
+  // last so the more specific rules above win, and deliberately does not match
+  // bare `sig=` (too common in unrelated URLs, would cause false positives).
+  { pattern: /((?:signature|secret)["']?\s*[:=]\s*["']?)[^"',&\s]+/gi, replacement: '$1***' }
 ]
 
 export function parseLogLevel(value: string | null | undefined, fallback: LogLevel = 'info'): LogLevel {

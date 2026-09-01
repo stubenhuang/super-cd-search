@@ -96,6 +96,40 @@ describe('logger', () => {
     expect(text).toContain('sk-***')
   })
 
+  it('redacts additional credential formats', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk'
+
+    logger.info('test', [
+      'Authorization: Discogs token=AbCdEf123456',
+      'access_token=ya29.a0AfH6SMBx',
+      'refresh_token=1//0eXaMpLe',
+      'app_key=abcdef123456',
+      'api_secret=s3cr3tValue',
+      'signature=abc123def456',
+      'sig=notRedacted',
+      jwt
+    ].join(' '))
+
+    const text = readLog()
+    expect(text).not.toContain('AbCdEf123456')
+    expect(text).not.toContain('ya29.a0AfH6SMBx')
+    expect(text).not.toContain('1//0eXaMpLe')
+    expect(text).not.toContain('abcdef123456')
+    expect(text).not.toContain('s3cr3tValue')
+    expect(text).not.toContain('abc123def456')
+    expect(text).not.toContain(jwt)
+
+    expect(text).toContain('Discogs token=***')
+    expect(text).toContain('access_token=***')
+    expect(text).toContain('refresh_token=***')
+    expect(text).toContain('app_key=***')
+    expect(text).toContain('api_secret=***')
+    expect(text).toContain('signature=***')
+    // Bare `sig=` is deliberately left alone: it is too common in unrelated
+    // URLs, and redacting it would cause more noise than it prevents.
+    expect(text).toContain('sig=notRedacted')
+  })
+
   it('truncates very long messages', () => {
     const long = 'x'.repeat(2000)
     logger.info('test', long)

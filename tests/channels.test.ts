@@ -409,6 +409,29 @@ describe('queryXianyu web flow', () => {
     expect(page.waitForFunction).toHaveBeenCalled()
     expect(release).toHaveBeenCalled()
   })
+
+  it('reports a timeout error when the search page navigation never settles', async () => {
+    vi.useFakeTimers()
+    try {
+      const release = vi.fn()
+      const { page } = fakeChromePage({ cookies: loggedInCookies('.goofish.com') })
+      // A wedged navigation: gotoWithAbort is abort-aware, so the 90s deadline
+      // stops it instead of leaving the shared page busy indefinitely.
+      page.goto.mockImplementation(() => new Promise(() => {}))
+      mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+
+      const pending = queryXianyu('XY-TIMEOUT')
+      await runWithFakeClock(pending, 1000, 200)
+      const result = await pending
+
+      expect(result).toMatchObject({ platform: 'xianyu', status: 'error' })
+      expect(result.error).toContain('超过 90 秒')
+      // The page must be handed back in the same moment the deadline fires.
+      expect(release).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('queryTaobaoImage web flow', () => {
@@ -540,5 +563,57 @@ describe('queryTaobaoImage web flow', () => {
     expect(result.status).toBe('error')
     expect(result.error).toContain('图片上传入口')
     expect(release).toHaveBeenCalled()
+  })
+
+  it('reports a timeout error when the homepage navigation never settles', async () => {
+    vi.useFakeTimers()
+    try {
+      const release = vi.fn()
+      const { page } = fakeChromePage({ cookies: loggedInCookies('.taobao.com') })
+      // A wedged navigation: the per-stage limits alone (30s navigation) cannot
+      // cover every stall, so the 90s cap is what stops it.
+      page.goto.mockImplementation(() => new Promise(() => {}))
+      // gotoWithAbort stops a cancelled navigation through page.evaluate.
+      const stopNavigation = vi.fn().mockResolvedValue(undefined)
+      page.evaluate = stopNavigation
+      mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+
+      const pending = queryTaobaoImage('TB-TIMEOUT', { buffer: Buffer.from('x'), mimeType: 'image/jpeg' })
+      await runWithFakeClock(pending, 1000, 200)
+      const result = await pending
+
+      expect(result).toMatchObject({ platform: 'taobao', status: 'error' })
+      expect(result.error).toContain('超过 90 秒')
+      // window.stop() proves the navigation was actively halted, not abandoned.
+      expect(stopNavigation).toHaveBeenCalled()
+      expect(release).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps reporting the stage error when the flow finishes well inside the deadline', async () => {
+    // Regression guard: the 30s result-tab wait must still surface its own
+    // message rather than being swallowed by the new 90s cap.
+    vi.useFakeTimers()
+    try {
+      const release = vi.fn()
+      const uploadFile = vi.fn().mockResolvedValue(undefined)
+      const { page } = fakeChromePage({
+        cookies: loggedInCookies('.taobao.com'),
+        fileInput: { uploadFile },
+        url: 'https://www.taobao.com/'
+      })
+      mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+
+      const pending = queryTaobaoImage('TB-NO-TAB-REGRESSION', { buffer: Buffer.from('x'), mimeType: 'image/jpeg' })
+      await runWithFakeClock(pending)
+      const result = await pending
+
+      expect(result.error).toContain('结果页未打开')
+      expect(release).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -5,7 +5,7 @@ import { notFound, queryError, loginRequired, parseCNYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
-import { gotoWithAbort, throwIfAborted } from '../browser/abort'
+import { gotoWithAbort, throwIfAborted, withTimeout, isTimeoutError } from '../browser/abort'
 
 const GOOFISH_WEB_URL = 'https://www.goofish.com'
 
@@ -33,6 +33,16 @@ const NO_RESULT_SELECTORS = ['[class*="empty"]', '[class*="noResult"]', '[class*
 
 /** Bound on how long to wait for lazy-loaded card images to hydrate. */
 const COVER_HYDRATION_TIMEOUT_MS = 5000
+
+/**
+ * Wall-clock ceiling for the whole search (navigation + result wait + cover
+ * hydration + extraction). The per-stage limits alone can stack up to ~55s and
+ * a wedged SPA navigation can outlast them, so this cap guarantees the shared
+ * Chrome page is handed back promptly. Per-channel knob: tune independently of
+ * taobao.
+ */
+const QUERY_TIMEOUT_MS = 90_000
+const TIMEOUT_MESSAGE = `闲鱼搜索超过 ${QUERY_TIMEOUT_MS / 1000} 秒未完成，请稍后重试`
 
 interface GoofishCard {
   title: string | null
@@ -204,11 +214,23 @@ export async function queryXianyu(catalogNumber: string, signal?: AbortSignal): 
 
   let result: QueryResult
   try {
-    result = await queryXianyuWeb(catalogNumber, signal)
+    result = await withTimeout(
+      (timeoutSignal) => queryXianyuWeb(catalogNumber, timeoutSignal),
+      QUERY_TIMEOUT_MS,
+      TIMEOUT_MESSAGE,
+      signal
+    )
   } catch (err) {
+    // A batch cancellation must stay a cancellation; only our own deadline
+    // turns into a retryable error result (never cached).
     throwIfAborted(signal)
-    logger.warn('queries.xianyu', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
-    result = queryError('xianyu', err instanceof Error ? err.message : 'Unknown error')
+    if (isTimeoutError(err)) {
+      logger.warn('queries.xianyu', 'query timed out', { catalogNumber, timeoutMs: QUERY_TIMEOUT_MS })
+      result = queryError('xianyu', TIMEOUT_MESSAGE)
+    } else {
+      logger.warn('queries.xianyu', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+      result = queryError('xianyu', err instanceof Error ? err.message : 'Unknown error')
+    }
   }
 
   throwIfAborted(signal)

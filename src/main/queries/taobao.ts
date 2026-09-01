@@ -9,7 +9,7 @@ import { notFound, queryError, loginRequired, parseCNYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
-import { gotoWithAbort, throwIfAborted, abortableDelay } from '../browser/abort'
+import { gotoWithAbort, throwIfAborted, abortableDelay, withTimeout, isTimeoutError } from '../browser/abort'
 
 /**
  * Taobao image-search (web Pailitao) channel.
@@ -71,6 +71,16 @@ const BUTTON_POLL_MS = 1000
 const BUTTON_POLLS_PER_ATTEMPT = 8
 const UPLOAD_ATTEMPTS = 3
 const RESULT_TAB_TIMEOUT_MS = 30000
+
+/**
+ * Wall-clock ceiling for the whole image search, every stage included. The
+ * per-stage limits above sum to well over this (30+15+24+30+25s), so this is
+ * the only bound that can stop a badly stuck run from holding the shared Chrome
+ * page — and with it the rest of the batch — hostage. Per-channel knob: tune
+ * independently of xianyu.
+ */
+const QUERY_TIMEOUT_MS = 90_000
+const TIMEOUT_MESSAGE = `淘宝图搜超过 ${QUERY_TIMEOUT_MS / 1000} 秒未完成，请稍后重试`
 
 /** Image-search result cards link to item detail pages. */
 const RESULT_SELECTORS = [
@@ -242,7 +252,27 @@ export async function queryTaobaoImage(
   const cached = getCachedQueryResult('taobao', catalogNumber)
   if (cached) return cached
 
-  const result = await queryTaobaoImageWeb(catalogNumber, image, signal)
+  let result: QueryResult
+  try {
+    result = await withTimeout(
+      (timeoutSignal) => queryTaobaoImageWeb(catalogNumber, image, timeoutSignal),
+      QUERY_TIMEOUT_MS,
+      TIMEOUT_MESSAGE,
+      signal
+    )
+  } catch (err) {
+    // A batch cancellation must stay a cancellation; only our own deadline
+    // turns into a retryable error result (never cached).
+    throwIfAborted(signal)
+    if (isTimeoutError(err)) {
+      logger.warn('queries.taobao', 'query timed out', { catalogNumber, timeoutMs: QUERY_TIMEOUT_MS })
+      result = queryError('taobao', TIMEOUT_MESSAGE)
+    } else {
+      logger.warn('queries.taobao', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+      result = queryError('taobao', err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
   throwIfAborted(signal)
   cacheQueryResult(catalogNumber, result)
   return result
