@@ -28,6 +28,7 @@ beforeEach(() => {
   deleteSetting('lanPort')
   deleteSetting('barcodeProviders')
   deleteSetting('lastExportDirectory')
+  deleteSetting('autoUpdateEnabled')
   setLanToken('')
 })
 
@@ -51,7 +52,8 @@ describe('settings', () => {
       lanHost: undefined,
       lanPort: undefined,
       barcodeProviders: DEFAULT_BARCODE_PROVIDERS,
-      lastExportDirectory: undefined
+      lastExportDirectory: undefined,
+      autoUpdateEnabled: true
     })
     expect(getSetting('discogsToken')).toBeUndefined()
   })

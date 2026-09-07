@@ -11,6 +11,8 @@ import { PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, CH
 import { makeProgressKey, buildProgressByCatalog, clearProgressEntries, countCompletedCatalogs } from '../../shared/progress'
 import { QueryEvents } from '../../shared/events'
 import { useCoverImage } from './hooks/useCoverImage'
+import { useUpdateState } from './hooks/useUpdateState'
+import { UpdateBanner } from './UpdateBanner'
 import { useI18n } from './i18n'
 import { buildExportRows } from './exportData'
 import { CDLibrary } from './CDLibrary'
@@ -327,6 +329,9 @@ function App() {
   // Copy of the pipeline upsert counts that triggers re-renders (the ref does
   // not), so the LAN search-state snapshot can report them to the phone.
   const [lanUpsertCounts, setLanUpsertCounts] = useState({ inserted: 0, updated: 0 })
+  // Auto-update state mirrored from the main process (banner only shows while
+  // a newer build is being pulled in or is ready to install).
+  const { state: updateState, install: installUpdate } = useUpdateState()
 
   // Platforms queried by the currently running search. Resolved from the
   // latest settings each time a search starts (see handleSearch).
@@ -1193,6 +1198,7 @@ function App() {
       {libraryToast && (
         <div className="app-toast" role="status" aria-live="polite">{libraryToast}</div>
       )}
+      <UpdateBanner state={updateState} onInstall={() => void installUpdate()} />
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <FlowDialog

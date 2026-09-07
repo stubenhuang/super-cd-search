@@ -8,6 +8,8 @@ import { registerCloudflareIpc } from './ipc/cloudflare'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
 import { registerLibraryIpc } from './ipc/library'
+import { registerUpdaterIpc } from './ipc/updater'
+import { initUpdater, disposeUpdater } from './updater'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
 import { initCloudflareChrome, closeCloudflareChrome } from './cloudflare'
 import { browserPool } from './browser'
@@ -111,6 +113,7 @@ app.whenReady().then(async () => {
   registerLanIpc()
   registerCurrencyIpc()
   registerCloudflareIpc()
+  registerUpdaterIpc()
 
   // Register shell.openExternal handler
   ipcMain.handle('openExternal', async (_event, url: string) => {
@@ -146,6 +149,8 @@ app.whenReady().then(async () => {
   }
 
   createWindow()
+  // After the window exists so the first state push reaches the renderer.
+  initUpdater()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -166,6 +171,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   logger.debug('main', 'before-quit: flushing cache and stopping LAN server')
+  disposeUpdater()
   flushCacheToDisk()
   closeCDLibrary()
   void closeLanServer()

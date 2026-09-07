@@ -20,6 +20,7 @@
 - **局域网连接**：点击首页顶部的手机连接图标，启动只监听局域网地址的本地服务，手机扫码即可连接（二维码内含随机访问令牌，不会绑定公网地址）
 - **手机远程搜索**：手机「搜索」页与电脑端搜索框双向同步（含标准/深度模式切换），可远程输入目录号并一键触发电脑端执行搜索（沿用桌面端完整状态机：进度、深度搜索/智能补全阶段、完成汇总）；深挖/智能生成的确认弹窗也可在手机端远程操作；找到的结果自动保存到 CD 库，手机端同步显示新增/更新条数
 - **手机扫码添加编号**：手机「搜索」页可拍照识别 CD 条码，按 Discogs → Tower → HMV → Yahoo → Suruga-ya 的优先级反查目录号并加入电脑搜索框（可在设置中调整顺序/停用；Suruga-ya 需先完成 Cloudflare 验证）；高置信度直接添加，低置信度在手机上显示候选
+- **自动更新**：启动时自动检查 GitHub Release，后台下载新版本，下载完成后右下角提示「重启升级」（设置 → 关于与更新 可手动检查或关闭）
 
 ## 支持平台
 
@@ -105,6 +106,25 @@ npm run test:coverage
 - **eBay Client Secret**：eBay 开发者门户 OAuth 客户端密钥
 
 凭证使用加密方式本地存储。
+
+## 发布与版本
+
+- **版本号以 git tag 为准**：推送 `v1.0.1` 后，GitHub Actions 在打包前执行 `npm version 1.0.1 --no-git-tag-version`，因此安装包、自动更新清单（`latest.yml` / `latest-mac.yml`）与 Release 的版本一定与 tag 一致。仓库里的 `package.json` 不需要手动改。
+- 发布步骤：
+
+```bash
+npm version patch        # 或 minor / major；会同时更新 package.json 与 package-lock.json 并打 tag
+git push --follow-tags   # 触发 .github/workflows/build-release.yml
+```
+
+- 工作流会在 push `v*` tag 时构建 macOS（dmg + zip）与 Windows（NSIS 安装包 + portable + zip），上传 Release，并在打包后校验 `latest*.yml` 中的版本号。
+
+## 自动更新
+
+- 基于 `electron-updater`，从 GitHub Release 拉取新版本。
+- 支持自动更新的包：macOS dmg / zip、Windows NSIS 安装包。**Windows 便携版（portable）无法自更新**，请改用安装包版本。
+- 启动约 5 秒后后台检查：发现新版本即自动下载，右下角出现进度卡片；下载完成后点击「重启升级」安装并重启。
+- 设置 → **关于与更新**：显示当前版本、手动「检查更新」、「在 GitHub 查看」以及「自动检查更新」开关（关闭后不再后台检查）。
 
 ## 调试日志
 

@@ -41,8 +41,10 @@ import type {
   PublishSnapshot,
   SettingsTransferResult
 } from '../../shared/types'
+import type { UpdateState } from '../../shared/updater'
 
 export type {
+  UpdateState,
   QueryResult,
   QueryStatus,
   Platform,
@@ -149,6 +151,10 @@ export interface IElectronAPI {
   setLanSearchAvailability: (available: boolean) => Promise<void>
   setLanSearchCatalogCount: (count: number) => Promise<void>
   setLanSearchState: (state: LanSearchState) => Promise<void>
+  getUpdateState: () => Promise<UpdateState>
+  checkForUpdates: () => Promise<UpdateState>
+  downloadUpdate: () => Promise<UpdateState>
+  installUpdate: () => Promise<boolean>
 }
 
 declare global {

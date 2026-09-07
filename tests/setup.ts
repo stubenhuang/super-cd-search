@@ -7,6 +7,8 @@ vi.mock('electron', () => {
   return {
     app: {
       getPath: vi.fn(() => '/tmp'),
+      getVersion: vi.fn(() => '1.0.0'),
+      isPackaged: true,
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn()

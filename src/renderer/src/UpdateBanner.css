@@ -1,0 +1,114 @@
+/* ============================================
+   UPDATE BANNER - background auto-update card
+   ============================================ */
+
+.update-banner {
+  position: fixed;
+  right: 24px;
+  bottom: 28px;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: min(360px, calc(100vw - 48px));
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-card);
+  box-shadow:
+    0 12px 40px rgba(44, 37, 32, 0.2),
+    0 4px 12px rgba(44, 37, 32, 0.12);
+  animation: update-banner-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.update-banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 50%;
+  color: var(--accent-primary);
+  background: var(--status-loading-bg);
+}
+
+.update-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.update-banner-text {
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.update-banner-track {
+  margin-top: 10px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.update-banner-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-primary);
+  transition: width 0.3s ease;
+}
+
+.update-banner-actions {
+  margin-top: 10px;
+}
+
+.update-banner-install {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.update-banner-install:hover {
+  background: var(--accent-hover);
+}
+
+.update-banner-close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.update-banner-close:hover {
+  color: var(--text-primary);
+}
+
+@keyframes update-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-banner {
+    animation-duration: 0.01ms !important;
+  }
+}

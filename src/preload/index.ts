@@ -27,6 +27,7 @@ import type {
   PublishSnapshot,
   SettingsTransferResult
 } from '../shared/types'
+import type { UpdateState } from '../shared/updater'
 
 const validSendChannels = ['toMain', 'renderer:log'] as const
 const validReceiveChannels = [
@@ -41,7 +42,8 @@ const validReceiveChannels = [
   'lan:flow-confirm',
   'lan:flow-skip',
   'lan:flow-close',
-  'library:publish-updated'
+  'library:publish-updated',
+  'updater:state'
 ] as const
 
 const validLogLevels = new Set(['debug', 'info', 'warn', 'error'])
@@ -151,5 +153,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLanSearchCatalogCount: (count: number): Promise<void> =>
     ipcRenderer.invoke('lan:setCatalogCount', count),
   setLanSearchState: (state: LanSearchState): Promise<void> =>
-    ipcRenderer.invoke('lan:setSearchState', state)
+    ipcRenderer.invoke('lan:setSearchState', state),
+  getUpdateState: (): Promise<UpdateState> =>
+    ipcRenderer.invoke('updater:getState'),
+  checkForUpdates: (): Promise<UpdateState> =>
+    ipcRenderer.invoke('updater:check'),
+  downloadUpdate: (): Promise<UpdateState> =>
+    ipcRenderer.invoke('updater:download'),
+  installUpdate: (): Promise<boolean> =>
+    ipcRenderer.invoke('updater:install')
 })

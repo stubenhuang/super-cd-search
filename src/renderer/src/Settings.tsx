@@ -3,6 +3,8 @@ import type { Settings, Platform, LoginPlatform, CloudflareSessionStatus, ThemeM
 import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { applyTheme } from './theme'
 import { useI18n } from './i18n'
+import { useUpdateState } from './hooks/useUpdateState'
+import { GITHUB_REPO_URL } from '../../shared/updater'
 import './Settings.css'
 
 interface SettingsPanelProps {
@@ -10,7 +12,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'cloudflare' | 'appearance' | 'backup'
+type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'cloudflare' | 'appearance' | 'backup' | 'about'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const { t, language, setLanguage } = useI18n()
@@ -53,6 +55,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [backupImportPassword, setBackupImportPassword] = useState('')
   const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null)
   const [backupImportError, setBackupImportError] = useState<string | null>(null)
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true)
+  const { state: updateState, check: checkForUpdates, download: downloadUpdate, install: installUpdate } = useUpdateState()
   const savedThemeRef = useRef<ThemeMode>('light')
   const savedLanguageRef = useRef<Language>('zh')
 
@@ -138,6 +142,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
+    setAutoUpdateEnabled(settings.autoUpdateEnabled !== false)
     const savedTheme = settings.theme || 'light'
     const savedLanguage = settings.language || 'zh'
     setTheme(savedTheme)
@@ -329,8 +334,43 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     { key: 'sources', icon: '◎', label: t('nav.sources') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
     { key: 'cloudflare', icon: '◈', label: t('nav.cloudflare') },
-    { key: 'backup', icon: '⇅', label: t('nav.backup') }
+    { key: 'backup', icon: '⇅', label: t('nav.backup') },
+    { key: 'about', icon: '⟳', label: t('nav.about') }
   ]
+
+  const showToast = (text: string, kind: 'success' | 'error' = 'success') => {
+    setToast({ kind, text })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  const handleToggleAutoUpdate = (enabled: boolean) => {
+    setAutoUpdateEnabled(enabled)
+    void window.electronAPI.setSetting('autoUpdateEnabled', enabled).catch(() => {})
+  }
+
+  const handleCheckForUpdates = async () => {
+    try {
+      const next = await checkForUpdates()
+      if (next.status === 'error') {
+        showToast(t('about.checkFailed', { error: next.error || t('lan.unknownError') }), 'error')
+      } else if (next.status === 'not-available') {
+        showToast(t('about.upToDate'))
+      }
+    } catch {
+      showToast(t('about.checkFailed', { error: t('lan.unknownError') }), 'error')
+    }
+  }
+
+  const handleDownloadUpdate = async () => {
+    try {
+      const next = await downloadUpdate()
+      if (next.status === 'error') {
+        showToast(t('about.checkFailed', { error: next.error || t('lan.unknownError') }), 'error')
+      }
+    } catch {
+      showToast(t('about.checkFailed', { error: t('lan.unknownError') }), 'error')
+    }
+  }
 
   const renderContent = () => {
     switch (activeSection) {
@@ -949,6 +989,89 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             </div>
           </div>
         )
+
+      case 'about': {
+        const status = updateState?.status ?? 'idle'
+        const latestVersion = updateState?.latestVersion ?? ''
+        const percent = Math.max(0, Math.min(100, updateState?.progress ?? 0))
+        const statusText =
+          status === 'checking' ? t('about.checking')
+            : status === 'not-available' ? t('about.upToDate')
+              : status === 'available' ? t('about.available', { version: latestVersion })
+                : status === 'downloading' ? t('about.downloading', { percent })
+                  : status === 'downloaded' ? t('about.downloaded', { version: latestVersion })
+                    : status === 'error' ? t('about.checkFailed', { error: updateState?.error || t('lan.unknownError') })
+                      : status === 'unsupported' ? t('about.unsupported')
+                        : t('about.desc')
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              {t('about.desc')}
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">⟳</span> {t('about.currentVersion')}
+              </div>
+              <div className="st-cf-status">{updateState?.currentVersion || '—'}</div>
+              <div className="st-cf-status" style={{ marginTop: '8px' }}>{statusText}</div>
+              {status === 'downloading' && (
+                <div className="update-banner-track" style={{ marginTop: '12px' }} aria-hidden="true">
+                  <div className="update-banner-fill" style={{ width: `${percent}%` }} />
+                </div>
+              )}
+              {updateState?.releaseNotes && (
+                <div className="st-field" style={{ marginTop: '14px' }}>
+                  <label className="st-label">
+                    <span className="st-label-icon">⟳</span> {t('about.releaseNotes')}
+                  </label>
+                  <div className="st-cf-status st-update-notes">{updateState.releaseNotes}</div>
+                </div>
+              )}
+              <div className="st-cf-actions">
+                <button
+                  type="button"
+                  className="st-btn-save"
+                  onClick={() => void handleCheckForUpdates()}
+                  disabled={status === 'checking' || status === 'downloading'}
+                >
+                  {status === 'checking' ? t('about.checking') : t('about.checkNow')}
+                </button>
+                {(status === 'available' || status === 'error') && (
+                  <button type="button" className="st-btn-cancel" onClick={() => void handleDownloadUpdate()}>
+                    {t('about.download')}
+                  </button>
+                )}
+                {status === 'downloaded' && (
+                  <button type="button" className="st-btn-save" onClick={() => void installUpdate()}>
+                    {t('about.install')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="st-btn-cancel"
+                  onClick={() => void window.electronAPI.openExternal(`${GITHUB_REPO_URL}/releases/latest`).catch(() => {})}
+                >
+                  {t('about.viewOnGithub')}
+                </button>
+              </div>
+            </div>
+            <div className="st-toggle-row">
+              <div className="st-toggle-info">
+                <span className="st-toggle-title">{t('about.autoUpdate')}</span>
+                <span className="st-toggle-desc">{t('about.autoUpdateDesc')}</span>
+              </div>
+              <label className="st-switch">
+                <input
+                  type="checkbox"
+                  checked={autoUpdateEnabled}
+                  onChange={e => handleToggleAutoUpdate(e.target.checked)}
+                />
+                <span className="st-slider"></span>
+              </label>
+            </div>
+          </div>
+        )
+      }
     }
   }
 

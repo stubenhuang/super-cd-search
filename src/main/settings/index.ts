@@ -29,6 +29,7 @@ const schema = {
   lanToken: { type: 'string' as const, default: '' },
   barcodeProviders: { type: 'array' as const, default: DEFAULT_BARCODE_PROVIDERS },
   lastExportDirectory: { type: 'string' as const, default: '' },
+  autoUpdateEnabled: { type: 'boolean' as const, default: true },
   llm: {
     type: 'object' as const,
     properties: {
@@ -232,7 +233,8 @@ export function getSettings(): Settings {
     lanHost: store.get('lanHost') as string || undefined,
     lanPort: store.get('lanPort') as number || undefined,
     barcodeProviders: store.get('barcodeProviders') as BarcodeProvider[] || DEFAULT_BARCODE_PROVIDERS,
-    lastExportDirectory: store.get('lastExportDirectory') as string || undefined
+    lastExportDirectory: store.get('lastExportDirectory') as string || undefined,
+    autoUpdateEnabled: store.get('autoUpdateEnabled') !== false
   }
 }
 
@@ -259,7 +261,7 @@ export const PUBLIC_SETTING_KEYS = new Set<keyof Settings>([
   'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
   'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
   'theme', 'language', 'lanEnabled', 'lanHost', 'lanPort',
-  'barcodeProviders', 'lastExportDirectory'
+  'barcodeProviders', 'lastExportDirectory', 'autoUpdateEnabled'
 ])
 
 export function deleteSetting<K extends keyof Settings>(key: K): void {

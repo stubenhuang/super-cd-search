@@ -253,6 +253,11 @@ export interface Settings {
   barcodeProviders?: BarcodeProvider[]
   /** Directory last used for Excel export; preselected next time. */
   lastExportDirectory?: string
+  /**
+   * Check GitHub for a new version on startup and download it in the
+   * background. Defaults to true when unset.
+   */
+  autoUpdateEnabled?: boolean
 }
 
 /**

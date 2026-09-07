@@ -43,6 +43,21 @@ jobs:
           node-version: 20
           cache: npm
 
+      # 应用版本号以 git tag 为准：v1.0.1 -> 1.0.1。必须在 install / build
+      # 之前执行，否则打出来的包仍是 package.json 里的旧版本。
+      - name: Sync package version with tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "Tag '${GITHUB_REF_NAME}' is not a valid version tag (expected vX.Y.Z)" >&2
+            exit 1
+          fi
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          node -e "const v=require('./package.json').version; if (v!=='$VERSION') { console.error('version sync failed: '+v); process.exit(1) }"
+          echo "package version -> $VERSION"
+
       - name: Install dependencies
         # 打包不需要下载 Chromium，跳过以加速并避免失败
         env:
@@ -63,6 +78,16 @@ jobs:
         # --publish=never 关闭 electron-builder 的隐式发布（上传交由下方 softprops 步骤处理）
         run: npm run dist:win -- --publish=never
 
+      # 自动升级依赖 release/latest.yml；确保其中的版本号来自 tag 而不是 package.json。
+      - name: Verify packaged version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          ls -1 release
+          grep -q "version: $VERSION" release/latest.yml
+          echo "latest.yml version -> $VERSION"
+
       - name: Upload Windows artifacts
         uses: softprops/action-gh-release@v2
         with:
@@ -81,6 +106,20 @@ jobs:
         with:
           node-version: 20
           cache: npm
+
+      # 与 Windows 任务保持一致：应用版本号以 git tag 为准。
+      - name: Sync package version with tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "Tag '${GITHUB_REF_NAME}' is not a valid version tag (expected vX.Y.Z)" >&2
+            exit 1
+          fi
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          node -e "const v=require('./package.json').version; if (v!=='$VERSION') { console.error('version sync failed: '+v); process.exit(1) }"
+          echo "package version -> $VERSION"
 
       - name: Install dependencies
         env:
@@ -102,6 +141,15 @@ jobs:
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         # --publish=never 关闭 electron-builder 的隐式发布（上传交由下方 softprops 步骤处理）
         run: npm run dist -- --mac --publish=never
+
+      - name: Verify packaged version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          ls -1 release
+          grep -q "version: $VERSION" release/latest-mac.yml
+          echo "latest-mac.yml version -> $VERSION"
 
       - name: Upload macOS artifacts
         uses: softprops/action-gh-release@v2
