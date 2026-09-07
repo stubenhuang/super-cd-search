@@ -1,6 +1,6 @@
 {
   "name": "super-cd-search",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "An Electron desktop app for batch-querying CD information by catalog number",
   "main": "./out/main/index.js",
   "scripts": {
