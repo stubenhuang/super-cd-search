@@ -117,11 +117,13 @@ npm version patch        # 或 minor / major；会同时更新 package.json 与 
 git push --follow-tags   # 触发 .github/workflows/build-release.yml
 ```
 
-- 工作流会在 push `v*` tag 时构建 macOS（dmg + zip）与 Windows（NSIS 安装包 + portable + zip），上传 Release，并在打包后校验 `latest*.yml` 中的版本号。
+- 工作流会在 push `v*` tag 时构建 macOS（dmg + zip）与 Windows（NSIS 安装包 + portable + zip），上传 Release，并调用 `scripts/verify-release-manifest.mjs` 校验 `latest*.yml`：版本号必须来自 tag，清单里声明的文件名必须在 `release/` 下真实存在。
+- **产物命名不允许出现空格**（统一为 `super-cd-search-<version>...`）：electron-builder 写入 `latest*.yml` 时把空格替换为 `-`，而 GitHub 上传资源时会把空格替换为 `.`，两者不一致会导致 electron-updater 下载 404。
 
 ## 自动更新
 
 - 基于 `electron-updater`，从 GitHub Release 拉取新版本。
+- **v1.0.2 及更早的安装包不支持自动升级**（当时的更新清单文件名与 GitHub 资源名不一致，会 404），请手动下载最新安装包重装一次；v1.0.3 起自动更新可用。
 - 支持自动更新的包：macOS dmg / zip、Windows NSIS 安装包。**Windows 便携版（portable）无法自更新**，请改用安装包版本。
 - 启动约 5 秒后后台检查：发现新版本即自动下载，右下角出现进度卡片；下载完成后点击「重启升级」安装并重启。
 - 设置 → **关于与更新**：显示当前版本、手动「检查更新」、「在 GitHub 查看」以及「自动检查更新」开关（关闭后不再后台检查）。

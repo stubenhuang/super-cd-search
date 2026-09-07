@@ -1002,7 +1002,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   : status === 'downloaded' ? t('about.downloaded', { version: latestVersion })
                     : status === 'error' ? t('about.checkFailed', { error: updateState?.error || t('lan.unknownError') })
                       : status === 'unsupported' ? t('about.unsupported')
-                        : t('about.desc')
+                        : t('about.idle')
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
@@ -1032,7 +1032,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   type="button"
                   className="st-btn-save"
                   onClick={() => void handleCheckForUpdates()}
-                  disabled={status === 'checking' || status === 'downloading'}
+                  disabled={status === 'checking' || status === 'downloading' || status === 'downloaded'}
                 >
                   {status === 'checking' ? t('about.checking') : t('about.checkNow')}
                 </button>
@@ -1049,7 +1049,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 <button
                   type="button"
                   className="st-btn-cancel"
-                  onClick={() => void window.electronAPI.openExternal(`${GITHUB_REPO_URL}/releases/latest`).catch(() => {})}
+                  onClick={() => void window.electronAPI.openExternal(updateState?.releaseUrl || `${GITHUB_REPO_URL}/releases/latest`).catch(() => {})}
                 >
                   {t('about.viewOnGithub')}
                 </button>

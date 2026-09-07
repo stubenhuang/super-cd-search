@@ -78,15 +78,12 @@ jobs:
         # --publish=never 关闭 electron-builder 的隐式发布（上传交由下方 softprops 步骤处理）
         run: npm run dist:win -- --publish=never
 
-      # 自动升级依赖 release/latest.yml；确保其中的版本号来自 tag 而不是 package.json。
-      - name: Verify packaged version
+      # 自动升级依赖 release/latest.yml：校验版本来自 tag，且清单里声明的
+      # 文件名在 release/ 中真实存在（含空格的文件名会被 GitHub 改写，
+      # electron-updater 下载时会 404）。
+      - name: Verify packaged version and update manifest
         shell: bash
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          ls -1 release
-          grep -q "version: $VERSION" release/latest.yml
-          echo "latest.yml version -> $VERSION"
+        run: node scripts/verify-release-manifest.mjs latest.yml "${GITHUB_REF_NAME#v}"
 
       - name: Upload Windows artifacts
         uses: softprops/action-gh-release@v2
@@ -142,14 +139,9 @@ jobs:
         # --publish=never 关闭 electron-builder 的隐式发布（上传交由下方 softprops 步骤处理）
         run: npm run dist -- --mac --publish=never
 
-      - name: Verify packaged version
+      - name: Verify packaged version and update manifest
         shell: bash
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          ls -1 release
-          grep -q "version: $VERSION" release/latest-mac.yml
-          echo "latest-mac.yml version -> $VERSION"
+        run: node scripts/verify-release-manifest.mjs latest-mac.yml "${GITHUB_REF_NAME#v}"
 
       - name: Upload macOS artifacts
         uses: softprops/action-gh-release@v2

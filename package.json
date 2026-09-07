@@ -45,6 +45,7 @@
         "dmg",
         "zip"
       ],
+      "artifactName": "${name}-${version}-${arch}.${ext}",
       "icon": "build/icon.png"
     },
     "win": {
@@ -68,6 +69,7 @@
           ]
         }
       ],
+      "artifactName": "${name}-${version}-win.${ext}",
       "icon": "build/icon.ico"
     },
     "nsis": {
@@ -76,7 +78,7 @@
       "allowElevation": true,
       "allowToChangeInstallationDirectory": false,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "artifactName": "${name}-setup-${version}.${ext}"
     }
   },
   "keywords": [
