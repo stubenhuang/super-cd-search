@@ -5,7 +5,6 @@ import { logger } from '../logger'
 import {
   resolveDiscogsBarcode,
   resolveHmvBarcode,
-  resolveSurugayaBarcode,
   resolveTowerBarcode,
   resolveYahooBarcode
 } from './providers'
@@ -30,8 +29,7 @@ export const barcodeResolvers: Record<BarcodeProvider, BarcodeProviderResolver> 
   discogs: resolveDiscogsBarcode,
   tower: resolveTowerBarcode,
   hmv: resolveHmvBarcode,
-  yahoo: resolveYahooBarcode,
-  surugaya: resolveSurugayaBarcode
+  yahoo: resolveYahooBarcode
 }
 
 export function getConfiguredBarcodeProviders(): BarcodeProvider[] {

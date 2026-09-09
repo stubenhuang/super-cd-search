@@ -6,8 +6,6 @@ const {
   mockGetSetting,
   mockAcquireBrowser,
   mockReleaseBrowser,
-  mockAcquireCloudflare,
-  mockIsChallenge,
   mockCompressHtml,
   mockChat,
   mockQueryTower,
@@ -15,16 +13,12 @@ const {
   mockQueryCdjapan,
   mockQueryKojima,
   mockQueryYahoo,
-  mockQuerySurugaya,
-  mockQueryZenmarket,
   mockGetCachedEnrichment,
   mockCacheEnrichment
 } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockAcquireBrowser: vi.fn(),
   mockReleaseBrowser: vi.fn(),
-  mockAcquireCloudflare: vi.fn(),
-  mockIsChallenge: vi.fn(),
   mockCompressHtml: vi.fn(),
   mockChat: vi.fn(),
   mockQueryTower: vi.fn(),
@@ -32,8 +26,6 @@ const {
   mockQueryCdjapan: vi.fn(),
   mockQueryKojima: vi.fn(),
   mockQueryYahoo: vi.fn(),
-  mockQuerySurugaya: vi.fn(),
-  mockQueryZenmarket: vi.fn(),
   mockGetCachedEnrichment: vi.fn(),
   mockCacheEnrichment: vi.fn()
 }))
@@ -41,10 +33,6 @@ const {
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/browser', () => ({
   browserPool: { acquire: mockAcquireBrowser, release: mockReleaseBrowser }
-}))
-vi.mock('../src/main/cloudflare', () => ({
-  acquireCloudflarePage: mockAcquireCloudflare,
-  isCloudflareChallenge: mockIsChallenge
 }))
 vi.mock('../src/main/parser/readability', () => ({ compressHtml: mockCompressHtml }))
 vi.mock('../src/main/llm/client', () => ({
@@ -59,8 +47,6 @@ vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
 vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
 vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mockQueryKojima }))
 vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
-vi.mock('../src/main/queries/surugaya', () => ({ querySurugaya: mockQuerySurugaya }))
-vi.mock('../src/main/queries/zenmarket', () => ({ queryZenmarket: mockQueryZenmarket }))
 vi.mock('../src/main/queries/cache', () => ({
   getCachedEnrichment: mockGetCachedEnrichment,
   cacheEnrichment: mockCacheEnrichment
@@ -80,9 +66,7 @@ const fullLlmSettings = {
     hmv: true,
     yahoo: true,
     cdjapan: true,
-    tower: true,
-    surugaya: true,
-    zenmarket: true
+    tower: true
   }
 }
 
@@ -110,7 +94,6 @@ function setupBrowserPage() {
   }
   mockAcquireBrowser.mockResolvedValue({ browser: {}, page })
   mockReleaseBrowser.mockResolvedValue(undefined)
-  mockIsChallenge.mockResolvedValue(false)
   return page
 }
 
@@ -134,8 +117,6 @@ beforeEach(() => {
   mockQueryCdjapan.mockResolvedValue(foundResult('cdjapan'))
   mockQueryKojima.mockResolvedValue(foundResult('kojima'))
   mockQueryYahoo.mockResolvedValue(foundResult('yahoo'))
-  mockQuerySurugaya.mockResolvedValue(foundResult('surugaya'))
-  mockQueryZenmarket.mockResolvedValue(foundResult('zenmarket'))
   mockGetCachedEnrichment.mockReturnValue(null)
   mockCacheEnrichment.mockReturnValue(undefined)
 })

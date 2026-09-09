@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Settings, Platform, LoginPlatform, CloudflareSessionStatus, BarcodeProvider, SettingsTransferResult } from './electron-api'
+import type { Settings, Platform, LoginPlatform, LoginSessionStatus, BarcodeProvider, SettingsTransferResult } from './electron-api'
 import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { useI18n } from './i18n'
 import { useUpdateState } from './hooks/useUpdateState'
@@ -11,7 +11,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'cloudflare' | 'backup' | 'about'
+type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'login' | 'backup' | 'about'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const { t } = useI18n()
@@ -34,11 +34,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [llmPlatformYahoo, setLlmPlatformYahoo] = useState(true)
   const [llmPlatformCdjapan, setLlmPlatformCdjapan] = useState(true)
   const [llmPlatformTower, setLlmPlatformTower] = useState(true)
-  const [llmPlatformSurugaya, setLlmPlatformSurugaya] = useState(true)
-  const [llmPlatformZenmarket, setLlmPlatformZenmarket] = useState(true)
-  const [loginStatus, setLoginStatus] = useState<Record<LoginPlatform, CloudflareSessionStatus>>({
-    surugaya: { state: 'not_started' },
-    zenmarket: { state: 'not_started' },
+  const [loginStatus, setLoginStatus] = useState<Record<LoginPlatform, LoginSessionStatus>>({
     xianyu: { state: 'not_started' },
     taobao: { state: 'not_started' }
   })
@@ -63,32 +59,27 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   }, [isOpen])
 
   const refreshLoginStatus = useCallback(async () => {
-    const [surugaya, zenmarket, xianyu, taobao] = await Promise.all([
-      window.electronAPI.getCloudflareStatus('surugaya'),
-      window.electronAPI.getCloudflareStatus('zenmarket'),
-      window.electronAPI.getCloudflareStatus('xianyu'),
-      window.electronAPI.getCloudflareStatus('taobao')
+    const [xianyu, taobao] = await Promise.all([
+      window.electronAPI.getLoginStatus('xianyu'),
+      window.electronAPI.getLoginStatus('taobao')
     ])
-    setLoginStatus({ surugaya, zenmarket, xianyu, taobao })
+    setLoginStatus({ xianyu, taobao })
   }, [])
 
-  const handleLoginChallenge = async (platform: LoginPlatform) => {
+  const handleLogin = async (platform: LoginPlatform) => {
     setLoginBusy(prev => ({ ...prev, [platform]: true }))
     try {
-      const result = await window.electronAPI.startCloudflareChallenge(platform)
-      const isChannel = platform === 'xianyu' || platform === 'taobao'
+      const result = await window.electronAPI.startLogin(platform)
       if (result.status === 'done') {
-        setToast({ kind: 'success', text: isChannel ? t('channels.toastSuccess') : t('cloudflare.toastSuccess') })
+        setToast({ kind: 'success', text: t('channels.toastSuccess') })
       } else if (result.status === 'cancelled') {
-        setToast({ kind: 'success', text: isChannel ? t('channels.toastCancelled') : t('cloudflare.toastCancelled') })
+        setToast({ kind: 'success', text: t('channels.toastCancelled') })
       } else {
-        setToast({ kind: 'error', text: isChannel
-          ? t('channels.toastFailed', { error: result.error || t('cloudflare.unknownError') })
-          : t('cloudflare.toastFailed', { error: result.error || t('cloudflare.unknownError') }) })
+        setToast({ kind: 'error', text: t('channels.toastFailed', { error: result.error || t('login.unknownError') }) })
       }
       setTimeout(() => setToast(null), 4000)
     } catch {
-      setToast({ kind: 'error', text: t('cloudflare.toastFailedUnknown') })
+      setToast({ kind: 'error', text: t('login.toastFailedUnknown') })
       setTimeout(() => setToast(null), 4000)
     } finally {
       setLoginBusy(prev => ({ ...prev, [platform]: false }))
@@ -96,8 +87,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     }
   }
 
-  const handleCloseCloudflare = async () => {
-    await window.electronAPI.closeCloudflareSession()
+  const handleCloseLogin = async () => {
+    await window.electronAPI.closeLoginSession()
     void refreshLoginStatus()
   }
 
@@ -132,8 +123,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setLlmPlatformYahoo(llm?.platformEnabled?.yahoo ?? true)
     setLlmPlatformCdjapan(llm?.platformEnabled?.cdjapan ?? true)
     setLlmPlatformTower(llm?.platformEnabled?.tower ?? true)
-    setLlmPlatformSurugaya(llm?.platformEnabled?.surugaya ?? true)
-    setLlmPlatformZenmarket(llm?.platformEnabled?.zenmarket ?? true)
     void refreshLoginStatus()
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
@@ -219,9 +208,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             hmv: llmPlatformHmv,
             yahoo: llmPlatformYahoo,
             cdjapan: llmPlatformCdjapan,
-            tower: llmPlatformTower,
-            surugaya: llmPlatformSurugaya,
-            zenmarket: llmPlatformZenmarket
+            tower: llmPlatformTower
           }
         }
       })
@@ -296,7 +283,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             title={verified ? t('sources.channelVerified') : t('sources.channelNotVerified')}
             onClick={e => {
               e.preventDefault()
-              setActiveSection('cloudflare')
+              setActiveSection('login')
             }}
           >
             {verified ? t('sources.channelVerified') : t('sources.channelNotVerified')}
@@ -314,7 +301,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     { key: 'barcode', icon: '▣', label: t('nav.barcodeProviders') },
     { key: 'sources', icon: '◎', label: t('nav.sources') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
-    { key: 'cloudflare', icon: '◈', label: t('nav.cloudflare') },
+    { key: 'login', icon: '◈', label: t('nav.login') },
     { key: 'backup', icon: '⇅', label: t('nav.backup') },
     { key: 'about', icon: '⟳', label: t('nav.about') }
   ]
@@ -489,9 +476,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     <span className="st-provider-order">{index + 1}</span>
                     <div className="st-provider-info">
                       <span className="st-provider-name">{BARCODE_PROVIDER_LABELS[provider]}</span>
-                      {provider === 'surugaya' && loginStatus.surugaya.state !== 'verified' && (
-                        <span className="st-provider-hint">{t('lan.surugayaHint')}</span>
-                      )}
                     </div>
                     <div className="st-provider-actions">
                       <button
@@ -726,60 +710,38 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   <span className="st-check-box"></span>
                   <span className="st-check-name">Tower</span>
                 </label>
-                <label className={`st-check-item ${llmPlatformSurugaya ? 'checked' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={llmPlatformSurugaya}
-                    onChange={e => setLlmPlatformSurugaya(e.target.checked)}
-                    disabled={!llmEnabled}
-                  />
-                  <span className="st-check-box"></span>
-                  <span className="st-check-name">Suruga-ya</span>
-                </label>
-                <label className={`st-check-item ${llmPlatformZenmarket ? 'checked' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={llmPlatformZenmarket}
-                    onChange={e => setLlmPlatformZenmarket(e.target.checked)}
-                    disabled={!llmEnabled}
-                  />
-                  <span className="st-check-box"></span>
-                  <span className="st-check-name">ZenMarket</span>
-                </label>
               </div>
             </div>
           </div>
         )
 
-      case 'cloudflare':
+      case 'login':
         return (
           <div className="st-section-content">
             <div className="st-section-desc">
-              {t('cloudflare.desc')}
+              {t('login.desc')}
             </div>
             <div className="st-field-group">
               <div className="st-field-group-title">
-                <span className="st-icon">◈</span> {t('cloudflare.status')}
+                <span className="st-icon">◈</span> {t('login.status')}
               </div>
               {([
-                { platform: 'surugaya' as const, label: 'Suruga-ya', kind: 'cloudflare' },
-                { platform: 'zenmarket' as const, label: 'ZenMarket', kind: 'cloudflare' },
-                { platform: 'xianyu' as const, label: t('channels.xianyu'), kind: 'channel' },
-                { platform: 'taobao' as const, label: t('channels.taobao'), kind: 'channel' }
+                { platform: 'xianyu' as const, label: t('channels.xianyu') },
+                { platform: 'taobao' as const, label: t('channels.taobao') }
               ] as const).map(row => {
                 const busy = !!loginBusy[row.platform]
                 const status = loginStatus[row.platform]
                 const statusText = busy
-                  ? (row.kind === 'channel' ? t('channels.loggingIn') : t('cloudflare.stateVerifying'))
+                  ? t('channels.loggingIn')
                   : status.state === 'verified'
-                    ? (status.expiresAt ? t('cloudflare.stateVerified', { expires: new Date(status.expiresAt).toLocaleString() }) : t('cloudflare.stateVerifiedShort'))
+                    ? (status.expiresAt ? t('login.stateVerified', { expires: new Date(status.expiresAt).toLocaleString() }) : t('login.stateVerifiedShort'))
                     : status.state === 'expired'
-                      ? t('cloudflare.stateExpired')
+                      ? t('login.stateExpired')
                       : status.state === 'unverified'
-                        ? t('cloudflare.stateUnverified')
+                        ? t('login.stateUnverified')
                         : status.state === 'starting'
-                          ? t('cloudflare.stateStarting')
-                          : t('cloudflare.stateNotStarted')
+                          ? t('login.stateStarting')
+                          : t('login.stateNotStarted')
                 return (
                   <div key={row.platform} className="st-field">
                     <label className="st-label">
@@ -790,24 +752,22 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                       <button
                         type="button"
                         className="st-btn-save"
-                        onClick={() => void handleLoginChallenge(row.platform)}
+                        onClick={() => void handleLogin(row.platform)}
                         disabled={busy}
                       >
-                        {busy
-                          ? (row.kind === 'channel' ? t('channels.loggingIn') : t('cloudflare.verifying'))
-                          : (row.kind === 'channel' ? t('channels.login') : t('cloudflare.verify'))}
+                        {busy ? t('channels.loggingIn') : t('channels.login')}
                       </button>
                     </div>
                   </div>
                 )
               })}
               <div className="st-cf-actions" style={{ marginTop: '14px' }}>
-                <button type="button" className="st-btn-cancel" onClick={() => void handleCloseCloudflare()}>
-                  {t('cloudflare.closeSession')}
+                <button type="button" className="st-btn-cancel" onClick={() => void handleCloseLogin()}>
+                  {t('login.closeSession')}
                 </button>
               </div>
               <div className="st-section-desc" style={{ marginTop: '12px' }}>
-                {t('cloudflare.hint')}
+                {t('login.hint')}
               </div>
             </div>
           </div>

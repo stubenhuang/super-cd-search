@@ -4,14 +4,14 @@ import { registerSettingsIpc } from './ipc/settings'
 import { registerOrchestratorIpc } from './ipc/orchestrator'
 import { registerImageIpc } from './ipc/image'
 import { registerCurrencyIpc } from './ipc/currency'
-import { registerCloudflareIpc } from './ipc/cloudflare'
+import { registerLoginIpc } from './ipc/login'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
 import { registerLibraryIpc } from './ipc/library'
 import { registerUpdaterIpc } from './ipc/updater'
 import { initUpdater, disposeUpdater } from './updater'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
-import { initCloudflareChrome, closeCloudflareChrome } from './cloudflare'
+import { initLoginSession, closeLoginSession } from './login'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
 import { registerLanIpc } from './ipc/lan'
@@ -100,7 +100,7 @@ app.whenReady().then(async () => {
 
   initCachePersistence(app.getPath('userData'))
   initCDLibrary(app.getPath('userData'))
-  initCloudflareChrome(app.getPath('userData'))
+  initLoginSession(app.getPath('userData'))
   prewarmExchangeRates()
   registerSettingsIpc()
   registerOrchestratorIpc()
@@ -111,7 +111,7 @@ app.whenReady().then(async () => {
   registerThrottleIpc()
   registerLanIpc()
   registerCurrencyIpc()
-  registerCloudflareIpc()
+  registerLoginIpc()
   registerUpdaterIpc()
 
   // Register shell.openExternal handler
@@ -162,7 +162,7 @@ app.on('window-all-closed', () => {
   logger.debug('main', 'all windows closed, tearing down browser/session resources')
   browserPool.closeAll()
   destroyProxyAgents()
-  void closeCloudflareChrome()
+  void closeLoginSession()
   if (process.platform !== 'darwin') {
     app.quit()
   }

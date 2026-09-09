@@ -10,8 +10,6 @@ const PLATFORM_NAMES: Record<Platform, string> = {
   yahoo: 'Yahoo Shopping Japan',
   cdjapan: 'CDJapan',
   tower: 'Tower Records Japan',
-  surugaya: 'Suruga-ya',
-  zenmarket: 'ZenMarket',
   xianyu: 'Xianyu',
   taobao: 'Taobao'
 }

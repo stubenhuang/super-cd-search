@@ -74,11 +74,11 @@ vi.mock('../src/main/settings/backup', () => ({
   importSettingsBackup: mockImportSettingsBackup
 }))
 
-vi.mock('../src/main/cloudflare', () => ({
-  startCloudflareChallenge: mockStartChallenge,
-  cancelCloudflareChallenge: mockCancelChallenge,
-  getCloudflareStatus: mockGetStatus,
-  closeCloudflareChrome: mockCloseChrome
+vi.mock('../src/main/login', () => ({
+  startLogin: mockStartChallenge,
+  cancelLogin: mockCancelChallenge,
+  getLoginStatus: mockGetStatus,
+  closeLoginSession: mockCloseChrome
 }))
 
 vi.mock('../src/main/orchestrator', () => ({
@@ -124,7 +124,7 @@ import { registerSettingsIpc } from '../src/main/ipc/settings'
 import { registerOrchestratorIpc } from '../src/main/ipc/orchestrator'
 import { registerImageIpc } from '../src/main/ipc/image'
 import { registerCurrencyIpc } from '../src/main/ipc/currency'
-import { registerCloudflareIpc } from '../src/main/ipc/cloudflare'
+import { registerLoginIpc } from '../src/main/ipc/login'
 import { registerEnrichmentIpc } from '../src/main/ipc/enrich'
 import { registerLoggingIpc } from '../src/main/ipc/log'
 import { registerLanIpc } from '../src/main/ipc/lan'
@@ -267,27 +267,27 @@ describe('registerCurrencyIpc', () => {
   })
 })
 
-describe('registerCloudflareIpc', () => {
-  it('registers the challenge lifecycle handlers', async () => {
+describe('registerLoginIpc', () => {
+  it('registers the login lifecycle handlers', async () => {
     mockStartChallenge.mockResolvedValue({ status: 'done' })
     mockGetStatus.mockResolvedValue({ state: 'verified', expiresAt: 123 })
     mockCloseChrome.mockResolvedValue(undefined)
     mockCancelChallenge.mockReturnValue(undefined)
 
-    registerCloudflareIpc()
+    registerLoginIpc()
 
-    expect(await handler('cloudflare:startChallenge')(null, 'surugaya')).toEqual({ status: 'done' })
-    expect(mockStartChallenge).toHaveBeenCalledWith('surugaya')
+    expect(await handler('login:start')(null, 'xianyu')).toEqual({ status: 'done' })
+    expect(mockStartChallenge).toHaveBeenCalledWith('xianyu')
 
-    expect(await handler('cloudflare:getStatus')(null, 'surugaya')).toEqual({
+    expect(await handler('login:status')(null, 'xianyu')).toEqual({
       state: 'verified',
       expiresAt: 123
     })
 
-    await handler('cloudflare:close')()
+    await handler('login:close')()
     expect(mockCloseChrome).toHaveBeenCalled()
 
-    await handler('cloudflare:cancelChallenge')()
+    await handler('login:cancel')()
     expect(mockCancelChallenge).toHaveBeenCalled()
   })
 })

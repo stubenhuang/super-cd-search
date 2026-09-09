@@ -2,8 +2,8 @@ import { writeFile, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { ElementHandle, Page } from 'puppeteer'
-import { acquireCloudflarePage } from '../cloudflare'
-import { LOGIN_DEFS, checkLoginState } from '../cloudflare/login'
+import { acquireLoginPage } from '../login'
+import { LOGIN_DEFS, checkLoginState } from '../login/defs'
 import type { QueryResult } from './types'
 import { notFound, queryError, loginRequired, parseCNYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
@@ -285,7 +285,7 @@ async function queryTaobaoImageWeb(
 ): Promise<QueryResult> {
   throwIfAborted(signal)
   // Headless session: the marketplace scrape needs no visible window.
-  const acquired = await acquireCloudflarePage('headless')
+  const acquired = await acquireLoginPage('headless')
   if (!acquired) {
     logger.debug('queries.taobao', 'real-Chrome session unavailable', { catalogNumber })
     return loginRequired('taobao')

@@ -35,28 +35,8 @@ export function queryError(platform: Platform, message: string): QueryResult {
 }
 
 /**
- * A distinct "needs verification" result for Cloudflare-protected platforms:
- * the scrape hit a challenge page or no verified session is available. Unlike a
- * plain error it is not a transient network failure, so the UI can point the
- * user at the verification flow.
- */
-export function cloudflareChallenge(platform: Platform): QueryResult {
-  return {
-    platform,
-    name: null,
-    artist: null,
-    priceMin: null,
-    priceMax: null,
-    coverUrl: null,
-    link: null,
-    status: 'challenge',
-    error: 'Cloudflare 验证未完成或已失效，请在设置中完成验证'
-  }
-}
-
-/**
- * Marketplace channels (xianyu/taobao) surface the same 'challenge' status
- * when their QR login is missing or expired; the message points at settings.
+ * Marketplace channels (xianyu/taobao) surface a 'challenge' status when their
+ * QR login is missing or expired; the message points at settings.
  */
 export function loginRequired(platform: Platform): QueryResult {
   return {

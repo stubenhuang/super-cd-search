@@ -13,9 +13,7 @@ const baseSettings = {
     hmv: true,
     yahoo: true,
     cdjapan: true,
-    tower: true,
-    surugaya: true,
-    zenmarket: true
+    tower: true
   }
 }
 

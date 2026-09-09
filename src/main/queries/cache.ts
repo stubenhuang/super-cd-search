@@ -132,7 +132,7 @@ export function getCachedQueryResult(platform: Platform, catalogNumber: string, 
 /** Store a successful query result (found / not_found) for later reuse. */
 export function cacheQueryResult(catalogNumber: string, result: QueryResult, context = 'default'): void {
   // Errors and challenge results are never cached, so a transient failure or an
-  // expired Cloudflare session is retried on the next run.
+  // expired login session is retried on the next run.
   if (result.status === 'error' || result.status === 'challenge') {
     logger.debug('cache', 'not caching transient result', { platform: result.platform, catalogNumber: catalogNumber.toUpperCase(), status: result.status })
     return

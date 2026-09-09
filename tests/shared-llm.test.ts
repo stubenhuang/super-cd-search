@@ -15,9 +15,7 @@ function llmSettings(overrides: Partial<LLMSettings> = {}): LLMSettings {
       hmv: true,
       yahoo: true,
       cdjapan: true,
-      tower: true,
-      surugaya: true,
-      zenmarket: true
+      tower: true
     },
     ...overrides
   }

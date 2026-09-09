@@ -63,7 +63,7 @@ async function filterVerifiedChannels(platforms: Platform[]): Promise<Platform[]
   const channels = platforms.filter((p): p is LoginPlatform => CHANNEL_PLATFORMS.includes(p))
   if (channels.length === 0) return platforms
   const statuses = await Promise.all(
-    channels.map(p => window.electronAPI.getCloudflareStatus(p).catch(() => null))
+    channels.map(p => window.electronAPI.getLoginStatus(p).catch(() => null))
   )
   const verified = channels.filter((_, i) => statuses[i]?.state === 'verified')
   const skipped = channels.filter((_, i) => statuses[i]?.state !== 'verified')

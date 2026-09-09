@@ -3,13 +3,12 @@ import type { LoginPlatform } from '../../shared/types'
 /**
  * Per-platform login definitions for the shared real-Chrome window.
  *
- * Cloudflare-protected platforms verify via the cf_clearance cookie set after
- * the challenge; the marketplace channels (taobao/xianyu) verify via the
- * Taobao SSO user cookies (`unb` is the member id, `tracknick` the nickname)
- * that only exist after a successful QR-code login.
+ * The marketplace channels (taobao/xianyu) verify via the Taobao SSO user
+ * cookies (`unb` is the member id, `tracknick` the nickname) that only exist
+ * after a successful QR-code login.
  */
 export interface LoginDefinition {
-  /** Page opened when the user starts a login/verification flow. */
+  /** Page opened when the user starts a login flow. */
   loginUrl: string
   /**
    * URL whose cookie jar scope the platform's login cookies live in. Cookie
@@ -25,18 +24,6 @@ export interface LoginDefinition {
 }
 
 export const LOGIN_DEFS: Record<LoginPlatform, LoginDefinition> = {
-  surugaya: {
-    loginUrl: 'https://www.suruga-ya.jp/',
-    cookieUrl: 'https://www.suruga-ya.jp/',
-    domainSuffix: 'suruga-ya.jp',
-    cookieNames: ['cf_clearance']
-  },
-  zenmarket: {
-    loginUrl: 'https://zenmarket.jp/',
-    cookieUrl: 'https://zenmarket.jp/',
-    domainSuffix: 'zenmarket.jp',
-    cookieNames: ['cf_clearance']
-  },
   taobao: {
     loginUrl: 'https://login.taobao.com/member/login.jhtml',
     cookieUrl: 'https://www.taobao.com/',
@@ -49,10 +36,6 @@ export const LOGIN_DEFS: Record<LoginPlatform, LoginDefinition> = {
     domainSuffix: 'goofish.com',
     cookieNames: ['unb']
   }
-}
-
-export function isCloudflareLoginPlatform(platform: LoginPlatform): boolean {
-  return platform === 'surugaya' || platform === 'zenmarket'
 }
 
 /** Minimal structural shape of a Puppeteer cookie, for pure testing. */

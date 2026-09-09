@@ -1,29 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockGetSetting, mockBrowserPool, mockQueryDiscogsByBarcode, mockWait, mockCloudflareStatus, mockAcquireCloudflarePage, mockIsCloudflareChallenge } = vi.hoisted(() => ({
+const { mockGetSetting, mockBrowserPool, mockQueryDiscogsByBarcode, mockWait } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockBrowserPool: { acquire: vi.fn(), release: vi.fn() },
   mockQueryDiscogsByBarcode: vi.fn(),
-  mockWait: vi.fn(),
-  mockCloudflareStatus: vi.fn(),
-  mockAcquireCloudflarePage: vi.fn(),
-  mockIsCloudflareChallenge: vi.fn()
+  mockWait: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/queries/discogs', () => ({ queryDiscogsByBarcode: mockQueryDiscogsByBarcode }))
 vi.mock('../src/main/queries/wait', () => ({ waitForResultOrNoResult: mockWait }))
-vi.mock('../src/main/cloudflare', () => ({
-  acquireCloudflarePage: mockAcquireCloudflarePage,
-  getCloudflareStatus: mockCloudflareStatus,
-  isCloudflareChallenge: mockIsCloudflareChallenge
-}))
 
 import {
   resolveDiscogsBarcode,
   resolveHmvBarcode,
-  resolveSurugayaBarcode,
   resolveTowerBarcode,
   resolveYahooBarcode
 } from '../src/main/barcode/providers'
@@ -154,36 +145,6 @@ describe('barcode provider wrappers', () => {
     })
   })
 
-  it('resolveSurugayaBarcode skips unless the Cloudflare session is verified', async () => {
-    mockCloudflareStatus.mockResolvedValue({ state: 'unverified' })
-    expect(await resolveSurugayaBarcode('4943674029365')).toMatchObject({ status: 'skipped' })
-    expect(mockAcquireCloudflarePage).not.toHaveBeenCalled()
-  })
-
-  it('resolveSurugayaBarcode returns a candidate when verified and the spec matches', async () => {
-    mockCloudflareStatus.mockResolvedValue({ state: 'verified' })
-    mockIsCloudflareChallenge.mockResolvedValue(false)
-
-    const page = makePage()
-    page.evaluate.mockImplementation(async (fn: unknown) => {
-      const source = String(fn)
-      if (source.includes('/product/detail/')) {
-        return { title: 'Luminosa', link: '/product/detail/230025530' }
-      }
-      if (source.includes('document.body.innerText')) {
-        return 'JAN 4943674029365\n品番 WPCS-11100'
-      }
-      if (source.includes('h1')) return 'ルミノーサ～聖なる光/リベラ'
-      return undefined
-    })
-    mockAcquireCloudflarePage.mockResolvedValue({ page, release: vi.fn() })
-
-    expect(await resolveSurugayaBarcode('4943674029365')).toMatchObject({
-      status: 'found',
-      candidate: { catalogNumber: 'WPCS-11100', source: 'surugaya', confidence: 'high' }
-    })
-  })
-
   it('resolveTowerBarcode falls back to a low-confidence search-card candidate when the detail page fails', async () => {
     const page = makePage()
     mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page })
@@ -270,31 +231,4 @@ describe('barcode provider wrappers', () => {
     })
   })
 
-  it('resolveSurugayaBarcode skips when the verified session cannot be acquired', async () => {
-    mockCloudflareStatus.mockResolvedValue({ state: 'verified' })
-    mockAcquireCloudflarePage.mockResolvedValue(null)
-
-    expect(await resolveSurugayaBarcode('4943674029365')).toMatchObject({ status: 'skipped' })
-  })
-
-  it('resolveSurugayaBarcode skips when Cloudflare challenges the search page', async () => {
-    mockCloudflareStatus.mockResolvedValue({ state: 'verified' })
-    mockIsCloudflareChallenge.mockResolvedValue(true)
-    mockAcquireCloudflarePage.mockResolvedValue({ page: makePage(), release: vi.fn() })
-
-    expect(await resolveSurugayaBarcode('4943674029365')).toMatchObject({ status: 'skipped' })
-  })
-
-  it('resolveSurugayaBarcode returns not_found when the search page has no product', async () => {
-    mockCloudflareStatus.mockResolvedValue({ state: 'verified' })
-    mockIsCloudflareChallenge.mockResolvedValue(false)
-    const page = makePage()
-    page.evaluate.mockImplementation(async (fn: unknown) => {
-      if (String(fn).includes('/product/detail/')) return null
-      return undefined
-    })
-    mockAcquireCloudflarePage.mockResolvedValue({ page, release: vi.fn() })
-
-    expect(await resolveSurugayaBarcode('4943674029365')).toEqual({ status: 'not_found' })
-  })
 })

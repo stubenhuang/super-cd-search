@@ -3,7 +3,7 @@ import { BrowserWindow } from 'electron'
 
 const {
   mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQueryYahoo,
-  mockQueryCdjapan, mockQueryTower, mockQuerySurugaya, mockQueryZenmarket,
+  mockQueryCdjapan, mockQueryTower,
   mockQueryXianyu, mockQueryTaobaoImage, mockGetEmbeddedLibraryImage, mockDownloadImage
 } = vi.hoisted(() => ({
   mockQueryDiscogs: vi.fn(),
@@ -13,8 +13,6 @@ const {
   mockQueryYahoo: vi.fn(),
   mockQueryCdjapan: vi.fn(),
   mockQueryTower: vi.fn(),
-  mockQuerySurugaya: vi.fn(),
-  mockQueryZenmarket: vi.fn(),
   mockQueryXianyu: vi.fn(),
   mockQueryTaobaoImage: vi.fn(),
   mockGetEmbeddedLibraryImage: vi.fn(),
@@ -28,8 +26,6 @@ vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
 vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
 vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
 vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
-vi.mock('../src/main/queries/surugaya', () => ({ querySurugaya: mockQuerySurugaya }))
-vi.mock('../src/main/queries/zenmarket', () => ({ queryZenmarket: mockQueryZenmarket }))
 vi.mock('../src/main/queries/xianyu', () => ({ queryXianyu: mockQueryXianyu }))
 vi.mock('../src/main/queries/taobao', () => ({ queryTaobaoImage: mockQueryTaobaoImage }))
 vi.mock('../src/main/library', () => ({ getEmbeddedLibraryImage: mockGetEmbeddedLibraryImage }))
@@ -67,8 +63,6 @@ beforeEach(() => {
   mockQueryYahoo.mockResolvedValue(found('yahoo'))
   mockQueryCdjapan.mockResolvedValue(found('cdjapan'))
   mockQueryTower.mockResolvedValue(found('tower'))
-  mockQuerySurugaya.mockResolvedValue(found('surugaya'))
-  mockQueryZenmarket.mockResolvedValue(found('zenmarket'))
   mockQueryXianyu.mockResolvedValue(found('xianyu'))
   mockQueryTaobaoImage.mockResolvedValue(found('taobao'))
   mockGetEmbeddedLibraryImage.mockReturnValue({ buffer: Buffer.from('cover'), mimeType: 'image/jpeg' })
@@ -84,7 +78,7 @@ describe('executeBatchQuery', () => {
     const results = await executeBatchQuery(['uccg90530', 'UICD-6234'])
 
     expect(results.map(r => r.catalogNumber)).toEqual(['UCCG-90530', 'UICD-6234'])
-    expect(results[0].results).toHaveLength(9)
+    expect(results[0].results).toHaveLength(7)
     expect(mockQueryDiscogs).toHaveBeenCalledWith('UCCG-90530', expect.anything())
     expect(mockQueryEbay).toHaveBeenCalledWith('UCCG-90530', expect.anything())
     expect(mockQueryKojima).toHaveBeenCalledWith('UCCG-90530', expect.anything())
@@ -92,8 +86,6 @@ describe('executeBatchQuery', () => {
     expect(mockQueryYahoo).toHaveBeenCalledWith('UCCG-90530', expect.anything())
     expect(mockQueryCdjapan).toHaveBeenCalledWith('UCCG-90530', expect.anything())
     expect(mockQueryTower).toHaveBeenCalledWith('UCCG-90530', expect.anything())
-    expect(mockQuerySurugaya).toHaveBeenCalledWith('UCCG-90530', expect.anything())
-    expect(mockQueryZenmarket).toHaveBeenCalledWith('UCCG-90530', expect.anything())
 
     // Progress events are emitted per platform
     const events = sendMock.mock.calls.map(([channel, data]) => ({ channel, event: data.event }))
@@ -126,14 +118,12 @@ describe('executeBatchQuery', () => {
     mockQueryYahoo.mockImplementation(async () => { called.push('yahoo'); return found('yahoo') })
     mockQueryCdjapan.mockImplementation(async () => { called.push('cdjapan'); return found('cdjapan') })
     mockQueryTower.mockImplementation(async () => { called.push('tower'); return found('tower') })
-    mockQuerySurugaya.mockImplementation(async () => { called.push('surugaya'); return found('surugaya') })
-    mockQueryZenmarket.mockImplementation(async () => { called.push('zenmarket'); return found('zenmarket') })
 
     const results = await executeBatchQuery(['X-1'])
 
     // Fast platforms must not wait for the slow one.
-    expect(called).toEqual(['ebay', 'kojima', 'hmv', 'yahoo', 'cdjapan', 'tower', 'surugaya', 'zenmarket', 'discogs'])
-    expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'ebay', 'kojima', 'hmv', 'yahoo', 'cdjapan', 'tower', 'surugaya', 'zenmarket'])
+    expect(called).toEqual(['ebay', 'kojima', 'hmv', 'yahoo', 'cdjapan', 'tower', 'discogs'])
+    expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'ebay', 'kojima', 'hmv', 'yahoo', 'cdjapan', 'tower'])
   })
 
   it('throws when no catalog numbers are provided', async () => {
@@ -158,7 +148,7 @@ describe('executeBatchQuery', () => {
     const results = await executeBatchQuery(['X-1'])
     const ebayResult = results[0].results.find(r => r.platform === 'ebay')
     expect(ebayResult).toMatchObject({ status: 'error', error: 'eBay is down' })
-    expect(results[0].results).toHaveLength(9)
+    expect(results[0].results).toHaveLength(7)
   })
 
   it('runs the taobao image search after the text platforms with the library cover', async () => {

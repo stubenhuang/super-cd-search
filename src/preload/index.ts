@@ -5,10 +5,9 @@ import type {
   ThrottleStatus,
   Platform,
   DisplayCurrency,
-  CloudflarePlatform,
   LoginPlatform,
-  CloudflareChallengeResult,
-  CloudflareSessionStatus,
+  LoginResult,
+  LoginSessionStatus,
   DetailEnrichmentResult,
   ExportFileResult,
   QueryResult,
@@ -132,14 +131,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),
-  startCloudflareChallenge: (platform: LoginPlatform): Promise<CloudflareChallengeResult> =>
-    ipcRenderer.invoke('cloudflare:startChallenge', platform),
-  cancelCloudflareChallenge: (): Promise<void> =>
-    ipcRenderer.invoke('cloudflare:cancelChallenge'),
-  getCloudflareStatus: (platform: LoginPlatform): Promise<CloudflareSessionStatus> =>
-    ipcRenderer.invoke('cloudflare:getStatus', platform),
-  closeCloudflareSession: (): Promise<void> =>
-    ipcRenderer.invoke('cloudflare:close'),
+  startLogin: (platform: LoginPlatform): Promise<LoginResult> =>
+    ipcRenderer.invoke('login:start', platform),
+  cancelLogin: (): Promise<void> =>
+    ipcRenderer.invoke('login:cancel'),
+  getLoginStatus: (platform: LoginPlatform): Promise<LoginSessionStatus> =>
+    ipcRenderer.invoke('login:status', platform),
+  closeLoginSession: (): Promise<void> =>
+    ipcRenderer.invoke('login:close'),
   getLanStatus: (): Promise<LanServerStatus> =>
     ipcRenderer.invoke('lan:getStatus'),
   getLanCandidates: (): Promise<LanCandidate[]> =>

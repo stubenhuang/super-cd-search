@@ -1,5 +1,5 @@
-import { acquireCloudflarePage } from '../cloudflare'
-import { LOGIN_DEFS, checkLoginState } from '../cloudflare/login'
+import { acquireLoginPage } from '../login'
+import { LOGIN_DEFS, checkLoginState } from '../login/defs'
 import type { QueryResult } from './types'
 import { notFound, queryError, loginRequired, parseCNYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
@@ -14,8 +14,7 @@ const GOOFISH_WEB_URL = 'https://www.goofish.com'
  *
  * Requires a QR-code login in the shared real-Chrome window: without the SSO
  * session the channel reports login-required by design (user opt-in, forced
- * login). The cookies live in the Chrome profile, same as the Cloudflare
- * platforms.
+ * login). The cookies live in the shared Chrome profile.
  *
  * goofish.com is a React SPA with frequently-shuffled class names, so the
  * extraction is deliberately defensive: item cards are identified by their
@@ -137,7 +136,7 @@ async function waitForCoverHydration(page: import('puppeteer').Page): Promise<vo
 async function queryXianyuWeb(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
   throwIfAborted(signal)
   // Headless session: the marketplace scrape needs no visible window.
-  const acquired = await acquireCloudflarePage('headless')
+  const acquired = await acquireLoginPage('headless')
   if (!acquired) {
     logger.debug('queries.xianyu', 'real-Chrome session unavailable', { catalogNumber })
     return loginRequired('xianyu')

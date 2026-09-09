@@ -130,9 +130,9 @@ describe('query result cache', () => {
     expect(getCachedQueryResult('ebay', 'X-1')).toBeNull()
   })
 
-  it('never caches Cloudflare challenge results', () => {
+  it('never caches challenge results', () => {
     const challengeResult: QueryResult = {
-      platform: 'zenmarket',
+      platform: 'xianyu',
       name: null,
       artist: null,
       priceMin: null,
@@ -140,10 +140,10 @@ describe('query result cache', () => {
       coverUrl: null,
       link: null,
       status: 'challenge',
-      error: 'Cloudflare 验证未完成'
+      error: '尚未扫码登录或登录已失效'
     }
     cacheQueryResult('X-1', challengeResult)
-    expect(getCachedQueryResult('zenmarket', 'X-1')).toBeNull()
+    expect(getCachedQueryResult('xianyu', 'X-1')).toBeNull()
   })
 })
 

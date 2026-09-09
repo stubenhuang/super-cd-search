@@ -44,9 +44,7 @@ const schema = {
           hmv: { type: 'boolean' as const, default: true },
           yahoo: { type: 'boolean' as const, default: true },
           cdjapan: { type: 'boolean' as const, default: true },
-          tower: { type: 'boolean' as const, default: true },
-          surugaya: { type: 'boolean' as const, default: true },
-          zenmarket: { type: 'boolean' as const, default: true }
+          tower: { type: 'boolean' as const, default: true }
         },
         default: {}
       }

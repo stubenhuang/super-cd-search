@@ -31,8 +31,6 @@
   --yahoo: #7B1FA2;
   --cdjapan: #00897B;
   --tower: #5C6BC0;
-  --surugaya: #43A047;
-  --zenmarket: #D81B60;
   --xianyu: #E8B411;
   --taobao: #FF5000;
 
@@ -104,8 +102,6 @@
   --yahoo: #C08AF0;
   --cdjapan: #4DB6AC;
   --tower: #9FA8DA;
-  --surugaya: #81C784;
-  --zenmarket: #F06292;
   --xianyu: #F5D327;
   --taobao: #FF7A45;
 
@@ -1036,14 +1032,6 @@ html[data-platform='win32'] .app-header {
 
 .platform-card[data-platform="tower"] .brand-bar {
   background: var(--tower);
-}
-
-.platform-card[data-platform="surugaya"] .brand-bar {
-  background: var(--surugaya);
-}
-
-.platform-card[data-platform="zenmarket"] .brand-bar {
-  background: var(--zenmarket);
 }
 
 .platform-card[data-platform="xianyu"] .brand-bar {

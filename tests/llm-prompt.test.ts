@@ -29,8 +29,8 @@ describe('buildDetailFillPrompt', () => {
       yahoo: 'Yahoo Shopping Japan',
       cdjapan: 'CDJapan',
       tower: 'Tower Records Japan',
-      surugaya: 'Suruga-ya',
-      zenmarket: 'ZenMarket'
+      xianyu: 'Xianyu',
+      taobao: 'Taobao'
     }
     for (const [platform, name] of Object.entries(names)) {
       expect(buildDetailFillPrompt(platform as Platform, 'X-1', content, ['label'], known)).toContain(name)

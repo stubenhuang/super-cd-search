@@ -8,10 +8,9 @@ import type {
   BatchQueryProgress,
   BatchQueryResult,
   DisplayCurrency,
-  CloudflarePlatform,
   LoginPlatform,
-  CloudflareChallengeResult,
-  CloudflareSessionStatus,
+  LoginResult,
+  LoginSessionStatus,
   DetailEnrichProgress,
   DetailEnrichProgressStatus,
   DetailEnrichmentResult,
@@ -51,10 +50,9 @@ export type {
   ThrottleStatus,
   BatchQueryResult,
   DisplayCurrency,
-  CloudflarePlatform,
   LoginPlatform,
-  CloudflareChallengeResult,
-  CloudflareSessionStatus,
+  LoginResult,
+  LoginSessionStatus,
   DetailEnrichProgress,
   DetailEnrichProgressStatus,
   DetailEnrichmentResult,
@@ -136,10 +134,10 @@ export interface IElectronAPI {
   setPublishPlatforms: (catalogNumber: string, platforms: PublishPlatform[]) => Promise<void>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
-  startCloudflareChallenge: (platform: LoginPlatform) => Promise<CloudflareChallengeResult>
-  cancelCloudflareChallenge: () => Promise<void>
-  getCloudflareStatus: (platform: LoginPlatform) => Promise<CloudflareSessionStatus>
-  closeCloudflareSession: () => Promise<void>
+  startLogin: (platform: LoginPlatform) => Promise<LoginResult>
+  cancelLogin: () => Promise<void>
+  getLoginStatus: (platform: LoginPlatform) => Promise<LoginSessionStatus>
+  closeLoginSession: () => Promise<void>
   getLanStatus: () => Promise<LanServerStatus>
   getLanCandidates: () => Promise<LanCandidate[]>
   applyLanServer: () => Promise<LanServerStatus>

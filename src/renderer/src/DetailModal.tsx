@@ -12,9 +12,7 @@ const PLATFORM_PRIORITY: Record<string, number> = {
   yahoo: 3,
   ebay: 4,
   cdjapan: 5,
-  tower: 6,
-  surugaya: 7,
-  zenmarket: 8
+  tower: 6
 }
 
 const DETAIL_LABEL_KEYS: Record<keyof CDDetails, 'detail.label' | 'detail.format' | 'detail.country' | 'detail.released' | 'detail.genre'> = {

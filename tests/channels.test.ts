@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Page } from 'puppeteer'
-import { checkLoginState, LOGIN_DEFS, type LoginCookie } from '../src/main/cloudflare/login'
-import { describeBrowserSessionFromUa } from '../src/main/cloudflare/chrome'
+import { checkLoginState, LOGIN_DEFS, type LoginCookie } from '../src/main/login/defs'
+import { describeBrowserSessionFromUa } from '../src/main/login/session'
 import { parseCNYPrice, loginRequired, notFound } from '../src/main/queries/types'
 import { extractCards as extractGoofishCards, queryXianyu } from '../src/main/queries/xianyu'
 import { extractCards as extractTaobaoCards, queryTaobaoImage } from '../src/main/queries/taobao'
 import { SEARCH_PLATFORMS, SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../src/shared/platforms'
 
-const { mockAcquireCloudflarePage } = vi.hoisted(() => ({ mockAcquireCloudflarePage: vi.fn() }))
+const { mockAcquireLoginPage } = vi.hoisted(() => ({ mockAcquireLoginPage: vi.fn() }))
 
-vi.mock('../src/main/cloudflare', () => ({ acquireCloudflarePage: mockAcquireCloudflarePage }))
+vi.mock('../src/main/login', () => ({ acquireLoginPage: mockAcquireLoginPage }))
 
 // Deterministic CNY->USD rate for price-parsing assertions.
 vi.mock('../src/main/currency', () => ({
@@ -61,7 +61,7 @@ describe('checkLoginState', () => {
   })
 
   it('defines login entries for every login platform', () => {
-    for (const platform of ['surugaya', 'zenmarket', 'xianyu', 'taobao'] as const) {
+    for (const platform of ['xianyu', 'taobao'] as const) {
       expect(LOGIN_DEFS[platform].loginUrl).toMatch(/^https:\/\//)
       expect(LOGIN_DEFS[platform].cookieNames.length).toBeGreaterThan(0)
     }
@@ -343,11 +343,11 @@ const loggedInCookies = (domain: string): LoginCookie[] => [cookie({ domain })]
 
 describe('queryXianyu web flow', () => {
   beforeEach(() => {
-    mockAcquireCloudflarePage.mockReset()
+    mockAcquireLoginPage.mockReset()
   })
 
   it('reports login-required when no real-Chrome session exists', async () => {
-    mockAcquireCloudflarePage.mockResolvedValue(null)
+    mockAcquireLoginPage.mockResolvedValue(null)
     const result = await queryXianyu('XY-1')
     expect(result.status).toBe('challenge')
     expect(result.error).toContain('扫码登录')
@@ -356,7 +356,7 @@ describe('queryXianyu web flow', () => {
   it('reports login-required when the goofish session cookie is missing', async () => {
     const release = vi.fn()
     const { page } = fakeChromePage({ cookies: [], html: '<a href="/item?id=1"><div>x ¥1</div></a>' })
-    mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+    mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
     const result = await queryXianyu('XY-2')
     expect(result.status).toBe('challenge')
     expect(release).toHaveBeenCalled()
@@ -371,7 +371,7 @@ describe('queryXianyu web flow', () => {
         <a href="/item?id=222"><div><span>Nirvana Nevermind</span><span>￥1,234</span></div></a>
       `
     })
-    mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+    mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
     const result = await queryXianyu('XY-3')
     expect(result).toMatchObject({
@@ -397,7 +397,7 @@ describe('queryXianyu web flow', () => {
         <a href="/item?id=111"><div><img src="data:image/svg+xml,gray" data-src="//img.alicdn.com/imgextra/a.jpg"><span>Beatles Abbey Road 日版</span><span>¥88.00</span></div></a>
       `
     })
-    mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+    mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
     const result = await queryXianyu('XY-4')
     expect(result).toMatchObject({
@@ -418,7 +418,7 @@ describe('queryXianyu web flow', () => {
       // A wedged navigation: gotoWithAbort is abort-aware, so the 90s deadline
       // stops it instead of leaving the shared page busy indefinitely.
       page.goto.mockImplementation(() => new Promise(() => {}))
-      mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+      mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
       const pending = queryXianyu('XY-TIMEOUT')
       await runWithFakeClock(pending, 1000, 200)
@@ -436,13 +436,13 @@ describe('queryXianyu web flow', () => {
 
 describe('queryTaobaoImage web flow', () => {
   beforeEach(() => {
-    mockAcquireCloudflarePage.mockReset()
+    mockAcquireLoginPage.mockReset()
   })
 
   it('reports login-required when the taobao session cookie is missing', async () => {
     const release = vi.fn()
     const { page } = fakeChromePage({ cookies: [] })
-    mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+    mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
     const result = await queryTaobaoImage('TB-LOGIN', { buffer: Buffer.from('x'), mimeType: 'image/jpeg' })
     expect(result.status).toBe('challenge')
     expect(release).toHaveBeenCalled()
@@ -452,7 +452,7 @@ describe('queryTaobaoImage web flow', () => {
     const release = vi.fn()
     const uploadFile = vi.fn().mockResolvedValue(undefined)
     const { page, buttonHandle } = fakeChromePage({ cookies: loggedInCookies('.taobao.com'), fileInput: { uploadFile } })
-    mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+    mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
     const result = await queryTaobaoImage('TB-FOUND', { buffer: Buffer.from('jpeg-bytes'), mimeType: 'image/jpeg' })
 
@@ -494,7 +494,7 @@ describe('queryTaobaoImage web flow', () => {
       fileInput: { uploadFile }
     })
     browser.waitForTarget.mockResolvedValue(target)
-    mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+    mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
     const result = await queryTaobaoImage('TB-POPUP', { buffer: Buffer.from('jpeg-bytes'), mimeType: 'image/jpeg' })
 
@@ -515,7 +515,7 @@ describe('queryTaobaoImage web flow', () => {
         fileInput: { uploadFile },
         html: '<div id="image-search-upload-button">上传图片</div>'
       })
-      mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+      mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
       const pending = queryTaobaoImage('TB-STUCK', { buffer: Buffer.from('x'), mimeType: 'image/jpeg' })
       await runWithFakeClock(pending)
@@ -541,7 +541,7 @@ describe('queryTaobaoImage web flow', () => {
         fileInput: { uploadFile },
         url: 'https://www.taobao.com/'
       })
-      mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+      mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
       const pending = queryTaobaoImage('TB-NOTAB', { buffer: Buffer.from('x'), mimeType: 'image/jpeg' })
       await runWithFakeClock(pending)
@@ -558,7 +558,7 @@ describe('queryTaobaoImage web flow', () => {
   it('returns a query error when no upload input can be found', async () => {
     const release = vi.fn()
     const { page } = fakeChromePage({ cookies: loggedInCookies('.taobao.com'), waitForSelector: 'error' })
-    mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+    mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
     const result = await queryTaobaoImage('TB-NOINPUT', { buffer: Buffer.from('x'), mimeType: 'image/jpeg' })
     expect(result.status).toBe('error')
     expect(result.error).toContain('图片上传入口')
@@ -576,7 +576,7 @@ describe('queryTaobaoImage web flow', () => {
       // gotoWithAbort stops a cancelled navigation through page.evaluate.
       const stopNavigation = vi.fn().mockResolvedValue(undefined)
       page.evaluate = stopNavigation
-      mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+      mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
       const pending = queryTaobaoImage('TB-TIMEOUT', { buffer: Buffer.from('x'), mimeType: 'image/jpeg' })
       await runWithFakeClock(pending, 1000, 200)
@@ -604,7 +604,7 @@ describe('queryTaobaoImage web flow', () => {
         fileInput: { uploadFile },
         url: 'https://www.taobao.com/'
       })
-      mockAcquireCloudflarePage.mockResolvedValue({ page: page as unknown as Page, release })
+      mockAcquireLoginPage.mockResolvedValue({ page: page as unknown as Page, release })
 
       const pending = queryTaobaoImage('TB-NO-TAB-REGRESSION', { buffer: Buffer.from('x'), mimeType: 'image/jpeg' })
       await runWithFakeClock(pending)

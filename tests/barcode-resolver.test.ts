@@ -23,8 +23,7 @@ function resolversFor(cases: Partial<Record<BarcodeProvider, BarcodeProviderOutc
     discogs: resolver(() => cases.discogs || { status: 'not_found' }),
     tower: resolver(() => cases.tower || { status: 'not_found' }),
     hmv: resolver(() => cases.hmv || { status: 'not_found' }),
-    yahoo: resolver(() => cases.yahoo || { status: 'not_found' }),
-    surugaya: resolver(() => cases.surugaya || { status: 'not_found' })
+    yahoo: resolver(() => cases.yahoo || { status: 'not_found' })
   }
 }
 
@@ -97,7 +96,7 @@ describe('resolveBarcodeCatalog', () => {
     setSetting('barcodeProviders', [])
     expect(getConfiguredBarcodeProviders()).toEqual([])
     deleteSetting('barcodeProviders')
-    expect(getConfiguredBarcodeProviders()).toEqual(['discogs', 'tower', 'hmv', 'yahoo', 'surugaya'])
+    expect(getConfiguredBarcodeProviders()).toEqual(['discogs', 'tower', 'hmv', 'yahoo'])
   })
 
   it('returns an error when every provider is disabled', async () => {
@@ -130,8 +129,7 @@ describe('resolveBarcodeCatalog', () => {
       discogs: spy,
       tower: spy,
       hmv: spy,
-      yahoo: spy,
-      surugaya: spy
+      yahoo: spy
     }
     const resolution = {
       status: 'candidates' as const,

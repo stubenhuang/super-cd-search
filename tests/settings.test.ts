@@ -98,10 +98,10 @@ describe('settings', () => {
   })
 
   it('round-trips the barcode provider order', () => {
-    setSetting('barcodeProviders', ['tower', 'discogs', 'surugaya'])
+    setSetting('barcodeProviders', ['tower', 'discogs', 'yahoo'])
 
-    expect(getSetting('barcodeProviders')).toEqual(['tower', 'discogs', 'surugaya'])
-    expect(getSettings().barcodeProviders).toEqual(['tower', 'discogs', 'surugaya'])
+    expect(getSetting('barcodeProviders')).toEqual(['tower', 'discogs', 'yahoo'])
+    expect(getSettings().barcodeProviders).toEqual(['tower', 'discogs', 'yahoo'])
   })
 
   it('round-trips nested object settings', () => {

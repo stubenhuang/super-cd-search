@@ -4,33 +4,27 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import puppeteer from 'puppeteer-core'
 import type { Browser, Page } from 'puppeteer-core'
-import { isCloudflareChallenge } from './detect'
-import { LOGIN_DEFS, checkLoginState, isCloudflareLoginPlatform } from './login'
+import { LOGIN_DEFS, checkLoginState } from './defs'
 import { findChromeExecutable } from '../browser/chrome-path'
 import { logger } from '../logger'
-import type { LoginPlatform, CloudflareChallengeResult, CloudflareSessionStatus } from '../../shared/types'
+import type { LoginPlatform, LoginResult, LoginSessionStatus } from '../../shared/types'
 
 /**
  * A real Chrome instance driven over the DevTools protocol (CDP).
  *
- * Modern Cloudflare Turnstile flags puppeteer-launched Chromium (even headed,
- * even with the legacy stealth plugin) and loops the challenge forever. A real
- * Chrome launched WITHOUT automation flags has no such markers, so the user can
- * complete the challenge once and the app scrapes through that same browser.
- *
- * The same browser also hosts the QR-code login sessions for the marketplace
- * channels (taobao/xianyu): both sites' cookies coexist in the single profile.
+ * The marketplace channels (taobao/xianyu) need a QR-code login a human must
+ * perform, so the app drives a real Chrome instead of the headless browser
+ * pool. Both sites' cookies coexist in the single profile, so one window
+ * serves every channel.
  */
 
 const POLL_INTERVAL_MS = 500
-const CHALLENGE_TIMEOUT_MS = 5 * 60 * 1000
+const LOGIN_TIMEOUT_MS = 5 * 60 * 1000
 
 /**
- * How the shared Chrome runs. Headless sessions serve automated scraping
- * (marketplace channels) with no visible window at all; headed sessions are
- * needed for anything a human must see or interact with (QR login, Cloudflare
- * challenge) and for the Cloudflare-protected scrapes whose cf_clearance
- * cookie is bound to the headed user agent.
+ * How the shared Chrome runs. Headless sessions serve automated scraping with
+ * no visible window at all; headed sessions are needed for anything a human
+ * must see or interact with (the QR-code login).
  */
 export type ChromeSessionMode = 'headed' | 'headless'
 
@@ -65,7 +59,9 @@ let launching: Promise<Session> | null = null
 let cancelRequested = false
 
 /** Must be called once at startup with the app's userData directory. */
-export function initCloudflareChrome(userDataDir: string): void {
+export function initLoginSession(userDataDir: string): void {
+  // The directory name is kept from the Cloudflare era on purpose: renaming it
+  // would drop the Chrome profile and force every user to log in again.
   profileDir = join(userDataDir, 'cloudflare-chrome')
 }
 
@@ -110,7 +106,7 @@ async function connectWithRetry(port: number): Promise<Browser> {
       await new Promise((r) => setTimeout(r, 500))
     }
   }
-  logger.warn('cloudflare.chrome', 'CDP connect retries exhausted', { port, error: lastError instanceof Error ? lastError.message : String(lastError) })
+  logger.warn('login.session', 'CDP connect retries exhausted', { port, error: lastError instanceof Error ? lastError.message : String(lastError) })
   throw lastError instanceof Error ? lastError : new Error('连接真实 Chrome 失败')
 }
 
@@ -138,7 +134,7 @@ async function reattachToRunningChrome(dir: string): Promise<Session | null> {
     if (!probe.ok) return null
     probeUa = String(((await probe.json()) as Record<string, unknown>)['User-Agent'] ?? '')
   } catch {
-    logger.debug('cloudflare.chrome', 'port file is stale, launching fresh Chrome', { port })
+    logger.debug('login.session', 'port file is stale, launching fresh Chrome', { port })
     return null
   }
 
@@ -149,7 +145,7 @@ async function reattachToRunningChrome(dir: string): Promise<Session | null> {
     })
     const page = await browser.newPage()
     browser.once('disconnected', () => {
-      logger.debug('cloudflare.chrome', 'reattached real Chrome disconnected')
+      logger.debug('login.session', 'reattached real Chrome disconnected')
       if (session?.browser === browser) {
         session = null
       }
@@ -159,10 +155,10 @@ async function reattachToRunningChrome(dir: string): Promise<Session | null> {
     // itself. Recording a reattached headless Chrome as headed left every
     // marketplace page with the raw HeadlessChrome UA, which goofish blocks.
     const { maskedUa, mode } = describeBrowserSessionFromUa(probeUa)
-    logger.debug('cloudflare.chrome', 'reattached to running real Chrome', { port, mode })
+    logger.debug('login.session', 'reattached to running real Chrome', { port, mode })
     return { proc: null, browser, page, lock: Promise.resolve(), mode, maskedUa }
   } catch (err) {
-    logger.debug('cloudflare.chrome', 'reattach connect failed, launching fresh', {
+    logger.debug('login.session', 'reattach connect failed, launching fresh', {
       port,
       error: err instanceof Error ? err.message : String(err)
     })
@@ -182,14 +178,14 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
 
   const chromePath = findChromeExecutable()
   if (!chromePath) {
-    logger.warn('cloudflare.chrome', 'Chrome executable not found')
+    logger.warn('login.session', 'Chrome executable not found')
     throw new Error('未找到 Google Chrome，请先安装（或将 CHROME_PATH 指向 Chrome 可执行文件）')
   }
 
   // Remove the previous session's port file so waitForDevToolsPort never
   // resolves with a dead port before the fresh Chrome writes its own.
   rmSync(join(dir, 'DevToolsActivePort'), { force: true })
-  logger.debug('cloudflare.chrome', 'launching real Chrome', { chromePath, profileDir: dir, mode })
+  logger.debug('login.session', 'launching real Chrome', { chromePath, profileDir: dir, mode })
 
   const proc = spawn(
     chromePath,
@@ -212,7 +208,7 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
   )
 
   const port = await waitForDevToolsPort(dir)
-  logger.debug('cloudflare.chrome', 'connected to real Chrome over CDP', { port })
+  logger.debug('login.session', 'connected to real Chrome over CDP', { port })
   const browser = await connectWithRetry(port)
   const page = await browser.newPage()
   // Headless pages advertise "HeadlessChrome" in their UA; mask it so target
@@ -225,9 +221,9 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
   }
 
   // If the user closes the Chrome window manually, clear the session so the
-  // next search reports "challenge" instead of erroring on a dead connection.
+  // next search reports "login required" instead of erroring on a dead connection.
   proc.once('exit', () => {
-    logger.debug('cloudflare.chrome', 'real Chrome process exited')
+    logger.debug('login.session', 'real Chrome process exited')
     if (session?.proc === proc) {
       session = null
     }
@@ -243,10 +239,9 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
 
 /**
  * Ensure a session in the requested mode. Policy is sticky toward headed: a
- * headless session is restarted headed when an interactive flow (or a
- * Cloudflare-protected scrape) needs one, but a headed session is reused for
- * headless requests — otherwise concurrent platform queries would thrash
- * Chrome between modes mid-batch.
+ * headless session is restarted headed when an interactive flow needs one, but
+ * a headed session is reused for headless requests — otherwise concurrent
+ * platform queries would thrash Chrome between modes mid-batch.
  */
 async function ensureSession(mode: ChromeSessionMode = 'headed'): Promise<Session> {
   if (session) {
@@ -254,8 +249,8 @@ async function ensureSession(mode: ChromeSessionMode = 'headed'): Promise<Sessio
       return session
     }
     if (session.mode !== mode) {
-      logger.debug('cloudflare.chrome', 'restarting real Chrome in headed mode for interactive use')
-      await closeCloudflareChrome()
+      logger.debug('login.session', 'restarting real Chrome in headed mode for interactive use')
+      await closeLoginSession()
     } else {
       return session
     }
@@ -291,7 +286,7 @@ async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   }
 }
 
-export function isCloudflareChromeRunning(): boolean {
+export function isLoginSessionRunning(): boolean {
   return session !== null
 }
 
@@ -304,9 +299,9 @@ const WINDOW_OFF_SCREEN = { left: -32000, top: -32000 }
  * Park/unpark the shared HEADED Chrome window. Best-effort and honest about
  * platform limits: macOS clamps window positions (a sliver always stays
  * visible) and ignores CDP minimize, so on Windows/Linux parking fully hides
- * the window while on macOS it only shrinks the footprint. Interactive flows
- * (QR login, Cloudflare challenge) restore the window while a human is needed,
- * then re-park. A failed move must never break the flow that triggered it.
+ * the window while on macOS it only shrinks the footprint. The QR-code login
+ * restores the window while a human is needed, then re-parks. A failed move
+ * must never break the flow that triggered it.
  */
 async function setMainWindowVisible(page: Page, visible: boolean): Promise<void> {
   try {
@@ -319,12 +314,12 @@ async function setMainWindowVisible(page: Page, visible: boolean): Promise<void>
       }
       const target = visible ? WINDOW_ON_SCREEN : WINDOW_OFF_SCREEN
       await cdp.send('Browser.setWindowBounds', { windowId, bounds: { left: target.left, top: target.top } })
-      logger.debug('cloudflare.chrome', 'window visibility moved', { visible })
+      logger.debug('login.session', 'window visibility moved', { visible })
     } finally {
       await cdp.detach().catch(() => {})
     }
   } catch (err) {
-    logger.debug('cloudflare.chrome', 'window visibility move failed', {
+    logger.debug('login.session', 'window visibility move failed', {
       visible,
       error: err instanceof Error ? err.message : String(err)
     })
@@ -332,48 +327,45 @@ async function setMainWindowVisible(page: Page, visible: boolean): Promise<void>
 }
 
 /**
- * Whether the shared browser currently holds a valid login/verification for
- * the platform: the expected cookies exist (unexpired) and, for Cloudflare
- * platforms, the page is not sitting on a challenge. Cookies are queried with
- * the platform's own cookieUrl so the shared page's current location cannot
- * hide another platform's session.
+ * Whether the shared browser currently holds a valid login for the platform:
+ * the expected cookies exist and are unexpired. Cookies are queried with the
+ * platform's own cookieUrl so the shared page's current location cannot hide
+ * another platform's session.
  */
 async function hasVerifiedSession(platform: LoginPlatform, page: Page): Promise<boolean> {
   const def = LOGIN_DEFS[platform]
   const cookies = await page.cookies(def.cookieUrl).catch(() => [])
-  if (checkLoginState(cookies, def) !== 'logged_in') return false
-  if (isCloudflareLoginPlatform(platform) && (await isCloudflareChallenge(page))) return false
-  return true
+  return checkLoginState(cookies, def) === 'logged_in'
 }
 
-/** Open the login page and wait for the user to pass the challenge / scan the QR code. */
-export async function startCloudflareChallenge(platform: LoginPlatform): Promise<CloudflareChallengeResult> {
+/** Open the login page and wait for the user to scan the QR code. */
+export async function startLogin(platform: LoginPlatform): Promise<LoginResult> {
   cancelRequested = false
   const loginUrl = LOGIN_DEFS[platform].loginUrl
-  logger.debug('cloudflare.chrome', 'start login flow', { platform, loginUrl })
+  logger.debug('login.session', 'start login flow', { platform, loginUrl })
   try {
     return await withPage(async (page) => {
       // Interactive flow: the user must see and operate the login window.
       await setMainWindowVisible(page, true)
       await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 })
 
-      const deadline = Date.now() + CHALLENGE_TIMEOUT_MS
+      const deadline = Date.now() + LOGIN_TIMEOUT_MS
       while (Date.now() < deadline) {
         if (cancelRequested) {
-          logger.debug('cloudflare.chrome', 'login flow cancelled by user', { platform })
+          logger.debug('login.session', 'login flow cancelled by user', { platform })
           return { status: 'cancelled' as const }
         }
         if (await hasVerifiedSession(platform, page)) {
-          logger.debug('cloudflare.chrome', 'login verified', { platform })
+          logger.debug('login.session', 'login verified', { platform })
           return { status: 'done' as const }
         }
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
       }
-      logger.warn('cloudflare.chrome', 'login verification timed out', { platform })
-      return { status: 'error' as const, error: '验证超时：未检测到登录态' }
+      logger.warn('login.session', 'login verification timed out', { platform })
+      return { status: 'error' as const, error: '登录超时：未检测到登录态' }
     })
   } catch (err) {
-    logger.warn('cloudflare.chrome', 'login flow failed', { platform, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('login.session', 'login flow failed', { platform, error: err instanceof Error ? err.message : String(err) })
     return { status: 'error' as const, error: err instanceof Error ? err.message : 'Unknown error' }
   } finally {
     // Park the window off-screen again — scraping runs invisibly. Best-effort
@@ -382,11 +374,11 @@ export async function startCloudflareChallenge(platform: LoginPlatform): Promise
   }
 }
 
-export function cancelCloudflareChallenge(): void {
+export function cancelLogin(): void {
   cancelRequested = true
 }
 
-export async function getCloudflareStatus(platform: LoginPlatform): Promise<CloudflareSessionStatus> {
+export async function getLoginStatus(platform: LoginPlatform): Promise<LoginSessionStatus> {
   // The in-memory session is always empty right after an app restart, but the
   // profile on disk still holds the logins — bring Chrome up (reattach or
   // launch) before judging the platform instead of dead-ending on
@@ -396,7 +388,7 @@ export async function getCloudflareStatus(platform: LoginPlatform): Promise<Clou
     try {
       await ensureSession('headless')
     } catch (err) {
-      logger.debug('cloudflare.chrome', 'status could not launch real Chrome', {
+      logger.debug('login.session', 'status could not launch real Chrome', {
         platform,
         error: err instanceof Error ? err.message : String(err)
       })
@@ -418,7 +410,7 @@ export async function getCloudflareStatus(platform: LoginPlatform): Promise<Clou
   return expiryCookie ? { state: 'verified', expiresAt: expiryCookie.expires * 1000 } : { state: 'verified' }
 }
 
-export interface AcquiredCloudflarePage {
+export interface AcquiredLoginPage {
   page: Page
   release: () => void
 }
@@ -427,12 +419,10 @@ export interface AcquiredCloudflarePage {
  * Acquire the shared scrape page, or null when Chrome cannot run. Query
  * modules use this instead of the headless browser pool.
  *
- * `mode` selects the session: 'headless' (invisible, marketplace channels)
- * or 'headed' (Cloudflare-protected scrapes, whose cf_clearance cookie is
- * bound to the headed user agent). See ensureSession for the switching
- * policy — switching is sticky toward headed.
+ * `mode` selects the session: 'headless' (invisible) or 'headed'. See
+ * ensureSession for the switching policy — switching is sticky toward headed.
  */
-export async function acquireCloudflarePage(mode: ChromeSessionMode = 'headed'): Promise<AcquiredCloudflarePage | null> {
+export async function acquireLoginPage(mode: ChromeSessionMode = 'headed'): Promise<AcquiredLoginPage | null> {
   if (!session) {
     // Lazily restore the session (e.g. right after an app restart): the
     // profile on disk still holds the logins, so a scrape must be able to
@@ -441,7 +431,7 @@ export async function acquireCloudflarePage(mode: ChromeSessionMode = 'headed'):
     try {
       await ensureSession(mode)
     } catch (err) {
-      logger.debug('cloudflare.chrome', 'acquire could not launch real Chrome', {
+      logger.debug('login.session', 'acquire could not launch real Chrome', {
         error: err instanceof Error ? err.message : String(err)
       })
       return null
@@ -455,7 +445,7 @@ export async function acquireCloudflarePage(mode: ChromeSessionMode = 'headed'):
     release = resolve
   })
   await previous
-  logger.debug('cloudflare.chrome', 'real-Chrome page acquired', { mode: session.mode })
+  logger.debug('login.session', 'real-Chrome page acquired', { mode: session.mode })
 
   // Clear per-request headers (e.g. Accept-Language) a previous scrape set on
   // the shared page so they cannot leak into platforms that set none.
@@ -498,13 +488,13 @@ function killChrome(proc: ChildProcess): Promise<void> {
   return Promise.resolve()
 }
 
-export async function closeCloudflareChrome(): Promise<void> {
+export async function closeLoginSession(): Promise<void> {
   const s = session
   if (s) {
     // Detach first: browser.close() fires the 'disconnected' handler, which
     // nulls the module session — reading session.proc afterwards would crash.
     session = null
-    logger.debug('cloudflare.chrome', 'closing real-Chrome session')
+    logger.debug('login.session', 'closing real-Chrome session')
     await s.browser.close().catch(() => {})
     if (s.proc) {
       // Graceful close may leave the process tree behind on Windows.

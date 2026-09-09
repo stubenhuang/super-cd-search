@@ -12,8 +12,6 @@ export const PLATFORMS: Platform[] = [
   'yahoo',
   'cdjapan',
   'tower',
-  'surugaya',
-  'zenmarket',
   'xianyu',
   'taobao'
 ]
@@ -26,8 +24,6 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   yahoo: 'Yahoo Shopping',
   cdjapan: 'CDJapan',
   tower: 'Tower Records Japan',
-  surugaya: 'Suruga-ya',
-  zenmarket: 'ZenMarket',
   xianyu: 'Xianyu',
   taobao: 'Taobao'
 }
@@ -53,10 +49,10 @@ export const SELECTABLE_PLATFORMS: Platform[] = [...SEARCH_PLATFORMS, ...CHANNEL
 export const DEFAULT_STANDARD_PLATFORMS: Platform[] = ['discogs', 'ebay']
 
 /**
- * Default platform set for the deep search mode. The two Cloudflare-protected
- * platforms are intentionally excluded: they need a manual verification step
- * first, so new users opt in to them from the settings panel instead of having
- * an unverified deep search fail by default.
+ * Default platform set for the deep search mode. The marketplace channels are
+ * intentionally excluded: they need a QR-code login first, so new users opt in
+ * to them from the settings panel instead of having an unverified deep search
+ * skip them by default.
  */
 export const DEFAULT_DEEP_PLATFORMS: Platform[] = [
   'discogs',
@@ -73,8 +69,7 @@ export const BARCODE_PROVIDERS: BarcodeProvider[] = [
   'discogs',
   'tower',
   'hmv',
-  'yahoo',
-  'surugaya'
+  'yahoo'
 ]
 
 export const DEFAULT_BARCODE_PROVIDERS: BarcodeProvider[] = [...BARCODE_PROVIDERS]
@@ -83,8 +78,7 @@ export const BARCODE_PROVIDER_LABELS: Record<BarcodeProvider, string> = {
   discogs: 'Discogs',
   tower: 'Tower Records Japan',
   hmv: 'HMV Japan',
-  yahoo: 'Yahoo Shopping',
-  surugaya: 'Suruga-ya'
+  yahoo: 'Yahoo Shopping'
 }
 
 /** Marketplaces a published CD can be marked as listed on (user-maintained). */

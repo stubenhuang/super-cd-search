@@ -10,8 +10,6 @@ export type Platform =
   | 'yahoo'
   | 'cdjapan'
   | 'tower'
-  | 'surugaya'
-  | 'zenmarket'
   | 'xianyu'
   | 'taobao'
 
@@ -36,30 +34,26 @@ export interface QueryResult {
   details?: CDDetails
 }
 
-/** Platforms that require a manual Cloudflare verification step. */
-export type CloudflarePlatform = 'surugaya' | 'zenmarket'
-
 /**
- * Platforms that require a manual login/verification in the shared real-Chrome
- * window before their queries can run. Cloudflare platforms verify via the
- * cf_clearance cookie; taobao/xianyu verify via a QR-code login.
+ * Marketplace channels that require a manual QR-code login in the shared
+ * real-Chrome window before their queries can run.
  */
-export type LoginPlatform = CloudflarePlatform | 'xianyu' | 'taobao'
+export type LoginPlatform = 'xianyu' | 'taobao'
 
-/** Result of a manual Cloudflare challenge run (IPC-facing). */
-export interface CloudflareChallengeResult {
+/** Result of a manual login run (IPC-facing). */
+export interface LoginResult {
   status: 'done' | 'error' | 'cancelled'
   error?: string
 }
 
 /**
- * Live status of the real-Chrome Cloudflare session for one platform. The
- * cookies live in the Chrome profile (not in app settings), so this is derived
- * from the running browser rather than persisted state.
+ * Live status of the real-Chrome login session for one platform. The cookies
+ * live in the Chrome profile (not in app settings), so this is derived from the
+ * running browser rather than persisted state.
  */
-export interface CloudflareSessionStatus {
+export interface LoginSessionStatus {
   state: 'not_started' | 'starting' | 'unverified' | 'verified' | 'expired'
-  /** Absolute ms timestamp when the current clearance expires (when verified). */
+  /** Absolute ms timestamp when the current login expires (when verified). */
   expiresAt?: number
 }
 
@@ -76,8 +70,6 @@ export interface LLMSettings {
     yahoo: boolean
     cdjapan: boolean
     tower: boolean
-    surugaya: boolean
-    zenmarket: boolean
   }
 }
 
@@ -106,7 +98,7 @@ export interface LanServerStatus {
 }
 
 /** Sources that can translate a CD barcode into a catalog number. */
-export type BarcodeProvider = 'discogs' | 'tower' | 'hmv' | 'yahoo' | 'surugaya'
+export type BarcodeProvider = 'discogs' | 'tower' | 'hmv' | 'yahoo'
 
 export type BarcodeCandidateConfidence = 'high' | 'low'
 
@@ -300,7 +292,6 @@ export type DetailEnrichSkipReason =
   | 'platform_disabled'
   | 'not_found'
   | 'no_product_link'
-  | 'cloudflare_challenge'
   | 'fetch_failed'
   | 'llm_failed'
 

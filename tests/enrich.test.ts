@@ -6,8 +6,6 @@ const {
   mockGetSetting,
   mockAcquireBrowser,
   mockReleaseBrowser,
-  mockAcquireCloudflare,
-  mockIsChallenge,
   mockCompressHtml,
   mockChat,
   mockQueryTower,
@@ -15,16 +13,12 @@ const {
   mockQueryCdjapan,
   mockQueryKojima,
   mockQueryYahoo,
-  mockQuerySurugaya,
-  mockQueryZenmarket,
   mockGetCachedEnrichment,
   mockCacheEnrichment
 } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockAcquireBrowser: vi.fn(),
   mockReleaseBrowser: vi.fn(),
-  mockAcquireCloudflare: vi.fn(),
-  mockIsChallenge: vi.fn(),
   mockCompressHtml: vi.fn(),
   mockChat: vi.fn(),
   mockQueryTower: vi.fn(),
@@ -32,8 +26,6 @@ const {
   mockQueryCdjapan: vi.fn(),
   mockQueryKojima: vi.fn(),
   mockQueryYahoo: vi.fn(),
-  mockQuerySurugaya: vi.fn(),
-  mockQueryZenmarket: vi.fn(),
   mockGetCachedEnrichment: vi.fn(),
   mockCacheEnrichment: vi.fn()
 }))
@@ -41,10 +33,6 @@ const {
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/browser', () => ({
   browserPool: { acquire: mockAcquireBrowser, release: mockReleaseBrowser }
-}))
-vi.mock('../src/main/cloudflare', () => ({
-  acquireCloudflarePage: mockAcquireCloudflare,
-  isCloudflareChallenge: mockIsChallenge
 }))
 vi.mock('../src/main/parser/readability', () => ({ compressHtml: mockCompressHtml }))
 vi.mock('../src/main/llm/client', () => ({
@@ -59,8 +47,6 @@ vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
 vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
 vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mockQueryKojima }))
 vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
-vi.mock('../src/main/queries/surugaya', () => ({ querySurugaya: mockQuerySurugaya }))
-vi.mock('../src/main/queries/zenmarket', () => ({ queryZenmarket: mockQueryZenmarket }))
 vi.mock('../src/main/queries/cache', () => ({
   getCachedEnrichment: mockGetCachedEnrichment,
   cacheEnrichment: mockCacheEnrichment
@@ -80,9 +66,7 @@ const fullLlmSettings = {
     hmv: true,
     yahoo: true,
     cdjapan: true,
-    tower: true,
-    surugaya: true,
-    zenmarket: true
+    tower: true
   }
 }
 
@@ -116,7 +100,6 @@ function setupBrowserPage(html = '<html><body>product</body></html>') {
   }
   mockAcquireBrowser.mockResolvedValue({ browser: {}, page })
   mockReleaseBrowser.mockResolvedValue(undefined)
-  mockIsChallenge.mockResolvedValue(false)
   return page
 }
 
@@ -137,8 +120,6 @@ beforeEach(() => {
   mockQueryCdjapan.mockResolvedValue(foundResult('cdjapan'))
   mockQueryKojima.mockResolvedValue(foundResult('kojima'))
   mockQueryYahoo.mockResolvedValue(foundResult('yahoo'))
-  mockQuerySurugaya.mockResolvedValue(foundResult('surugaya'))
-  mockQueryZenmarket.mockResolvedValue(foundResult('zenmarket'))
   mockGetCachedEnrichment.mockReturnValue(null)
   mockCacheEnrichment.mockReturnValue(undefined)
 })
@@ -246,8 +227,6 @@ describe('enrichDetails', () => {
     mockQueryCdjapan.mockResolvedValue({ ...foundResult('cdjapan'), status: 'not_found', link: null })
     mockQueryKojima.mockResolvedValue({ ...foundResult('kojima'), status: 'not_found', link: null })
     mockQueryYahoo.mockResolvedValue({ ...foundResult('yahoo'), status: 'not_found', link: null })
-    mockQuerySurugaya.mockResolvedValue({ ...foundResult('surugaya'), status: 'challenge', link: null })
-    mockQueryZenmarket.mockResolvedValue({ ...foundResult('zenmarket'), status: 'not_found', link: null })
 
     const result = await enrichDetails('X-1', [])
 
@@ -350,39 +329,6 @@ describe('enrichDetails', () => {
     expect(result.attemptedPlatforms).toContain('tower')
   })
 
-  it('fetches Cloudflare-protected sources through the real-Chrome page', async () => {
-    setupLlm({
-      ...fullLlmSettings,
-      platformEnabled: {
-        ...fullLlmSettings.platformEnabled,
-        tower: false,
-        hmv: false,
-        cdjapan: false,
-        kojima: false,
-        yahoo: false,
-        surugaya: true,
-        zenmarket: false
-      }
-    })
-    const page = {
-      goto: vi.fn().mockResolvedValue(undefined),
-      content: vi.fn().mockResolvedValue('<html><body>surugaya</body></html>'),
-      setExtraHTTPHeaders: vi.fn().mockResolvedValue(undefined),
-      setCookie: vi.fn().mockResolvedValue(undefined)
-    }
-    const release = vi.fn()
-    mockAcquireCloudflare.mockResolvedValue({ page, release })
-    mockQuerySurugaya.mockResolvedValue(foundResult('surugaya'))
-    mockChat.mockResolvedValue({
-      content: '{"details":{"label":"L","format":"CD","country":"Japan","released":"2024","genre":"Jazz"}}'
-    })
-
-    const result = await enrichDetails('X-1', [])
-    expect(result.analyzedPlatforms).toEqual(['surugaya'])
-    expect(result.status).toBe('complete')
-    expect(release).toHaveBeenCalled()
-  })
-
   it('trusts an existing not_found result and does not search that platform again', async () => {
     const existing: QueryResult = { ...foundResult('tower'), status: 'not_found', link: null }
 
@@ -395,39 +341,8 @@ describe('enrichDetails', () => {
     const existing: QueryResult = { ...foundResult('tower'), status: 'challenge', link: null }
 
     const result = await enrichDetails('X-1', [existing])
-    expect(result.skippedPlatforms[0]).toEqual({ platform: 'tower', reason: 'cloudflare_challenge' })
+    expect(result.skippedPlatforms[0]).toEqual({ platform: 'tower', reason: 'not_found' })
     expect(mockQueryTower).not.toHaveBeenCalled()
-  })
-
-  it('skips a Cloudflare-protected source while its page still shows a challenge', async () => {
-    setupLlm({
-      ...fullLlmSettings,
-      platformEnabled: {
-        ...fullLlmSettings.platformEnabled,
-        tower: false,
-        hmv: false,
-        cdjapan: false,
-        kojima: false,
-        yahoo: false,
-        surugaya: true,
-        zenmarket: false
-      }
-    })
-    const page = {
-      goto: vi.fn().mockResolvedValue(undefined),
-      content: vi.fn().mockResolvedValue('<html>Just a moment</html>'),
-      setExtraHTTPHeaders: vi.fn().mockResolvedValue(undefined),
-      setCookie: vi.fn().mockResolvedValue(undefined)
-    }
-    const release = vi.fn()
-    mockAcquireCloudflare.mockResolvedValue({ page, release })
-    mockQuerySurugaya.mockResolvedValue(foundResult('surugaya'))
-    mockIsChallenge.mockResolvedValue(true)
-
-    const result = await enrichDetails('X-1', [])
-    expect(result.skippedPlatforms).toContainEqual({ platform: 'surugaya', reason: 'cloudflare_challenge' })
-    expect(mockChat).not.toHaveBeenCalled()
-    expect(release).toHaveBeenCalled()
   })
 
   it('reports no_product_link when a source finds a title without a product URL', async () => {

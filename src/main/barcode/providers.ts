@@ -1,5 +1,4 @@
 import { browserPool } from '../browser'
-import { acquireCloudflarePage, getCloudflareStatus, isCloudflareChallenge } from '../cloudflare'
 import { waitForResultOrNoResult } from '../queries/wait'
 import { queryDiscogsByBarcode } from '../queries/discogs'
 import { logger } from '../logger'
@@ -9,7 +8,6 @@ import type { BarcodeProviderOutcome } from './resolver'
 const TOWER_WEB_URL = 'https://tower.jp'
 const HMV_WEB_URL = 'https://www.hmv.co.jp'
 const YAHOO_SHOPPING_URL = 'https://shopping.yahoo.co.jp'
-const SURUGAYA_WEB_URL = 'https://www.suruga-ya.jp'
 
 const CATNO_LABEL_PATTERN = /(?:規格品番|品番|カタログ番号|型番|Catalog\s*(?:No\.?|Number)?)\s*[:：]?\s*/i
 
@@ -239,82 +237,8 @@ async function resolveYahooBarcode(barcode: string): Promise<BarcodeProviderOutc
   }
 }
 
-// ---------------------------------------------------------------------------
-// Suruga-ya (only after a verified Cloudflare session)
-// ---------------------------------------------------------------------------
-
-async function resolveSurugayaBarcode(barcode: string): Promise<BarcodeProviderOutcome> {
-  const status = await getCloudflareStatus('surugaya')
-  if (status.state !== 'verified') {
-    return { status: 'skipped', reason: 'surugaya Cloudflare session not verified' }
-  }
-
-  const acquired = await acquireCloudflarePage()
-  if (!acquired) {
-    return { status: 'skipped', reason: 'surugaya real-Chrome session unavailable' }
-  }
-
-  const { page, release } = acquired
-  try {
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' })
-
-    const searchUrl = `${SURUGAYA_WEB_URL}/search?search_word=${encodeURIComponent(barcode)}`
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
-
-    if (await isCloudflareChallenge(page)) {
-      return { status: 'skipped', reason: 'surugaya Cloudflare challenge reappeared' }
-    }
-
-    await waitForResultOrNoResult(page, {
-      resultSelector: '.item, a[href*="/product/detail/"]',
-      noResultSelectors: ['.search_no_result', '.no_result', '[class*="no-result"]'],
-      timeoutMs: 4000
-    })
-
-    const searchData = await page.evaluate(() => {
-      const item = document.querySelector('.item')
-      const anchor =
-        item?.querySelector<HTMLAnchorElement>('.thum a') ||
-        item?.querySelector<HTMLAnchorElement>('a[href*="/product/detail/"]') ||
-        document.querySelector<HTMLAnchorElement>('a[href*="/product/detail/"]')
-      if (!anchor) return null
-      const title = item?.querySelector('.title a')?.textContent?.trim() || anchor.getAttribute('title') || anchor.textContent?.trim() || null
-      return { title, link: anchor.getAttribute('href') }
-    })
-
-    if (!searchData) return { status: 'not_found' }
-
-    let title = searchData.title || ''
-    let bodyText = ''
-    let catno: string | null = null
-    const productUrl = normalizeUrl(SURUGAYA_WEB_URL, searchData.link)
-
-    if (productUrl) {
-      try {
-        await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        bodyText = await page.evaluate(() => document.body.innerText)
-        const detailTitle = await page.evaluate(() => document.querySelector('h1')?.textContent?.trim() || null)
-        if (detailTitle) title = detailTitle
-        catno = extractCatnoFromLabeledText(bodyText)
-      } catch (err) {
-        logger.warn('barcode.surugaya', 'detail page failed', { barcode, error: err instanceof Error ? err.message : String(err) })
-      }
-    }
-
-    if (!catno) catno = extractCatnoFromText(title)
-    if (!catno) return { status: 'not_found' }
-
-    const high = pageContainsBarcode(bodyText || title, barcode)
-    return { status: 'found', candidate: makeCandidate('surugaya', catno, title, high ? 'high' : 'low', productUrl) }
-  } finally {
-    release()
-  }
-}
-
 export {
   resolveTowerBarcode,
   resolveHmvBarcode,
-  resolveYahooBarcode,
-  resolveSurugayaBarcode
+  resolveYahooBarcode
 }

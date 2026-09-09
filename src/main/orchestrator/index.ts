@@ -6,8 +6,6 @@ import { queryHmv } from '../queries/hmv'
 import { queryYahoo } from '../queries/yahoo'
 import { queryCdjapan } from '../queries/cdjapan'
 import { queryTower } from '../queries/tower'
-import { querySurugaya } from '../queries/surugaya'
-import { queryZenmarket } from '../queries/zenmarket'
 import { queryXianyu } from '../queries/xianyu'
 import { queryTaobaoImage } from '../queries/taobao'
 import { notFound } from '../queries/types'
@@ -137,8 +135,6 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     { name: 'yahoo', query: () => queryYahoo(catalogNumber, signal) },
     { name: 'cdjapan', query: () => queryCdjapan(catalogNumber, signal) },
     { name: 'tower', query: () => queryTower(catalogNumber, signal) },
-    { name: 'surugaya', query: () => querySurugaya(catalogNumber, signal) },
-    { name: 'zenmarket', query: () => queryZenmarket(catalogNumber, signal) },
     { name: 'xianyu', query: () => queryXianyu(catalogNumber, signal) }
   ]
 

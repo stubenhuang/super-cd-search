@@ -27,9 +27,7 @@ const settings: Settings = {
       hmv: true,
       yahoo: true,
       cdjapan: true,
-      tower: true,
-      surugaya: false,
-      zenmarket: true
+      tower: true
     }
   },
   standardPlatforms: ['discogs', 'tower'],

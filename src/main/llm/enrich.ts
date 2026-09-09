@@ -12,7 +12,6 @@ import { isLlmConfigured } from '../../shared/llm'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
-import { acquireCloudflarePage, isCloudflareChallenge } from '../cloudflare'
 import { compressHtml } from '../parser/readability'
 import { LLMClient } from './client'
 import { buildDetailFillPrompt } from './prompt'
@@ -23,8 +22,6 @@ import { queryHmv } from '../queries/hmv'
 import { queryYahoo } from '../queries/yahoo'
 import { queryCdjapan } from '../queries/cdjapan'
 import { queryTower } from '../queries/tower'
-import { querySurugaya } from '../queries/surugaya'
-import { queryZenmarket } from '../queries/zenmarket'
 import { getCachedEnrichment, cacheEnrichment } from '../queries/cache'
 
 /**
@@ -38,8 +35,6 @@ export type SmartFillPlatform =
   | 'yahoo'
   | 'cdjapan'
   | 'tower'
-  | 'surugaya'
-  | 'zenmarket'
 
 /**
  * On-demand LLM enrichment source order.
@@ -52,8 +47,6 @@ export type SmartFillPlatform =
  *  3. CDJapan — product pages are directly addressable by catalog number.
  *  4. Kojima Rokuon — specialist CD shop with key:value descriptions.
  *  5. Yahoo Shopping — marketplace; useful but less structured.
- *  6. Suruga-ya — second-hand listings; metadata is sparse.
- *  7. ZenMarket — aggregator/proxy of marketplace listings (last resort).
  *
  * Discogs and eBay are intentionally excluded from the smart-fill flow.
  */
@@ -62,9 +55,7 @@ export const SMART_FILL_PLATFORM_PRIORITY: SmartFillPlatform[] = [
   'hmv',
   'cdjapan',
   'kojima',
-  'yahoo',
-  'surugaya',
-  'zenmarket'
+  'yahoo'
 ]
 
 const QUERY_FUNCTIONS: Record<SmartFillPlatform, (catalogNumber: string, signal?: AbortSignal) => Promise<QueryResult>> = {
@@ -72,9 +63,7 @@ const QUERY_FUNCTIONS: Record<SmartFillPlatform, (catalogNumber: string, signal?
   hmv: queryHmv,
   cdjapan: queryCdjapan,
   kojima: queryKojima,
-  yahoo: queryYahoo,
-  surugaya: querySurugaya,
-  zenmarket: queryZenmarket
+  yahoo: queryYahoo
 }
 
 const PLATFORM_HEADERS: Partial<Record<Platform, Record<string, string>>> = {
@@ -130,26 +119,6 @@ function isPlatformEnabledForLLM(platform: SmartFillPlatform): boolean {
 async function fetchProductHtml(platform: SmartFillPlatform, url: string, signal?: AbortSignal): Promise<string | null> {
   throwIfAborted(signal)
   const navigation = { waitUntil: 'domcontentloaded' as const, timeout: 30000 }
-
-  // Cloudflare-protected shops run through the user-verified real Chrome.
-  if (platform === 'surugaya' || platform === 'zenmarket') {
-    const acquired = await acquireCloudflarePage()
-    if (!acquired) return null
-    const { page, release } = acquired
-    try {
-      // gotoWithAbort stops the document mid-navigation, so a cancelled run
-      // releases the shared Cloudflare page immediately.
-      await gotoWithAbort(page, url, navigation, signal)
-      if (await isCloudflareChallenge(page)) return null
-      return await page.content()
-    } catch (err) {
-      if (signal?.aborted) throw createAbortError()
-      logger.warn('llm.enrich', 'failed to fetch Cloudflare page', { platform, url, error: err instanceof Error ? err.message : String(err) })
-      return null
-    } finally {
-      release()
-    }
-  }
 
   const { browser, page } = await browserPool.acquire()
   try {
@@ -336,7 +305,7 @@ export async function enrichDetails(
       if (result && result.status === 'found' && result.link) {
         // Reuse the search result the renderer already has.
       } else if (result && result.status !== 'found') {
-        skip(platform, result.status === 'challenge' ? 'cloudflare_challenge' : 'not_found')
+        skip(platform, 'not_found')
         continue
       } else {
         emitProgress({ catalogNumber: normalizedCatalog, platform, status: 'searching' })
@@ -360,7 +329,7 @@ export async function enrichDetails(
       })
 
       if (!result || result.status !== 'found') {
-        skip(platform, result?.status === 'challenge' ? 'cloudflare_challenge' : 'not_found')
+        skip(platform, 'not_found')
         continue
       }
       if (!result.link) {
@@ -388,7 +357,7 @@ export async function enrichDetails(
         html = null
       }
       if (!html) {
-        skip(platform, platform === 'surugaya' || platform === 'zenmarket' ? 'cloudflare_challenge' : 'fetch_failed')
+        skip(platform, 'fetch_failed')
         continue
       }
 
