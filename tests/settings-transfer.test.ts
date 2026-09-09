@@ -36,8 +36,6 @@ const settings: Settings = {
   deepPlatforms: ['discogs', 'ebay', 'hmv'],
   fastMode: true,
   displayCurrency: 'CNY',
-  theme: 'dark',
-  language: 'en',
   lanEnabled: true,
   lanHost: '192.168.1.5',
   lanPort: 9000,

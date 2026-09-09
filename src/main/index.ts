@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, nativeTheme } from 'electron'
+import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import { join } from 'path'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerOrchestratorIpc } from './ipc/orchestrator'
@@ -20,14 +20,13 @@ import { initCachePersistence, flushCacheToDisk } from './queries/cache'
 import { prewarmExchangeRates } from './currency'
 import { isAllowedRendererNavigation, isSafeExternalUrl } from './security/urls'
 import { initCDLibrary, closeCDLibrary } from './library'
-import { getSetting } from './settings'
-import { TITLE_BAR_OVERLAY_COLORS, TITLE_BAR_OVERLAY_HEIGHT, resolveThemeMode } from '../shared/theme'
+import { TITLE_BAR_OVERLAY_COLORS, TITLE_BAR_OVERLAY_HEIGHT } from '../shared/theme'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
-function titleBarOverlayForSavedTheme() {
-  const resolved = resolveThemeMode(getSetting('theme'), nativeTheme.shouldUseDarkColors)
-  return { ...TITLE_BAR_OVERLAY_COLORS[resolved], height: TITLE_BAR_OVERLAY_HEIGHT }
+// The app ships a single dark theme, so the overlay colors are fixed.
+function titleBarOverlay() {
+  return { ...TITLE_BAR_OVERLAY_COLORS, height: TITLE_BAR_OVERLAY_HEIGHT }
 }
 
 function createWindow() {
@@ -58,7 +57,7 @@ function createWindow() {
       : process.platform === 'win32'
         ? {
             titleBarStyle: 'hidden' as const,
-            titleBarOverlay: titleBarOverlayForSavedTheme()
+            titleBarOverlay: titleBarOverlay()
           }
         : {})
   })
@@ -126,7 +125,7 @@ app.whenReady().then(async () => {
   })
 
   // The Windows window-controls strip colors follow the app theme; the
-  // renderer pushes an update whenever the resolved theme changes.
+  // renderer pushes the fixed dark palette once at startup.
   ipcMain.handle('window:setTitleBarOverlay', (event, options) => {
     if (process.platform !== 'win32') return false
     const win = BrowserWindow.fromWebContents(event.sender)

@@ -64,7 +64,7 @@ vi.mock('../src/main/settings', () => ({
     'discogsToken', 'ebayClientId', 'ebayClientSecret',
     'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
     'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
-    'theme', 'language', 'lanEnabled', 'lanHost', 'lanPort',
+    'lanEnabled', 'lanHost', 'lanPort',
     'barcodeProviders', 'lastExportDirectory'
   ])
 }))
@@ -170,14 +170,14 @@ describe('registerSettingsIpc', () => {
 
   it('registers the settings backup handlers', async () => {
     mockExportSettingsBackup.mockResolvedValue({ status: 'ok', filePath: '/tmp/backup.scdset' })
-    mockImportSettingsBackup.mockResolvedValue({ status: 'ok', filePath: '/tmp/backup.scdset', importedKeys: ['theme', 'language'] })
+    mockImportSettingsBackup.mockResolvedValue({ status: 'ok', filePath: '/tmp/backup.scdset', importedKeys: ['discogsToken', 'llm'] })
 
     registerSettingsIpc()
 
     expect(await handler('settings:export-backup')(null, 'password-123')).toEqual({ status: 'ok', filePath: '/tmp/backup.scdset' })
     expect(mockExportSettingsBackup).toHaveBeenCalledWith('password-123')
 
-    expect(await handler('settings:import-backup')(null, 'password-123')).toEqual({ status: 'ok', filePath: '/tmp/backup.scdset', importedKeys: ['theme', 'language'] })
+    expect(await handler('settings:import-backup')(null, 'password-123')).toEqual({ status: 'ok', filePath: '/tmp/backup.scdset', importedKeys: ['discogsToken', 'llm'] })
     expect(mockImportSettingsBackup).toHaveBeenCalledWith('password-123')
   })
 

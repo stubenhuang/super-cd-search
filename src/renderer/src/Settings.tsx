@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import type { Settings, Platform, LoginPlatform, CloudflareSessionStatus, ThemeMode, Language, BarcodeProvider, SettingsTransferResult } from './electron-api'
+import { useState, useEffect, useCallback } from 'react'
+import type { Settings, Platform, LoginPlatform, CloudflareSessionStatus, BarcodeProvider, SettingsTransferResult } from './electron-api'
 import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
-import { applyTheme } from './theme'
 import { useI18n } from './i18n'
 import { useUpdateState } from './hooks/useUpdateState'
 import { GITHUB_REPO_URL } from '../../shared/updater'
@@ -12,11 +11,11 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'cloudflare' | 'appearance' | 'backup' | 'about'
+type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'cloudflare' | 'backup' | 'about'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
-  const { t, language, setLanguage } = useI18n()
-  const [activeSection, setActiveSection] = useState<SectionKey>('appearance')
+  const { t } = useI18n()
+  const [activeSection, setActiveSection] = useState<SectionKey>('api')
   const [discogsToken, setDiscogsToken] = useState('')
   const [ebayClientId, setEbayClientId] = useState('')
   const [ebayClientSecret, setEbayClientSecret] = useState('')
@@ -47,7 +46,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [standardPlatforms, setStandardPlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
   const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
   const [fastMode, setFastMode] = useState(false)
-  const [theme, setTheme] = useState<ThemeMode>('light')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [backupExportPassword, setBackupExportPassword] = useState('')
@@ -57,8 +55,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [backupImportError, setBackupImportError] = useState<string | null>(null)
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true)
   const { state: updateState, check: checkForUpdates, download: downloadUpdate, install: installUpdate } = useUpdateState()
-  const savedThemeRef = useRef<ThemeMode>('light')
-  const savedLanguageRef = useRef<Language>('zh')
 
   useEffect(() => {
     if (isOpen) {
@@ -143,13 +139,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
     setAutoUpdateEnabled(settings.autoUpdateEnabled !== false)
-    const savedTheme = settings.theme || 'light'
-    const savedLanguage = settings.language || 'zh'
-    setTheme(savedTheme)
-    applyTheme(savedTheme)
-    setLanguage(savedLanguage, false)
-    savedThemeRef.current = savedTheme
-    savedLanguageRef.current = savedLanguage
   }, [refreshLoginStatus])
 
   const backupErrorMessage = (result: SettingsTransferResult): string | null => {
@@ -218,8 +207,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         standardPlatforms,
         deepPlatforms,
         fastMode,
-        theme,
-        language,
         llm: {
           enabled: llmEnabled,
           apiBaseUrl: llmApiBaseUrl,
@@ -238,8 +225,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           }
         }
       })
-      savedThemeRef.current = theme
-      savedLanguageRef.current = language
       window.electronAPI.log('debug', 'settings', 'settings saved', { llmEnabled, llmModel, llmApiBaseUrl })
       setToast({ kind: 'success', text: t('settings.saved') })
       setTimeout(() => setToast(null), 3000)
@@ -253,9 +238,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   }
 
   const handleCancel = () => {
-    setTheme(savedThemeRef.current)
-    applyTheme(savedThemeRef.current)
-    setLanguage(savedLanguageRef.current, false)
     onClose()
   }
 
@@ -327,7 +309,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   if (!isOpen) return null
 
   const navItems: { key: SectionKey; icon: string; label: string }[] = [
-    { key: 'appearance', icon: '◐', label: t('nav.appearance') },
     { key: 'api', icon: '◆', label: t('nav.api') },
     { key: 'proxy', icon: '◉', label: t('nav.proxy') },
     { key: 'barcode', icon: '▣', label: t('nav.barcodeProviders') },
@@ -827,73 +808,6 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
               <div className="st-section-desc" style={{ marginTop: '12px' }}>
                 {t('cloudflare.hint')}
-              </div>
-            </div>
-          </div>
-        )
-
-      case 'appearance':
-        return (
-          <div className="st-section-content">
-            <div className="st-section-desc">
-              {t('appearance.desc')}
-            </div>
-            <div className="st-field-group">
-              <div className="st-field-group-title">
-                <span className="st-icon">◐</span> {t('appearance.theme')}
-              </div>
-              <div className="st-theme-options" role="radiogroup" aria-label={t('appearance.theme')}>
-                {([
-                  { value: 'light', label: t('theme.light'), hint: t('theme.lightHint') },
-                  { value: 'dark', label: t('theme.dark'), hint: t('theme.darkHint') },
-                  { value: 'system', label: t('theme.system'), hint: t('theme.systemHint') }
-                ] as { value: ThemeMode; label: string; hint: string }[]).map(option => (
-                  <label
-                    key={option.value}
-                    className={`st-theme-option ${theme === option.value ? 'checked' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="theme"
-                      value={option.value}
-                      checked={theme === option.value}
-                      onChange={e => {
-                        const next = e.target.value as ThemeMode
-                        setTheme(next)
-                        applyTheme(next)
-                      }}
-                    />
-                    <span className="st-theme-radio"></span>
-                    <span className="st-theme-label">{option.label}</span>
-                    <span className="st-theme-hint">{option.hint}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="st-field-group">
-              <div className="st-field-group-title">
-                <span className="st-icon">◐</span> {t('appearance.language')}
-              </div>
-              <div className="st-theme-options" role="radiogroup" aria-label={t('appearance.language')}>
-                {([
-                  { value: 'zh', label: '中文' },
-                  { value: 'en', label: 'English' }
-                ] as { value: Language; label: string }[]).map(option => (
-                  <label
-                    key={option.value}
-                    className={`st-theme-option ${language === option.value ? 'checked' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="language"
-                      value={option.value}
-                      checked={language === option.value}
-                      onChange={e => setLanguage(e.target.value as Language, false)}
-                    />
-                    <span className="st-theme-radio"></span>
-                    <span className="st-theme-label">{option.label}</span>
-                  </label>
-                ))}
               </div>
             </div>
           </div>

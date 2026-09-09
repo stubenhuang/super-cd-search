@@ -2,10 +2,6 @@ export type QueryStatus = 'found' | 'not_found' | 'error' | 'challenge'
 
 export type DisplayCurrency = 'USD' | 'CNY'
 
-export type ThemeMode = 'light' | 'dark' | 'system'
-
-export type Language = 'zh' | 'en'
-
 export type Platform =
   | 'discogs'
   | 'ebay'
@@ -233,10 +229,6 @@ export interface Settings {
   fastMode?: boolean
   /** Currency used to display prices in the UI. */
   displayCurrency?: DisplayCurrency
-  /** UI theme mode: light, dark, or follow the operating system. */
-  theme?: ThemeMode
-  /** UI language: Chinese or English. */
-  language?: Language
   /** Enable the LAN-only HTTP server so a phone can connect via QR code. */
   lanEnabled?: boolean
   /**

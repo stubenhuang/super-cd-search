@@ -20,8 +20,6 @@ beforeEach(() => {
   deleteSetting('deepPlatforms')
   deleteSetting('fastMode')
   deleteSetting('displayCurrency')
-  deleteSetting('theme')
-  deleteSetting('language')
   deleteSetting('llm')
   deleteSetting('lanEnabled')
   deleteSetting('lanHost')
@@ -46,8 +44,6 @@ describe('settings', () => {
       deepPlatforms: DEFAULT_DEEP_PLATFORMS,
       fastMode: undefined,
       displayCurrency: 'USD',
-      theme: 'light',
-      language: 'zh',
       lanEnabled: undefined,
       lanHost: undefined,
       lanPort: undefined,
@@ -129,27 +125,6 @@ describe('settings', () => {
 
     expect(getSetting('llm')).toEqual(llm)
     expect(getSettings().llm?.platformEnabled.ebay).toBe(false)
-  })
-
-  it('round-trips the theme setting and defaults to light', () => {
-    expect(getSetting('theme')).toBeUndefined()
-    expect(getSettings().theme).toBe('light')
-
-    setSetting('theme', 'dark')
-    expect(getSetting('theme')).toBe('dark')
-    expect(getSettings().theme).toBe('dark')
-
-    setSetting('theme', 'system')
-    expect(getSettings().theme).toBe('system')
-  })
-
-  it('round-trips the language setting and defaults to Chinese', () => {
-    expect(getSetting('language')).toBeUndefined()
-    expect(getSettings().language).toBe('zh')
-
-    setSetting('language', 'en')
-    expect(getSetting('language')).toBe('en')
-    expect(getSettings().language).toBe('en')
   })
 
   it('deletes settings', () => {

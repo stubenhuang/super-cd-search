@@ -1,6 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import type { Language } from '../../shared/types'
 
 type Params = Record<string, string | number>
 
@@ -157,7 +156,6 @@ const zh = {
   'settings.saved': '设置已保存',
   'settings.saveFailed': '保存设置失败',
 
-  'nav.appearance': '外观',
   'nav.api': 'API 令牌',
   'nav.proxy': '代理',
   'nav.lan': '局域网连接',
@@ -192,17 +190,6 @@ const zh = {
   'update.banner.downloaded': '新版本 {version} 已下载完成',
   'update.banner.install': '重启升级',
   'update.banner.later': '稍后',
-
-  // Appearance
-  'appearance.desc': '选择应用外观与显示语言。「跟随系统」会随操作系统的深色 / 浅色模式自动切换。',
-  'appearance.theme': '主题',
-  'theme.light': '白色',
-  'theme.lightHint': '暖色纸张浅色主题',
-  'theme.dark': '黑色',
-  'theme.darkHint': '暖调深色主题',
-  'theme.system': '跟随系统',
-  'theme.systemHint': '跟随 macOS 外观',
-  'appearance.language': '语言',
 
   // Backup & restore
   'backup.desc': '将全部设置（含 API 密钥）导出为加密文件；导入时需输入相同密码。局域网配对凭证不会包含在内。',
@@ -344,380 +331,30 @@ const zh = {
   'detail.smartMissing': '缺失: {fields}'
 }
 
-const en: Record<keyof typeof zh, string> = {
-  'panel.input': 'Input',
-  'panel.results': 'Results',
-  'tab.search': 'Search',
-  'tab.library': 'CD Library',
-  'export.failed': 'Export Failed',
-  'export.catalogNumber': 'Catalog Number',
-  'export.image': 'Image',
-  'export.details': 'Details',
-  'export.lowestPriceUsd': 'Lowest Price ($)',
-  'export.highestPriceUsd': 'Highest Price ($)',
-  'export.lowestPriceCny': 'Lowest Price (¥)',
-  'export.highestPriceCny': 'Highest Price (¥)',
-  'autoFlow.deepDigTitle': 'Deep Dig',
-  'autoFlow.deepDigBody': '{count} catalog numbers were not found by the standard search. Deep Dig will re-query them on additional platforms ({platforms}) for broader coverage, but it takes longer.',
-  'autoFlow.platformsMore': 'and {count} more',
-  'autoFlow.deepDigRun': 'Run Deep Dig',
-  'autoFlow.skip': 'Skip',
-  'autoFlow.smartTitle': 'Smart Generate',
-  'autoFlow.smartBody': '{count} catalog numbers have incomplete details (label / format / country / released / genre). Smart Generate will visit platform product pages one by one and call the configured LLM to fill in the missing fields; this can take a while for multiple numbers and consumes LLM API quota.',
-  'autoFlow.smartRun': 'Start Smart Generate',
-  'autoFlow.smartProgress': 'Smart generating ({current}/{total}): {catalogNumber}…',
-  'autoFlow.smartDone': 'Smart generation complete',
-  'autoFlow.smartDoneFailed': '{failed} numbers failed to generate',
-  'autoFlow.smartPhase.searching': 'Searching {platform}…',
-  'autoFlow.smartPhase.fetching': 'Fetching the {platform} product page…',
-  'autoFlow.smartPhase.analyzing': 'Analyzing the {platform} page with AI…',
-  'autoFlow.smartPhase.preparing': 'Preparing…',
-  'autoFlow.cancel': 'Cancel Smart Generate',
-  'autoFlow.cancelling': 'Cancelling…',
-  'autoFlow.smartCancelled': 'Cancelled — {completed} / {total} completed',
-  'autoFlow.close': 'Close',
-  'settings.buttonTitle': 'Settings',
-  'currency.usdTitle': 'US Dollar',
-  'currency.cnyTitle': 'Chinese Yuan',
-  'library.searchPlaceholder': 'Search catalog number…',
-  'library.add': 'Add Record',
-  'library.searchUpsertToast': 'This search added {inserted} and updated {updated} CDs to the library — see the CD Library tab',
-  'library.newBadge': 'New',
-  'library.import': 'Import Excel',
-  'library.importing': 'Importing…',
-  'library.exportSelected': 'Export',
-  'library.deleteSelected': 'Delete Selected',
-  'library.selected': '{count} selected',
-  'library.empty': 'The CD library is empty. Search results will be saved here automatically.',
-  'library.noMatches': 'No matching catalog numbers.',
-  'library.loading': 'Loading CD library…',
-  'library.actions': 'Actions',
-  'library.edit': 'Edit',
-  'library.delete': 'Delete',
-  'library.previous': 'Previous',
-  'library.next': 'Next',
-  'library.page': 'Page {page} / {pages}, {total} records',
-  'library.pageSize': 'Per page',
-  'library.addTitle': 'Add CD Record',
-  'library.editTitle': 'Edit CD Record',
-  'library.imageUrl': 'Image URL',
-  'library.embeddedImage': 'This record contains an embedded Excel image',
-  'library.removeEmbeddedImage': 'Remove the embedded image',
-  'library.details': 'Details',
-  'library.save': 'Save',
-  'library.cancel': 'Cancel',
-  'library.deleteOneConfirm': 'Delete {catalogNumber}? This cannot be undone.',
-  'library.deleteManyConfirm': 'Delete the selected {count} records? This cannot be undone.',
-  'library.importDone': 'Import complete: {added} added, {updated} overwritten, {skipped} skipped.',
-  'library.importErrors': 'Some rows were skipped: {errors}',
-  'library.exportDone': 'Selected records exported.',
-  'library.publishSelected': 'Publish',
-  'library.publishConfirm': 'Start a new publish round with the {count} selected CDs on the phone "Publish" tab?\nExisting published/platform states are kept. Closing the page ends the round. Continue?',
-  'library.lanOffHint': 'The LAN service is off, so the phone cannot view them yet. Enable "LAN Connection" on the home page first.',
-  'library.publishStateColumn': 'Publish Status',
-  'library.publishPlatformColumn': 'Publish Platforms',
-  'library.publishedYes': 'Published',
-  'library.publishedNo': 'Not Published',
-  'library.publishBatchTitle': 'This Round',
-  'library.closeRoundConfirm': 'Closing ends this publish round and clears the phone content immediately. Close?',
-  'library.finishPublish': 'Finish Publishing',
-  'library.filter': 'Filters',
-  'library.filterAll': 'All',
-  'library.resetFilter': 'Reset',
-  'library.needSelection': 'Select records first.',
-  'library.publishEmpty': 'No publish round in progress.',
-  'library.publishStats': '{total} CDs · {published} published · {platforms} with platforms',
-  'library.copy': 'Copy',
-  'library.copyDetails': 'Copy Details',
-  'library.copied': 'Copied ✓',
-  'library.copyFailed': 'Copy failed, please retry',
-  'library.noDetails': '(no details)',
-  'library.close': 'Close',
-  'library.platformTaobao': 'Taobao',
-  'library.platformXianyu': 'Xianyu',
-  'library.platformDiscogs': 'Discogs',
-  'library.storageError': 'CD library operation failed: {error}',
-  'library.priceMinUsd': 'Lowest Price ($)',
-  'library.priceMaxUsd': 'Highest Price ($)',
-  'library.priceMinCny': 'Lowest Price (¥)',
-  'library.priceMaxCny': 'Highest Price (¥)',
-
-  'input.placeholder':
-    'Enter catalog numbers (one per line or comma-separated)\n\nExample:\nTOCP-53001\nBVCP-21002\nSRCL-3101',
-  'input.searchMode': 'Search Mode',
-  'searchMode.standard': 'Standard Search',
-  'searchMode.deep': 'Deep Search',
-  'searchMode.deepWarning': 'Deep search queries all checked platforms and is slower',
-  'searchMode.deepWarningShort': 'Deep search is slower',
-  'search.button': 'Search',
-  'search.searching': 'Searching...',
-  'search.deepDigging': 'Digging...',
-  'search.cancelling': 'Cancelling...',
-  'search.cancelTitle': 'Cancel',
-
-  'error.noCatalog': 'Please enter at least one catalog number',
-  'error.maxCatalog': 'Maximum 10 catalog numbers allowed',
-  'mobile.addedToast': 'Added from phone: {catalogNumber}',
-  'error.noPlatforms': 'No data sources selected for the current search mode. Configure them in Settings.',
-  'error.queryFailed': 'Query failed',
-
-  'progress.done': '{done}/{total} done',
-  'progress.deepDig': 'Deep dig',
-  'progress.cancelling': 'Cancelling...',
-  'progress.querying': 'Querying...',
-  'results.placeholder': 'Search results will appear here.',
-
-  'result.lowest': '★ Lowest Price',
-  'result.highest': '▲ Highest Price',
-  'result.noImage': 'No Image',
-  'result.viewDetails': 'View Details →',
-  'result.fixedPrice': 'Fixed Price',
-  'result.priceRange': 'Price Range',
-  'result.titleClick': 'Click to view details',
-  'result.statusChallenge': 'Verification Required',
-  'result.statusChallengeHint': 'Complete Cloudflare verification in Settings',
-  'result.statusChallengeTitle': 'Cloudflare verification incomplete',
-  'result.statusError': 'Request Error',
-  'result.statusErrorDefault': 'Error',
-  'result.statusNotFound': 'Not Found',
-
-  'settings.title': 'Settings',
-  'settings.close': 'Close',
-  'settings.badge': 'Configuration',
-  'settings.footerHint': 'Changes apply on next search',
-  'settings.cancel': 'Cancel',
-  'settings.save': 'Save Changes',
-  'settings.saving': 'Saving...',
-  'settings.saved': 'Settings saved successfully',
-  'settings.saveFailed': 'Failed to save settings',
-
-  'nav.appearance': 'Appearance',
-  'nav.api': 'API Tokens',
-  'nav.proxy': 'Proxy',
-  'nav.lan': 'LAN Connection',
-  'nav.barcodeProviders': 'Barcode Providers',
-  'nav.sources': 'Search Sources',
-  'nav.llm': 'LLM Config',
-  'nav.cloudflare': 'Special Channels (Manual Login)',
-  'nav.backup': 'Backup & Restore',
-  'nav.about': 'About & Updates',
-
-  // About & auto update
-  'about.desc': 'The app checks GitHub for a new version on startup, downloads it in the background and lets you restart to install. Portable and development builds cannot self-update — download the installer from GitHub instead.',
-  'about.currentVersion': 'Current Version',
-  'about.autoUpdate': 'Check for Updates Automatically',
-  'about.autoUpdateDesc': 'Look for a new GitHub release every time the app starts',
-  'about.checkNow': 'Check for Updates',
-  'about.checking': 'Checking for updates…',
-  'about.idle': 'Not checked yet',
-  'about.upToDate': 'You are on the latest version',
-  'about.available': 'Version {version} found — downloading in the background…',
-  'about.downloading': 'Downloading update {percent}%',
-  'about.downloaded': 'Version {version} is ready — restart to install',
-  'about.download': 'Download Update',
-  'about.install': 'Restart & Update',
-  'about.checkFailed': 'Update check failed: {error}',
-  'about.unsupported': 'This build cannot self-update (development or portable). Download the installer from GitHub.',
-  'about.viewOnGithub': 'View on GitHub',
-  'about.releaseNotes': 'Release Notes',
-  'update.banner.checking': 'Checking for updates…',
-  'update.banner.available': 'Version {version} found — downloading in the background…',
-  'update.banner.downloading': 'Downloading update {percent}%',
-  'update.banner.downloaded': 'Version {version} is ready to install',
-  'update.banner.install': 'Restart & Update',
-  'update.banner.later': 'Later',
-
-  'appearance.desc': 'Choose the app appearance and display language. "Follow System" tracks your OS dark / light mode.',
-  'appearance.theme': 'Theme',
-  'theme.light': 'Light',
-  'theme.lightHint': 'Warm paper light theme',
-  'theme.dark': 'Dark',
-  'theme.darkHint': 'Warm dark theme',
-  'theme.system': 'Follow System',
-  'theme.systemHint': 'Follow macOS appearance',
-  'appearance.language': 'Language',
-
-  // Backup & restore
-  'backup.desc': 'Export all settings (including API keys) to an encrypted file; the same password is required to import. LAN pairing credentials are never included.',
-  'backup.password': 'Set Password',
-  'backup.passwordHint': 'At least 8 characters',
-  'backup.confirmPassword': 'Confirm Password',
-  'backup.export': 'Export Settings File',
-  'backup.exporting': 'Exporting…',
-  'backup.import': 'Choose File & Import',
-  'backup.importing': 'Importing…',
-  'backup.importPassword': 'Backup Password',
-  'backup.importHint': 'Only the keys actually present in the file will be overwritten.',
-  'backup.exportDone': 'Settings exported to an encrypted file',
-  'backup.importDone': 'Settings imported and applied',
-  'backup.error.weak': 'Password must be at least 8 characters',
-  'backup.error.mismatch': 'The two passwords do not match',
-  'backup.error.badPassword': 'Incorrect password',
-  'backup.error.corrupt': 'The backup file is corrupt or invalid',
-  'backup.error.unsupported': 'The backup file is too new — upgrade the app first',
-  'backup.error.io': 'File operation failed',
-
-  'api.desc': 'Configure API credentials for each platform. Tokens are stored securely and encrypted.',
-  'api.discogs.pat': 'Personal Access Token',
-  'api.discogs.patPlaceholder': 'Your Discogs API token',
-  'api.ebay.clientId': 'Client ID',
-  'api.ebay.clientIdPlaceholder': 'Your eBay Client ID',
-  'api.ebay.clientSecret': 'Client Secret',
-  'api.ebay.clientSecretPlaceholder': 'Your eBay Client Secret',
-
-  'proxy.desc': 'Route all network traffic through a SOCKS5 proxy for privacy or region access.',
-  'proxy.enable': 'Enable SOCKS5 Proxy',
-  'proxy.enableDesc': 'All requests will be routed through the proxy',
-  'proxy.host': 'Host',
-  'proxy.port': 'Port',
-
-  'lan.buttonTitle': 'LAN Connection',
-  'lan.desc': 'Starts an HTTP server on this computer that listens on a LAN address only. With the phone on the same Wi-Fi, scan the QR code to connect. It never binds to a public address.',
-  'lan.enable': 'Enable LAN Connection',
-  'lan.enableDesc': 'Let phones on the same LAN scan the QR code and connect to this computer',
-  'lan.bindAddress': 'Bind IP',
-  'lan.refresh': 'Refresh',
-  'lan.autoDetect': 'Auto-detect (Recommended)',
-  'lan.customAddress': 'Enter manually…',
-  'lan.customAddressLabel': 'Enter a LAN IPv4 address manually',
-  'lan.bindHint': 'Only LAN addresses such as 192.168.x.x / 10.x.x.x / 172.16-31.x.x are accepted; public IPs are rejected.',
-  'lan.providers': 'Barcode Lookup Providers',
-  'lan.providersDesc': 'Phone barcode lookups query these sources top to bottom. A high-confidence match is added immediately; low-confidence matches are shown as candidates on the phone.',
-  'lan.surugayaHint': 'Only active after completing Suruga-ya Cloudflare verification',
-  'lan.moveUp': 'Move up',
-  'lan.moveDown': 'Move down',
-  'lan.disableProvider': 'Disable this provider',
-  'lan.disabledProviders': 'Disabled providers',
-  'lan.port': 'Port',
-  'lan.stateRunning': 'Server running: http://{host}:{port}/',
-  'lan.stateDisabled': 'Server disabled. Save with the switch on to show the QR code.',
-  'lan.stateStopped': 'Server stopped',
-  'lan.stateError': 'Server failed to start: {error}',
-  'lan.stateNoNetwork': 'No LAN IPv4 address detected. Select or enter one manually.',
-  'lan.unknownError': 'Unknown error',
-  'lan.scanHint': 'Scan the code with your phone camera. The phone and computer must be on the same LAN.',
-  'lan.qrAlt': 'LAN connection QR code',
-  'lan.regenerateToken': 'Regenerate Access Token',
-  'lan.regenerating': 'Regenerating…',
-  'lan.tokenRegenerated': 'Access token regenerated; the old QR code is now invalid',
-  'lan.tokenRegenerateFailed': 'Failed to regenerate access token',
-
-  'sources.desc': 'Choose which platforms each search mode queries. Standard mode defaults to Discogs + eBay; deep mode defaults to every platform. Xianyu / Taobao channels need a QR-code login and only run while checked.',
-  'sources.fastMode': 'Fast Mode (Skip Detail Pages)',
-  'sources.fastModeDesc': 'Skip product-detail page visits for a faster, lower-traffic search (details may be omitted)',
-  'sources.standard': 'Standard Search',
-  'sources.deep': 'Deep Search',
-  'sources.channelXianyu': 'Xianyu',
-  'sources.channelTaobao': 'Taobao Image',
-  'sources.channelVerified': 'Logged in',
-  'sources.channelNotVerified': 'Not logged in',
-
-  // Search cache
-  'cache.label': 'Search Cache',
-  'cache.desc': 'Clear locally cached query results and product details',
-  'cache.clear': 'Clear Search Cache',
-  'cache.cleared': 'Search cache cleared',
-  'cache.clearFailed': 'Failed to clear cache',
-
-  'llm.desc': 'Configure an OpenAI-compatible API. When enabled, missing detail fields can be filled on demand with "Smart Generate" — searches never call the LLM automatically.',
-  'llm.enable': 'Enable LLM Smart Generate',
-  'llm.enableDesc': 'Allow AI to fill missing detail fields on demand',
-  'llm.apiBaseUrl': 'API Base URL',
-  'llm.apiBaseUrlHint': 'Use the provider root or /v1 URL (e.g. https://api.deepseek.com), or the full .../chat/completions endpoint',
-  'llm.apiKey': 'API Key',
-  'llm.model': 'Model',
-  'llm.platformSelection': 'Smart-fill Sources',
-  'llm.smartSourcesHint': 'Smart generation always excludes Discogs and eBay; it only analyzes sources where a product was found.',
-
-  'cloudflare.desc': 'Special channels share one real Chrome session: Suruga-ya / ZenMarket need a manual Cloudflare verification, Xianyu / Taobao need a QR-code login. A channel only joins the search while it is checked in Sources and its login is verified; login and searches all run inside that Chrome window.',
-  'cloudflare.status': 'Platform Status',
-  'cloudflare.stateVerifying': 'Verifying… (complete verification in the opened Chrome window)',
-  'cloudflare.stateVerified': 'Verified (valid until {expires})',
-  'cloudflare.stateVerifiedShort': 'Verified',
-  'cloudflare.stateExpired': 'Verification expired (re-verify required)',
-  'cloudflare.stateUnverified': 'Chrome started, not yet verified',
-  'cloudflare.stateStarting': 'Starting Chrome…',
-  'cloudflare.stateNotStarted': 'Chrome not started',
-  'cloudflare.verify': 'Launch Chrome & Verify',
-  'cloudflare.verifying': 'Verifying…',
-  'cloudflare.closeSession': 'Close Chrome Session',
-  'cloudflare.hint': 'Tip: verification and search run in the same real Chrome window. Closing that Chrome requires restarting and re-verifying; Cloudflare verification usually lasts 30 minutes to a few hours.',
-  'cloudflare.toastSuccess': 'Cloudflare verified — searching is ready',
-  'cloudflare.toastCancelled': 'Verification cancelled',
-  'cloudflare.toastFailed': 'Verification failed: {error}',
-  'cloudflare.toastFailedUnknown': 'Verification failed',
-  'cloudflare.unknownError': 'Unknown error',
-  'channels.xianyu': 'Xianyu (goofish web)',
-  'channels.taobao': 'Taobao Image Search (Pailitao)',
-  'channels.login': 'Scan QR to Log In',
-  'channels.loggingIn': 'Logging in… (scan the QR in the opened Chrome window)',
-  'channels.toastSuccess': 'Login successful — searching is now available',
-  'channels.toastCancelled': 'Login cancelled',
-  'channels.toastFailed': 'Login failed: {error}',
-
-  'detail.catalogNumber': 'Catalog Number',
-  'detail.album': 'Album',
-  'detail.artist': 'Artist',
-  'detail.source': 'Source: {platform}',
-  'detail.label': 'Label',
-  'detail.format': 'Format',
-  'detail.country': 'Country',
-  'detail.released': 'Released',
-  'detail.genre': 'Genre',
-  'detail.copy': 'Copy Info',
-  'detail.copied': 'Copied',
-  'detail.close': 'Close',
-  'detail.smartMissing': 'Missing: {fields}'
-}
-
-const dictionaries: Record<Language, Record<TranslationKey, string>> = { zh, en }
-
 export type TranslationKey = keyof typeof zh
 
 interface I18nContextValue {
-  language: Language
-  setLanguage: (language: Language, persist?: boolean) => void
   t: (key: TranslationKey, params?: Params) => string
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null)
 
+/**
+ * The UI is Chinese-only: the appearance settings section (which used to hold
+ * the language switch) was removed, so `t` always reads the zh table.
+ */
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('zh')
-
-  useEffect(() => {
-    let cancelled = false
-    void window.electronAPI
-      .getSetting('language')
-      .then((saved) => {
-        if (!cancelled) setLanguageState(saved === 'en' ? 'en' : 'zh')
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const setLanguage = useCallback((next: Language, persist = true) => {
-    setLanguageState(next)
-    if (persist) void window.electronAPI.setSetting('language', next).catch(() => {})
-  }, [])
-
-  const t = useCallback(
-    (key: TranslationKey, params?: Params) => {
-      const dict = dictionaries[language]
-      let text = dict[key] ?? zh[key] ?? key
-      if (params) {
-        for (const [name, value] of Object.entries(params)) {
-          text = text.replaceAll(`{${name}}`, String(value))
-        }
+  const t = useCallback((key: TranslationKey, params?: Params) => {
+    let text = zh[key] ?? key
+    if (params) {
+      for (const [name, value] of Object.entries(params)) {
+        text = text.replaceAll(`{${name}}`, String(value))
       }
-      return text
-    },
-    [language]
-  )
+    }
+    return text
+  }, [])
 
-  const value = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t])
+  const value = useMemo(() => ({ t }), [t])
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }

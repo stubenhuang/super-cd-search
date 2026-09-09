@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { hostname, userInfo } from 'os'
 import electronStore from 'electron-store'
-import type { Settings, LLMSettings, Platform, DisplayCurrency, ThemeMode, Language, BarcodeProvider } from '../../shared/types'
+import type { Settings, LLMSettings, Platform, DisplayCurrency, BarcodeProvider } from '../../shared/types'
 import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 
 export type { Settings, LLMSettings }
@@ -20,8 +20,6 @@ const schema = {
   deepPlatforms: { type: 'array' as const, default: DEFAULT_DEEP_PLATFORMS },
   fastMode: { type: 'boolean' as const, default: false },
   displayCurrency: { type: 'string' as const, default: 'USD' },
-  theme: { type: 'string' as const, default: 'light' },
-  language: { type: 'string' as const, default: 'zh' },
   lanEnabled: { type: 'boolean' as const, default: false },
   lanHost: { type: 'string' as const, default: '' },
   lanPort: { type: 'number' as const, default: 8787 },
@@ -227,8 +225,6 @@ export function getSettings(): Settings {
     deepPlatforms: store.get('deepPlatforms') as Platform[] || DEFAULT_DEEP_PLATFORMS,
     fastMode: store.get('fastMode') as boolean || undefined,
     displayCurrency: (store.get('displayCurrency') as DisplayCurrency) || 'USD',
-    theme: (store.get('theme') as ThemeMode) || 'light',
-    language: (store.get('language') as Language) || 'zh',
     lanEnabled: store.get('lanEnabled') as boolean || undefined,
     lanHost: store.get('lanHost') as string || undefined,
     lanPort: store.get('lanPort') as number || undefined,
@@ -260,7 +256,7 @@ export const PUBLIC_SETTING_KEYS = new Set<keyof Settings>([
   'discogsToken', 'ebayClientId', 'ebayClientSecret',
   'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
   'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
-  'theme', 'language', 'lanEnabled', 'lanHost', 'lanPort',
+  'lanEnabled', 'lanHost', 'lanPort',
   'barcodeProviders', 'lastExportDirectory', 'autoUpdateEnabled'
 ])
 

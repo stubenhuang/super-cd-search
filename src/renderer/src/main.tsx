@@ -9,12 +9,12 @@ import '@fontsource/dm-sans/latin-500.css'
 import '@fontsource/dm-sans/latin-600.css'
 import '@fontsource/jetbrains-mono/latin-500.css'
 import App from './App'
-import { initTheme } from './theme'
+import { applyTheme } from './theme'
 import { I18nProvider } from './i18n'
 import './index.css'
 
-// Apply the saved theme before first render to avoid a light-theme flash.
-initTheme()
+// Apply the dark theme before first render to avoid a light-theme flash.
+applyTheme()
 
 // Expose the host platform so CSS can adapt (e.g. reserve space for the
 // native window controls on Windows' frameless title bar).
