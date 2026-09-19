@@ -3,7 +3,7 @@
 
 ## 项目定位
 
-Super CD Search 面向 **CD 卖家**：按目录号批量查询多平台 CD 信息，聚合详情、比价、LLM 补全并导出 Excel。
+Super CD Search 面向 **CD 卖家**：按目录号批量查询多平台 CD 信息，聚合详情、比价、LLM 补全。
 
 ## 技术栈
 
