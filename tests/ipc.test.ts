@@ -65,7 +65,7 @@ vi.mock('../src/main/settings', () => ({
     'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
     'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
     'lanEnabled', 'lanHost', 'lanPort',
-    'barcodeProviders', 'lastExportDirectory'
+    'barcodeProviders', 'lastExportDirectory', 'publishTargets'
   ])
 }))
 
@@ -166,6 +166,21 @@ describe('registerSettingsIpc', () => {
 
     expect(() => handler('getSetting')(null, 'lanToken')).toThrow('Invalid settings key')
     expect(() => handler('updateSettings')(null, { lanToken: 'secret' })).toThrow('Invalid settings key')
+  })
+
+  it('re-canonicalizes publishTargets on the way in', async () => {
+    // The renderer saves the list it read earlier, which may predate the
+    // Discogs-token migration; the handler must not let that undo it.
+    mockGetSetting.mockImplementation((key: string) => (key === 'discogsToken' ? 'global-token' : undefined))
+
+    registerSettingsIpc()
+    await handler('updateSettings')(null, {
+      publishTargets: [{ id: 'd-1', platform: 'discogs', name: 'D', account: 'seller', enabled: true, createdAt: 1 }]
+    })
+
+    expect(mockUpdateSettings).toHaveBeenCalledWith({
+      publishTargets: [expect.objectContaining({ id: 'd-1', token: 'global-token' })]
+    })
   })
 
   it('registers the settings backup handlers', async () => {

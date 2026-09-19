@@ -266,7 +266,7 @@ export async function buildPublishDraft(request: PublishPrepareRequest): Promise
     const lowestUsd = lowestUsdPrice(results)
     const price = await prefillPrice(lowestUsd, currency)
 
-    if (!token) blockers.push('未配置 Discogs Token：请在「API 令牌」分区填写，或在本目标里单独填写')
+    if (!token) blockers.push('未配置专用 Discogs Token：每个 Discogs 目标都需要自己的 Token，请在「编辑」里填写并点「测试连接」验证')
     if (lowestUsd === null) warnings.push('搜索结果是空的，价格需要手动填写')
     else if (price === null) warnings.push('汇率查询超时，价格需要手动填写')
 

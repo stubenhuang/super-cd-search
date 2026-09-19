@@ -289,10 +289,13 @@ const zh = {
   'settings.publishGroupXianyu': '闲鱼默认值',
   'settings.publishSleeveNone': '不设置',
   'settings.publishToken': '专用 Token',
-  'settings.publishTokenPlaceholder': '留空则使用全局 Discogs token',
+  'settings.publishTokenPlaceholder': '粘贴该目标自己的 Discogs Token',
+  'settings.publishTokenHelpTitle': '如何获取这个目标的 Token',
+  'settings.publishTokenHelpStep1': '1. 登录该 Token 所属的 Discogs 账号（多店铺时注意别登错号）。',
+  'settings.publishTokenHelpStep2': '2. 打开 Discogs「Settings → Developers」，点 Generate new token 生成一个专用 Token。',
+  'settings.publishTokenHelpStep3': '3. 复制 Token 粘贴到上方输入框，保存后点「测试连接」验证；验证通过前开关无法打开。',
+  'settings.publishTokenOpenGuide': '打开 Discogs Developer Settings',
   'settings.publishUploadCover': '上传封面图',
-  'settings.publishXianyuHint': '闲鱼发布前需要先扫码登录，且登录有效期内才能自动填写卖家工作台。',
-  'settings.publishXianyuGoLogin': '去登录',
 
   // Every 闲鱼 target owns its own browser profile, so this list manages its
   // login lifecycle independently from the search-channel login.
@@ -311,10 +314,23 @@ const zh = {
   'settings.publishLoginFailed': '扫码登录失败',
   'settings.publishLogoutSuccess': '已退出该目标的闲鱼登录',
   'settings.publishLogoutFailed': '退出登录失败',
-  'settings.publishXianyuLoginGuide': '点「扫码登录」，用该目标自己的闲鱼账号登录（独立会话，与搜索源登录互不影响）。',
+  'settings.publishXianyuLoginGuide': '点「编辑」，用该目标自己的闲鱼账号扫码登录（独立会话，与搜索源登录互不影响）。',
   'settings.publishXianyuLoginReady': '该目标已用自己的闲鱼账号登录，可以自动填写卖家工作台。',
   'settings.publishXianyuIndependentNote': '每个闲鱼目标都是一个独立账号，需要各自「扫码登录」；该登录与「设置 → 登录」里搜索源的闲鱼登录互不影响，也不会共用 cookie。',
   'settings.publishDeleteConfirmXianyu': '确定删除发布目标「{name}」吗？同时会清除该目标自己的闲鱼登录数据。',
+
+  // Enable switch gate: a target whose account is not verified cannot be
+  // turned on, so a listing never fails halfway through for lack of a login.
+  'settings.publishLockNoToken': '未配置专用 Token：每个 Discogs 目标都要有自己的 Token，点「编辑」填写后打开开关',
+  'settings.publishLockTokenUnverified': 'Token 尚未通过校验：点「编辑」→「测试连接」验证成功后才能打开开关',
+  'settings.publishLockXianyuLoggedOut': '该目标还未登录闲鱼：点「编辑」扫码登录成功后才能打开开关',
+  'settings.publishLockedHint': '请先完成登录 / 校验，再打开该发布目标',
+
+  // Editor: per-target login / verification block (the row itself only shows a
+  // status badge, so every credential action happens here).
+  'settings.publishEditorLoginTitleXianyu': '该目标的闲鱼登录',
+  'settings.publishEditorLoginTitleDiscogs': '该目标的 Discogs 凭据',
+  'settings.publishEditorLoginFirst': '新目标需要先点底部「保存」，之后才能登录 / 校验。',
 
   // Publish menu on result cards
   'publish.menu': '发布 ▾',

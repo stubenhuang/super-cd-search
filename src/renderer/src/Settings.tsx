@@ -592,12 +592,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       case 'publish':
         // Target list changes are persisted immediately inside the section, so
         // the panel-level 保存 button has nothing to stage for it.
-        return (
-          <PublishTargetsSection
-            onToast={showToast}
-            onGoLogin={() => setActiveSection('login')}
-          />
-        )
+        return <PublishTargetsSection onToast={showToast} />
 
       case 'llm':
         return (

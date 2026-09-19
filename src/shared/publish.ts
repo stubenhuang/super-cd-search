@@ -87,8 +87,21 @@ export interface PublishTarget {
   location?: string
   weight?: number | null
   formatQuantity?: number | null
-  /** Optional per-target token; falls back to the global `discogsToken`. */
+  /**
+   * This target's own Discogs token. Required for Discogs targets: the global
+   * `discogsToken` only feeds searching, never publishing, so two targets can
+   * list under two different Discogs accounts.
+   */
   token?: string
+  /**
+   * Fingerprint of the token that was last verified against Discogs'
+   * `/oauth/identity` (see `discogsTokenFingerprint` in the main process).
+   *
+   * A Discogs target counts as「已验证」only while this matches its current
+   * `token`: editing the token therefore invalidates the verification by
+   * itself, without any field to clear by hand.
+   */
+  tokenFingerprint?: string
   // --- 闲鱼 defaults ---
   xianyuCondition?: string
   uploadCover?: boolean

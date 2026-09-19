@@ -5,7 +5,10 @@ import {
   listEnabledPublishTargets,
   getPublishTarget,
   patchPublishTarget,
-  resolveDiscogsToken
+  preparePublishTargets,
+  resolveDiscogsToken,
+  isTargetCredentialReady,
+  discogsTokenFingerprint
 } from '../src/main/publish/targets'
 import { setSetting, getSetting } from '../src/main/settings'
 import { XIANYU_CONDITIONS, type PublishTarget } from '../src/shared/publish'
@@ -276,21 +279,87 @@ describe('patchPublishTarget', () => {
 })
 
 describe('resolveDiscogsToken', () => {
-  it('prefers the per-target token over the global one', () => {
+  it('returns the target token, trimmed', () => {
     setSetting('discogsToken', 'global-token')
     const target = normalizePublishTarget({ platform: 'discogs', token: '  target-token  ' })!
     expect(resolveDiscogsToken(target)).toBe('target-token')
   })
 
-  it('falls back to the global discogsToken', () => {
+  it('never falls back to the global discogsToken', () => {
+    // The global setting only feeds searching: publishing needs the target's
+    // own credential, otherwise two targets could not use two accounts.
     setSetting('discogsToken', '  global-token  ')
     const target = normalizePublishTarget({ platform: 'discogs' })!
-    expect(resolveDiscogsToken(target)).toBe('global-token')
+    expect(resolveDiscogsToken(target)).toBe('')
   })
 
-  it('returns an empty string when neither token is configured', () => {
+  it('returns an empty string when no token is configured', () => {
     setSetting('discogsToken', '')
     const target = normalizePublishTarget({ platform: 'discogs' })!
     expect(resolveDiscogsToken(target)).toBe('')
+  })
+})
+
+describe('discogsTokenFingerprint', () => {
+  it('is stable, trimmed and never the token itself', () => {
+    expect(discogsTokenFingerprint('  tok  ')).toBe(discogsTokenFingerprint('tok'))
+    expect(discogsTokenFingerprint('tok')).toHaveLength(16)
+    expect(discogsTokenFingerprint('tok')).not.toContain('tok')
+    expect(discogsTokenFingerprint('tok')).not.toBe(discogsTokenFingerprint('tok2'))
+  })
+})
+
+describe('preparePublishTargets / global-token migration', () => {
+  it('copies the global token into Discogs targets that have none and persists it', () => {
+    setSetting('discogsToken', '  global-token  ')
+    const prepared = preparePublishTargets([
+      { id: 'd-1', platform: 'discogs', name: 'D' },
+      { id: 'd-2', platform: 'discogs', name: 'D2', token: 'own-token' }
+    ])
+
+    expect(prepared.map(target => target.token)).toEqual(['global-token', 'own-token'])
+    // Persisted, so a later renderer save that read the old list cannot undo it.
+    expect(getPublishTarget('d-1')?.token).toBe('global-token')
+  })
+
+  it('leaves every target alone when there is no global token', () => {
+    setSetting('discogsToken', '')
+    const prepared = preparePublishTargets([{ id: 'd-1', platform: 'discogs', name: 'D' }])
+    expect(prepared[0]?.token).toBeUndefined()
+  })
+
+  it('does not touch 闲鱼 targets', () => {
+    setSetting('discogsToken', 'global-token')
+    const prepared = preparePublishTargets([rawTarget({ id: 'x-1' })])
+    expect(prepared[0]?.token).toBeUndefined()
+  })
+})
+
+describe('isTargetCredentialReady', () => {
+  const base = { id: 't-1', name: 'target', account: '', enabled: true, createdAt: 1 } as const
+
+  it('requires a verified token for Discogs', () => {
+    const unverified = normalizePublishTarget({ ...base, platform: 'discogs', token: 'tok' })!
+    expect(isTargetCredentialReady(unverified)).toBe(false)
+
+    const verified = normalizePublishTarget({
+      ...base,
+      platform: 'discogs',
+      token: 'tok',
+      tokenFingerprint: discogsTokenFingerprint('tok')
+    })!
+    expect(isTargetCredentialReady(verified)).toBe(true)
+
+    // Editing the token invalidates the earlier verification by itself.
+    const changed = { ...verified, token: 'other' }
+    expect(isTargetCredentialReady(changed)).toBe(false)
+  })
+
+  it('requires a remembered login for 闲鱼', () => {
+    const neverLoggedIn = normalizePublishTarget({ ...base, platform: 'xianyu' })!
+    expect(isTargetCredentialReady(neverLoggedIn)).toBe(false)
+
+    const loggedInBefore = normalizePublishTarget({ ...base, platform: 'xianyu', xianyuLoginAt: 123 })!
+    expect(isTargetCredentialReady(loggedInBefore)).toBe(true)
   })
 })

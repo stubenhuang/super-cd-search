@@ -11,7 +11,11 @@
  *   artifacts/ui/shot-2-shimo.png    desktop 石墨文档 placeholder tab
  *   artifacts/ui/shot-3-mobile.png   LAN phone search page (rendered in a
  *                                    throwaway hidden Electron window)
- *   artifacts/ui/shot-4-publish-settings.png  发布目标 settings section
+ *   artifacts/ui/shot-4-publish-settings.png  发布目标 settings section (open
+ *                                              Discogs editor: token + guide)
+ *   artifacts/ui/shot-4b-publish-token.png      Discogs target editor (required
+ *                                              token + how-to guide)
+ *   artifacts/ui/shot-4c-publish-login.png      闲鱼 target editor (own login)
  *   artifacts/ui/shot-5-result-card.png        result card with the publish menu
  *   artifacts/ui/shot-6-publish-menu.png       publish target dropdown
  *   artifacts/ui/shot-7-publish-dialog.png     prefilled publish preview dialog
@@ -324,7 +328,10 @@ try {
           createdAt: Date.now(),
           currency: 'USD',
           condition: 'Very Good Plus (VG+)',
-          status: 'For Sale'
+          status: 'For Sale',
+          // Credentials are per-target now; without a verified token the target
+          // is locked, which is exactly what the assertions below check.
+          token: 'smoke-token'
         }
       ]
     })
@@ -342,8 +349,8 @@ try {
   )
   check('设置·发布目标条目数为 2', targetNames.length === 2, String(targetNames.length))
 
-  // Every 闲鱼 target owns an independent login: its row must expose a status
-  // badge plus its own 扫码登录 / 退出登录 buttons (never the search channel's).
+  // Every 闲鱼 target owns an independent login, and its row reports that with a
+  // status badge — but the login controls now live in the editor, not the row.
   const xianyuRow = window.locator('.publish-target-row', { hasText: '冒烟-闲鱼号' })
   await xianyuRow.locator('.publish-status-badge').first().waitFor({ timeout: 20000 })
   const xianyuBadge = await xianyuRow.locator('.publish-status-badge').first().innerText()
@@ -353,17 +360,51 @@ try {
     xianyuBadge
   )
   check(
-    '闲鱼目标有「扫码登录」按钮',
-    await xianyuRow.locator('button', { hasText: '扫码登录' }).first().isVisible()
+    '闲鱼行内不再有「扫码登录」按钮（已移入编辑框）',
+    (await xianyuRow.locator('button', { hasText: '扫码登录' }).count()) === 0
   )
   check(
-    '闲鱼目标有「退出登录」按钮',
-    await xianyuRow.locator('button', { hasText: '退出登录' }).first().isVisible()
+    '闲鱼行内不再有「退出登录」按钮（已移入编辑框）',
+    (await xianyuRow.locator('button', { hasText: '退出登录' }).count()) === 0
   )
   check(
     'Discogs 目标不显示闲鱼扫码登录按钮',
     (await window.locator('.publish-target-row', { hasText: '冒烟-Discogs停用' }).locator('button', { hasText: '扫码登录' }).count()) === 0
   )
+
+  // The seeded 闲鱼 target is ENABLED, so its switch is unlocked on purpose and
+  // can always be switched off. What the gate protects is turning a target ON:
+  // see the Discogs target below, which is off and unverified.
+  const xianyuSwitch = xianyuRow.locator('.st-switch input[type="checkbox"]')
+  check('已启用的闲鱼目标开关仍是打开的（可随时关闭）', await xianyuSwitch.isChecked())
+  check('已启用的闲鱼目标开关未被锁定', !(await xianyuSwitch.isDisabled()))
+
+  const discogsRow = window.locator('.publish-target-row', { hasText: '冒烟-Discogs停用' })
+  await discogsRow.locator('.publish-status-badge').first().waitFor({ timeout: 20000 })
+  const discogsSwitch = discogsRow.locator('.st-switch input[type="checkbox"]')
+  check('未校验的 Discogs 目标开关被锁定', await discogsSwitch.isDisabled())
+  check(
+    '锁定开关带禁用态样式',
+    (await discogsRow.locator('.st-switch.publish-switch-locked').count()) === 1
+  )
+  const discogsLockHint = discogsRow.locator('.publish-target-lock-hint').first()
+  // The Discogs probe is an API call: wait for「检查登录状态…」to be replaced by
+  // the real reason before reading it.
+  await window.waitForFunction(
+    () => !(document.querySelector('.publish-target-lock-hint')?.textContent ?? '').includes('检查登录状态'),
+    { timeout: 40000 }
+  ).catch(() => {})
+  const discogsLockText = await discogsLockHint.innerText()
+  check(
+    'Discogs 锁定原因提示 Token / 校验',
+    discogsLockText.includes('Token') || discogsLockText.includes('校验'),
+    discogsLockText
+  )
+
+  // A locked switch must stay off even when it is forced, not merely look grey.
+  await discogsSwitch.click({ force: true }).catch(() => {})
+  await window.waitForTimeout(200)
+  check('强制点击锁定开关也不会被打开', !(await discogsSwitch.isChecked()))
 
   // Review feedback: rows must line up, both platform tags must share one
   // colour treatment, and the enable toggle belongs at the very end.
@@ -391,9 +432,7 @@ try {
     JSON.stringify(badgeColors)
   )
 
-  // Scope to the head row: 闲鱼's footer holds its login buttons in a second
-  // actions container, which legitimately has no switch.
-  const headActionCounts = await window.locator('.publish-target-head .publish-target-actions').evaluateAll(actions =>
+  const headActionCounts = await window.locator('.publish-target-actions').evaluateAll(actions =>
     actions.map(action => {
       const last = action.lastElementChild
       const buttons = [...action.querySelectorAll('button')].map(button => button.textContent?.trim() ?? '')
@@ -404,11 +443,11 @@ try {
       }
     })
   )
-  check('上半部分每行「开关」都在最后', headActionCounts.every(item => item.switchLast), JSON.stringify(headActionCounts))
+  check('每行「开关」都在最后', headActionCounts.every(item => item.switchLast), JSON.stringify(headActionCounts))
 
-  // The head row must stay a single line for both platforms; a wrapped switch
-  // was exactly the misalignment this layout fixes.
-  const headSingleLine = await window.locator('.publish-target-head .publish-target-actions').evaluateAll(actions =>
+  // The action strip must stay a single line for both platforms; a wrapped
+  // switch was exactly the misalignment this layout fixes.
+  const headSingleLine = await window.locator('.publish-target-actions').evaluateAll(actions =>
     actions.every(action => {
       // Vertically centred items of different heights share a centre, not a top,
       // when they sit on one line; a wrapped line shifts the centre by ~half the
@@ -417,25 +456,63 @@ try {
       return centres.length > 0 && Math.max(...centres) - Math.min(...centres) <= 3
     })
   )
-  check('上半部分按钮与开关在同一行（未换行）', headSingleLine)
+  check('每行的按钮与开关在同一行（未换行）', headSingleLine)
   check(
-    '闲鱼行上半部分与 Discogs 按钮数一致（登录按钮已下移）',
+    '两条目标行的按钮数一致（登录按钮已移入编辑框）',
     headActionCounts.length === 2 && headActionCounts[0].buttonCount === headActionCounts[1].buttonCount,
     JSON.stringify(headActionCounts)
   )
-  check('上半部分不含扫码登录/退出登录', headActionCounts.every(item => !item.hasLogin), JSON.stringify(headActionCounts))
+  check('行内按钮不含扫码登录/退出登录', headActionCounts.every(item => !item.hasLogin), JSON.stringify(headActionCounts))
 
-  // The 闲鱼-only footer (below the dashed separator) carries those buttons.
-  const xianyuFoot = await window.locator('.publish-target-row', { hasText: '冒烟-闲鱼号' }).locator('.publish-target-foot')
-  const footButtons = await xianyuFoot.locator('button').allTextContents()
+  // The login controls live in the editor now, which is also the only place
+  // that manages the target's own session / credential.
+  await xianyuRow.locator('button', { hasText: '编辑' }).first().click()
+  await window.waitForSelector('.publish-editor', { timeout: 5000 })
+  const editorLogin = window.locator('.publish-editor .publish-editor-login')
+  check('编辑框内有该目标的登录区块', await editorLogin.isVisible())
+  const editorLoginButtons = await editorLogin.locator('button').allTextContents()
   check(
-    '登录按钮位于虚线下的页脚区',
-    await xianyuFoot.isVisible() &&
-      footButtons.some(label => label.includes('扫码登录')) &&
-      footButtons.some(label => label.includes('退出登录')),
-    JSON.stringify(footButtons)
+    '编辑框内提供「扫码登录 / 退出登录」',
+    editorLoginButtons.some(label => label.includes('扫码登录')) &&
+      editorLoginButtons.some(label => label.includes('退出登录')),
+    JSON.stringify(editorLoginButtons)
   )
+  check(
+    '编辑框内说明该目标的登录/校验状态',
+    (await editorLogin.locator('.publish-editor-login-hint').first().innerText()).length > 0
+  )
+  await editorLogin.scrollIntoViewIfNeeded()
+  await window.waitForTimeout(250)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-4c-publish-login.png') })
+  checkScreenshot('闲鱼目标编辑框（登录区块）', join(ARTIFACTS, 'shot-4c-publish-login.png'))
+  await window.locator('.publish-editor-cancel').first().click()
+  await window.waitForTimeout(200)
 
+  // Discogs target: its editor owns the required token plus the how-to guide.
+  await discogsRow.locator('button', { hasText: '编辑' }).first().click()
+  await window.waitForSelector('.publish-editor', { timeout: 5000 })
+  check(
+    'Discogs 编辑框内提供「测试连接」校验入口',
+    await window.locator('.publish-editor .publish-editor-login button', { hasText: '测试连接' }).first().isVisible()
+  )
+  const tokenField = window.locator('.publish-editor-token input#publish-target-token')
+  check('Discogs 编辑框内 Token 输入框存在', await tokenField.isVisible())
+  const tokenLabel = await window.locator('.publish-editor-token .st-label').first().innerText()
+  check('Token 标记为必填（*）', tokenLabel.includes('*'), tokenLabel)
+  const tokenHelp = await window.locator('.publish-editor-token-help').first().innerText()
+  check(
+    'Token 获取引导含步骤与 Discogs 入口',
+    tokenHelp.includes('Discogs') && tokenHelp.includes('Generate new token'),
+    tokenHelp.slice(0, 120)
+  )
+  // The editor opens below the fold: scroll it into view before shooting, or
+  // the screenshot proves nothing about the new blocks.
+  await window.locator('.publish-editor-token-help').first().scrollIntoViewIfNeeded()
+  await window.waitForTimeout(250)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-4b-publish-token.png') })
+  checkScreenshot('Discogs 目标编辑框（Token + 引导）', join(ARTIFACTS, 'shot-4b-publish-token.png'))
+  await window.locator('.publish-editor-cancel').first().click()
+  await window.waitForTimeout(200)
   // Look for a labelled「账户」field rather than a specific id/placeholder, so the
   // assertion cannot go vacuous when the markup is refactored.
   const accountFields = await window.locator('.publish-editor .st-field').evaluateAll(fields =>

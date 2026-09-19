@@ -38,7 +38,10 @@ const DISCOGS_TARGET: PublishTarget = {
   name: '我的 Discogs',
   account: 'seller',
   enabled: true,
-  createdAt: 1
+  createdAt: 1,
+  // Discogs credentials are per-target now: the global `discogsToken` setting
+  // only feeds searching, so a target without its own token cannot publish.
+  token: 'tok'
 }
 
 const XIANYU_TARGET: PublishTarget = {
@@ -50,10 +53,9 @@ const XIANYU_TARGET: PublishTarget = {
   createdAt: 1
 }
 
-function setTargets(targets: PublishTarget[], token = ''): void {
+function setTargets(targets: PublishTarget[]): void {
   mockGetSetting.mockImplementation((key: string) => {
     if (key === 'publishTargets') return targets
-    if (key === 'discogsToken') return token
     return undefined
   })
 }
@@ -141,7 +143,7 @@ describe('runPublish: guards', () => {
 
 describe('runPublish: discogs', () => {
   it('fails without a token', async () => {
-    setTargets([DISCOGS_TARGET], '')
+    setTargets([{ ...DISCOGS_TARGET, token: '' }])
     const outcome = await runPublish(discogsRequest())
     expect(outcome.status).toBe('error')
     expect(outcome.error).toContain('Token')
@@ -149,19 +151,19 @@ describe('runPublish: discogs', () => {
   })
 
   it('fails when no release is selected', async () => {
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     const outcome = await runPublish(discogsRequest([field('condition', 'Very Good Plus (VG+)'), field('price', '19.99')]))
     expect(outcome.error).toBe('请选择要发布的 Discogs Release')
   })
 
   it('fails when no condition is selected', async () => {
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     const outcome = await runPublish(discogsRequest([field('release', '123'), field('price', '19.99')]))
     expect(outcome.error).toBe('请选择唱片成色')
   })
 
   it('fails when the price is not a positive number', async () => {
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     const zero = await runPublish(
       discogsRequest([field('release', '123'), field('condition', 'Very Good Plus (VG+)'), field('price', '0')])
     )
@@ -175,7 +177,7 @@ describe('runPublish: discogs', () => {
   })
 
   it('publishes and returns the listing id/url', async () => {
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     mockCreateDiscogsListing.mockResolvedValue({
       listingId: '55',
       listingUrl: 'https://www.discogs.com/sell/item/55'
@@ -212,7 +214,7 @@ describe('runPublish: discogs', () => {
   })
 
   it('forwards every optional field from the form', async () => {
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     mockCreateDiscogsListing.mockResolvedValue({ listingId: '1', listingUrl: 'u' })
     await runPublish(
       discogsRequest([
@@ -245,7 +247,7 @@ describe('runPublish: discogs', () => {
   })
 
   it('turns a createDiscogsListing failure into an error outcome', async () => {
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     mockCreateDiscogsListing.mockRejectedValue(new Error('Discogs 拒绝了该发布内容（422）'))
     const outcome = await runPublish(discogsRequest())
     expect(outcome.status).toBe('error')
@@ -356,7 +358,7 @@ describe('runPublish: progress events', () => {
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([
       { isDestroyed: () => false, webContents: { send } } as unknown as BrowserWindow
     ])
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     mockCreateDiscogsListing.mockResolvedValue({ listingId: '1', listingUrl: 'u' })
 
     await runPublish(discogsRequest())
@@ -395,7 +397,7 @@ describe('runPublish: progress events', () => {
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([
       { isDestroyed: () => false, webContents: { send } } as unknown as BrowserWindow
     ])
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     mockCreateDiscogsListing.mockRejectedValue(new Error('boom'))
 
     const outcome = await runPublish(discogsRequest())
@@ -411,7 +413,7 @@ describe('runPublish: progress events', () => {
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([
       { isDestroyed: () => true, webContents: { send } } as unknown as BrowserWindow
     ])
-    setTargets([DISCOGS_TARGET], 'tok')
+    setTargets([DISCOGS_TARGET])
     mockCreateDiscogsListing.mockResolvedValue({ listingId: '1', listingUrl: 'u' })
 
     await runPublish(discogsRequest())

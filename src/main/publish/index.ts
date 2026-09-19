@@ -118,7 +118,7 @@ export async function runPublish(request: PublishRunRequest): Promise<PublishOut
 
       const token = resolveDiscogsToken(target)
       if (!token) {
-        return failure(request, '未配置 Discogs Token：请到「设置 → API 令牌」填写，或在该发布目标里单独填写', 'discogs', target.name)
+        return failure(request, '未配置专用 Discogs Token：每个 Discogs 目标都需要自己的 Token，请在「设置 → 发布目标」的「编辑」里填写并验证', 'discogs', target.name)
       }
 
       const releaseId = readNumber(request.fields, 'release')

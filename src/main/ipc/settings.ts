@@ -5,6 +5,7 @@ import { clearReleaseCache, clearDiscogsBarcodeCache } from '../queries/discogs'
 import { clearItemDetailsCache } from '../queries/ebay'
 import { clearBarcodeResolutionCache } from '../barcode/resolver'
 import { exportSettingsBackup, importSettingsBackup } from '../settings/backup'
+import { preparePublishTargets } from '../publish/targets'
 
 function assertPublicSettingKey(key: string): asserts key is keyof Settings {
   if (!PUBLIC_SETTING_KEYS.has(key as keyof Settings)) throw new Error('Invalid settings key')
@@ -28,7 +29,13 @@ export function registerSettingsIpc(): void {
   ipcMain.handle('updateSettings', (_event, values: Partial<Settings>) => {
     if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('Invalid settings payload')
     for (const key of Object.keys(values)) assertPublicSettingKey(key)
-    updateSettings(values)
+    // A publish-target list is re-canonicalized on the way in: the renderer
+    // saves the list it read earlier, and that snapshot must not be able to
+    // drop the Discogs-token migration (which would lock the target).
+    const payload: Partial<Settings> = 'publishTargets' in values
+      ? { ...values, publishTargets: preparePublishTargets(values.publishTargets) }
+      : values
+    updateSettings(payload)
   })
 
   ipcMain.handle('deleteSetting', (_event, key: string) => {

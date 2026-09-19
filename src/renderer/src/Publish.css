@@ -198,15 +198,25 @@
   color: var(--st-text-muted);
 }
 
-/* Buttons keep their natural size and wrap inside this container only, so a
-   crowded 闲鱼 row never pushes the platform badge onto its own line. */
+/* Second line of a row: the login/credential badge plus, when known, the
+   account. Both platforms share it now. */
+.publish-target-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Buttons keep their natural size on their own full-width line, so a crowded
+   row can never push the platform badge onto a separate line — and every row
+   wraps identically instead of depending on how long its account name is. */
 .publish-target-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  flex: 0 1 auto;
   min-width: 0;
   margin-left: auto;
 }
@@ -259,29 +269,29 @@
   color: var(--st-text-muted);
 }
 
-/* 闲鱼-only footer under the dashed separator: the explainer on the left, the
-   target's own login controls on the right. Keeping those two buttons out of the
-   head is what lets both rows' action columns line up. */
-.publish-target-foot {
+/* Why this row's switch is locked. A disabled control with no explanation reads
+   as a bug, so the reason is spelled out (not only in the tooltip). */
+.publish-target-lock-hint {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   padding-top: 8px;
   border-top: 1px dashed var(--st-border);
-}
-
-.publish-target-hint {
-  flex: 1 1 auto;
-  min-width: 0;
   font-family: var(--st-font-body);
   font-size: 11px;
   line-height: 1.5;
   color: var(--st-text-muted);
 }
 
-.publish-target-actions-login {
-  margin-left: 0;
-  flex-wrap: nowrap;
+.publish-editor-lock-icon {
+  flex-shrink: 0;
+  color: var(--st-accent);
+}
+
+/* Locked enable switch: dimmed and not clickable. */
+.st-switch.publish-switch-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .publish-link-btn {
@@ -418,6 +428,89 @@
 
 .publish-editor-account-detect {
   font-size: 11px;
+  color: var(--st-text-muted);
+}
+
+/* Per-target login / credential block in the editor. This replaced the old
+   row footer: the list rows stay compact, and the target's own Chrome session
+   and token are managed in the one place that already edits the target. */
+.publish-editor-login {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 12px;
+  background: var(--st-bg-tertiary);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-md);
+}
+
+.publish-editor-login-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.publish-editor-login-title {
+  font-family: var(--st-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--st-text-primary);
+}
+
+.publish-editor-login-hint {
+  font-family: var(--st-font-body);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--st-text-muted);
+}
+
+.publish-editor-login-lock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--st-font-body);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--warning-icon);
+}
+
+.publish-editor-login-actions {
+  margin-left: 0;
+  flex-wrap: wrap;
+}
+
+/* The required per-target Discogs token and its how-to guide. */
+.publish-editor-token {
+  margin: 14px 0 0;
+}
+
+.publish-editor-token-help {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--st-accent-soft);
+  border: 1px solid var(--st-accent-border);
+  border-radius: var(--st-radius-md);
+  font-family: var(--st-font-body);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--st-text-secondary);
+}
+
+.publish-editor-token-help-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--st-text-primary);
+}
+
+.publish-editor-token-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 8px;
   color: var(--st-text-muted);
 }
 

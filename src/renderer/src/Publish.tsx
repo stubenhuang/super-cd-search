@@ -28,6 +28,13 @@ const PLATFORM_LABEL_KEYS: Record<PublishPlatform, TranslationKey> = {
   discogs: 'publish.platform.discogs'
 }
 
+/**
+ * Where a user creates their own Discogs token. Discogs has no per-app OAuth
+ * flow for listing, so a Personal Access Token is the only credential the
+ * publishing API accepts.
+ */
+const DISCOGS_TOKEN_GUIDE_URL = 'https://www.discogs.com/settings/developers'
+
 /** Small colored platform pill shared by the settings list and the dropdown. */
 function PlatformBadge({ platform }: { platform: PublishPlatform }) {
   const { t } = useI18n()
@@ -43,13 +50,6 @@ function PlatformBadge({ platform }: { platform: PublishPlatform }) {
 interface PublishTargetsSectionProps {
   /** Reuse the settings panel toast so the styling stays identical. */
   onToast: (text: string, kind?: 'success' | 'error') => void
-  /**
-   * Jump to the settings「特殊渠道（扫码登录）」section. Kept for the caller's API
-   * compatibility: a 闲鱼 publish target now logs in from its own row with its
-   * own browser profile, so the search-channel login is no longer part of this
-   * flow and the link is intentionally unused.
-   */
-  onGoLogin?: () => void
 }
 
 /** Login probe result for one target row; absent until the first probe. */
@@ -59,8 +59,45 @@ interface TargetStatusView {
 }
 
 /**
- * Colored login badge for a 闲鱼 target. The localized `message` from the main
- * process is surfaced as the tooltip, so the badge itself stays short.
+ * Whether the app can already publish through this target, i.e. whether the
+ * enable switch may be turned on.
+ *
+ * The main process owns the same rule (`isTargetCredentialReady` in
+ * src/main/publish/targets.ts) for its own guards; this copy exists because the
+ * renderer needs it while rendering, and it additionally needs the probed
+ * status — 闲鱼 may have logged in before (its Chrome session lives in memory,
+ * the login itself on disk), and Discogs only reports `logged_in` once its own
+ * token has passed `/oauth/identity`.
+ */
+function isTargetReady(target: PublishTarget, view?: TargetStatusView): boolean {
+  if (target.platform === 'discogs') {
+    return view?.status?.state === 'logged_in' && Boolean(target.account)
+  }
+  if (view?.status?.state === 'logged_in') return true
+  return Boolean(target.xianyuLoginAt)
+}
+
+/**
+ * Why the switch is locked, as an i18n key. `null` means「no reason, it is
+ * ready」. The row renders this next to the switch so a greyed-out control never
+ * leaves the user guessing.
+ */
+function lockReasonKey(target: PublishTarget, view?: TargetStatusView): TranslationKey | null {
+  if (view?.loading && !view.status) return 'settings.publishStatusChecking'
+  if (target.platform === 'discogs') {
+    if (!(target.token ?? '').trim()) return 'settings.publishLockNoToken'
+    if (view?.status?.state === 'logged_in' && target.account) return null
+    return 'settings.publishLockTokenUnverified'
+  }
+  if (view?.status?.state === 'logged_in') return null
+  if (target.xianyuLoginAt) return null
+  return 'settings.publishLockXianyuLoggedOut'
+}
+
+/**
+ * Colored login badge for one target. The localized `message` from the main
+ * process is surfaced as the tooltip, so the badge itself stays short; 闲鱼 and
+ * Discogs share it because both report the same three states.
  */
 function LoginStatusBadge({ view }: { view: TargetStatusView }) {
   const { t } = useI18n()
@@ -191,12 +228,11 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
         if (!mountedRef.current) return
         setTargets(loaded)
         setLoading(false)
-        // Probe the 闲鱼 targets strictly one after another: every call may talk
-        // to that target's own Chrome profile, so a Promise.all would race them.
-        // Discogs targets need no probe —「测试连接」covers them.
+        // Probe strictly one after another: a 闲鱼 probe touches that target's
+        // own Chrome profile and a Discogs probe may call the API, so a
+        // Promise.all would race them (and the shared rate limiter).
         for (const target of loaded) {
           if (!mountedRef.current) return
-          if (target.platform !== 'xianyu') continue
           await fetchStatus(target.id)
         }
       } catch (err) {
@@ -208,6 +244,16 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
       }
     })()
   }, [fetchStatus])
+
+  // Opening the editor refreshes that target's badge/switch state, so a token
+  // typed in a previous session (or a login that expired meanwhile) is never
+  // shown from a stale snapshot. Keyed on the id only: the effect must not
+  // re-fire while the user is typing in the editor.
+  const editingId = editing?.id ?? null
+  useEffect(() => {
+    if (!editingId || isNew) return
+    void fetchStatus(editingId)
+  }, [editingId, isNew, fetchStatus])
 
   // List mutations are written straight to disk; the panel-level 保存 button
   // only persists the unrelated sections, so there is nothing to stage here.
@@ -260,9 +306,10 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
     setEditing(null)
     setIsNew(false)
     onToast(t('settings.publishSaved'))
-    // A target saved as 闲鱼 has no probed badge yet; fetch it so the row is
-    // immediately actionable. Fire-and-forget: the editor must close at once.
-    if (target.platform === 'xianyu') void fetchStatus(target.id)
+    // Re-probe after a save: a new/changed Discogs token is what decides
+    // whether the target unlocks, and a saved 闲鱼 target has no badge yet.
+    // Fire-and-forget: the editor must close at once.
+    void fetchStatus(target.id)
   }
 
   const handleDelete = async (target: PublishTarget) => {
@@ -296,7 +343,7 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
   const handleLogin = async (target: PublishTarget) => {
     setLoginId(target.id)
     try {
-      // Can block for tens of seconds while the user scans; only this row's
+      // Can block for tens of seconds while the user scans; only this target's
       // login/logout buttons are disabled, the rest of the panel stays usable.
       const result = await window.electronAPI.loginPublishTarget(target.id)
       if (!mountedRef.current) return
@@ -355,7 +402,20 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
     }
   }
 
-  const handleToggle = (target: PublishTarget, enabled: boolean) => {
+  /**
+   * Enable/disable one target.
+   *
+   * Turning a target ON requires a verified credential (see `isTargetReady`):
+   * an unlogged target would only fail at publish time, so the switch stays
+   * locked and explains why. Turning one OFF is always allowed — including for
+   * a target whose credential was removed later, which must remain reachable.
+   */
+  const handleToggle = (target: PublishTarget, enabled: boolean, view?: TargetStatusView) => {
+    if (enabled && !isTargetReady(target, view)) {
+      const reason = lockReasonKey(target, view)
+      onToast(reason ? t(reason) : t('settings.publishLockedHint'), 'error')
+      return
+    }
     void persist(targets.map(item => (item.id === target.id ? { ...item, enabled } : item)))
   }
 
@@ -372,7 +432,8 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
         // once, exactly like a successful「扫码登录」.
         await reloadTargets()
         if (!mountedRef.current) return
-        if (target.platform === 'xianyu') await fetchStatus(target.id)
+        // Both platforms: the probe also decides whether the switch unlocks.
+        await fetchStatus(target.id)
       }
     } catch (err) {
       onToast(t('settings.publishSaveFailed'), 'error')
@@ -385,7 +446,29 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
     }
   }
 
-  const renderEditor = (target: PublishTarget) => (
+  const renderEditor = (target: PublishTarget) => {
+    // A brand-new target has no id yet, so nothing can be probed for it: the
+    // login/verification buttons stay disabled until the user saves it.
+    const targetView = isNew ? undefined : statusViews[target.id]
+    const loginPending = loginId === target.id
+    const logoutPending = logoutId === target.id
+    const busy = busyId === target.id
+    const lockReason = lockReasonKey(target, targetView)
+    const editorHint = targetView?.loading
+      ? t('settings.publishStatusChecking')
+      : (targetView?.status?.message
+        || (target.platform === 'xianyu'
+          ? t('settings.publishXianyuLoginGuide')
+          : t('settings.publishTokenHelpStep3')))
+    const openTokenGuide = (url: string) => {
+      void window.electronAPI.openExternal(url).catch(err => {
+        window.electronAPI.log('warn', 'publish.targets', 'failed to open Discogs token guide', {
+          error: err instanceof Error ? err.message : String(err)
+        })
+      })
+    }
+
+    return (
     <div className="publish-editor">
       <div className="publish-editor-title">
         {isNew ? t('settings.publishNewTitle') : t('settings.publishEditTitle')}
@@ -448,6 +531,62 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
             </span>
           </div>
         )}
+      </div>
+
+      {/* Login / verification lives here, not on the list row: the row stays a
+          compact summary, and this is the one place where the target's own
+          session and credential are managed. */}
+      <div className="publish-editor-login">
+        <div className="publish-editor-login-head">
+          <span className="publish-editor-login-title">
+            {target.platform === 'discogs'
+              ? t('settings.publishEditorLoginTitleDiscogs')
+              : t('settings.publishEditorLoginTitleXianyu')}
+          </span>
+          {!isNew && <LoginStatusBadge view={targetView ?? { loading: false }} />}
+        </div>
+        <div className="publish-editor-login-hint">
+          {isNew ? t('settings.publishEditorLoginFirst') : editorHint}
+        </div>
+        {!isNew && lockReason && (
+          <div className="publish-editor-login-lock">
+            <span className="publish-editor-lock-icon">⚑</span>
+            <span>{t(lockReason)}</span>
+          </div>
+        )}
+        <div className="publish-target-actions publish-editor-login-actions">
+          {target.platform === 'xianyu' ? (
+            <>
+              <button
+                type="button"
+                className="st-btn-cancel publish-btn-login"
+                onClick={() => void handleLogin(target)}
+                disabled={isNew || loginPending || logoutPending}
+                title={targetView?.status?.message || undefined}
+              >
+                {loginPending ? t('settings.publishLoggingIn') : t('settings.publishLoginScan')}
+              </button>
+              <button
+                type="button"
+                className="st-btn-cancel"
+                onClick={() => void handleLogout(target)}
+                disabled={isNew || loginPending || logoutPending}
+              >
+                {logoutPending ? t('settings.publishLoggingOut') : t('settings.publishLogout')}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="st-btn-cancel publish-btn-login"
+              onClick={() => void handleTest(target)}
+              disabled={isNew || busy}
+              title={targetView?.status?.message || undefined}
+            >
+              {busy ? t('settings.publishTesting') : t('settings.publishTest')}
+            </button>
+          )}
+        </div>
       </div>
 
       {target.platform === 'discogs' ? (
@@ -558,10 +697,15 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
                 onChange={e => patchEditing({ formatQuantity: e.target.value === '' ? null : Number(e.target.value) })}
               />
             </div>
+          </div>
 
+          {/* The credential is required and belongs to THIS target only, so it
+              gets its own block (with the how-to guide) instead of being one
+              anonymous input among the listing defaults. */}
+          <div className="publish-editor-token">
             <div className="st-field">
               <label className="st-label" htmlFor="publish-target-token">
-                <span className="st-label-icon">◆</span> {t('settings.publishToken')}
+                <span className="st-label-icon">◆</span> {t('settings.publishToken')} *
               </label>
               <input
                 id="publish-target-token"
@@ -571,6 +715,26 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
                 onChange={e => patchEditing({ token: e.target.value })}
                 placeholder={t('settings.publishTokenPlaceholder')}
               />
+            </div>
+            <div className="publish-editor-token-help">
+              <div className="publish-editor-token-help-title">
+                <span className="publish-editor-account-note-icon">◈</span>
+                <span>{t('settings.publishTokenHelpTitle')}</span>
+              </div>
+              {/* A plain list, not <ol>: the i18n strings carry their own
+                  「1. / 2. / 3.」 prefixes and an ordered list would double them. */}
+              <div className="publish-editor-token-steps">
+                <div>{t('settings.publishTokenHelpStep1')}</div>
+                <div>{t('settings.publishTokenHelpStep2')}</div>
+                <div>{t('settings.publishTokenHelpStep3')}</div>
+              </div>
+              <button
+                type="button"
+                className="publish-link-btn"
+                onClick={() => openTokenGuide(DISCOGS_TOKEN_GUIDE_URL)}
+              >
+                {t('settings.publishTokenOpenGuide')} ↗
+              </button>
             </div>
           </div>
 
@@ -628,7 +792,7 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
       <div className="st-cf-actions publish-editor-actions">
         <button
           type="button"
-          className="st-btn-cancel"
+          className="st-btn-cancel publish-editor-cancel"
           onClick={() => {
             setEditing(null)
             setIsNew(false)
@@ -647,7 +811,8 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
         </button>
       </div>
     </div>
-  )
+    )
+  }
 
   return (
     <div className="st-section-content">
@@ -659,10 +824,12 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
           <div className="publish-empty">{t('settings.publishEmpty')}</div>
         )}
         {!loading && targets.map(target => {
-          const isXianyu = target.platform === 'xianyu'
           const statusView = statusViews[target.id]
-          const loginPending = loginId === target.id
-          const logoutPending = logoutId === target.id
+          const ready = isTargetReady(target, statusView)
+          const lockReason = lockReasonKey(target, statusView)
+          // Already-enabled targets can always be switched off; only turning one
+          // ON is gated, and only while its credential is unverified.
+          const switchLocked = !target.enabled && !ready
           return (
             <div key={target.id} className="publish-target-row">
               <div className="publish-target-head">
@@ -672,79 +839,67 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
                     <div className="publish-target-name-row">
                       <span className="publish-target-name">{target.name}</span>
                     </div>
-                    {/* Secondary read-only line: 闲鱼 shows its login state, Discogs
-                        its resolved account. Keeping the name row free of the
-                        badge is what stops the action buttons from wrapping. */}
-                    {isXianyu
-                      ? (statusView && <LoginStatusBadge view={statusView} />)
-                      : (target.account && (
+                    {/* Secondary read-only line: both platforms report a login
+                        state, and 闲鱼 adds the account name. Keeping the name
+                        row free of the badge is what stops the action buttons
+                        from wrapping. */}
+                    <span className="publish-target-sub">
+                      {statusView && <LoginStatusBadge view={statusView} />}
+                      {target.account && (
                         <span className="publish-target-account">
                           {t('settings.publishAccountValue', { account: target.account })}
                         </span>
-                      ))}
+                      )}
+                    </span>
                   </div>
-                </div>
-                {/* Actions keep their own wrapping context so a crowded row
-                    wraps inside this container instead of pushing the badge down.
-                    Only the buttons both platforms share live here: 闲鱼's own
-                    login controls moved below the separator, which is what keeps
-                    the two rows' action columns aligned. */}
-                <div className="publish-target-actions">
-                  <button
-                    type="button"
-                    className="st-btn-cancel"
-                    onClick={() => void handleTest(target)}
-                    disabled={busyId === target.id}
-                  >
-                    {busyId === target.id ? t('settings.publishTesting') : t('settings.publishTest')}
-                  </button>
-                  <button type="button" className="st-btn-cancel" onClick={() => startEdit(target)}>
-                    {t('settings.publishEdit')}
-                  </button>
-                  <button
-                    type="button"
-                    className="st-btn-cancel publish-btn-danger"
-                    onClick={() => void handleDelete(target)}
-                  >
-                    {t('settings.publishDelete')}
-                  </button>
-                  {/* The enable switch sits last, at the far right of the row. */}
-                  <label className="st-switch" title={t('settings.publishEnabled')}>
-                    <input
-                      type="checkbox"
-                      checked={target.enabled}
-                      onChange={e => handleToggle(target, e.target.checked)}
-                    />
-                    <span className="st-slider"></span>
-                  </label>
                 </div>
               </div>
-              {isXianyu && (
-                <div className="publish-target-foot">
-                  <span className="publish-target-hint">
-                    {statusView?.status?.state === 'logged_in'
-                      ? (statusView.status.message || t('settings.publishXianyuLoginReady'))
-                      : t('settings.publishXianyuLoginGuide')}
-                  </span>
-                  <div className="publish-target-actions publish-target-actions-login">
-                    <button
-                      type="button"
-                      className="st-btn-cancel publish-btn-login"
-                      onClick={() => void handleLogin(target)}
-                      disabled={loginPending || logoutPending}
-                      title={statusView?.status?.message || undefined}
-                    >
-                      {loginPending ? t('settings.publishLoggingIn') : t('settings.publishLoginScan')}
-                    </button>
-                    <button
-                      type="button"
-                      className="st-btn-cancel"
-                      onClick={() => void handleLogout(target)}
-                      disabled={loginPending || logoutPending}
-                    >
-                      {logoutPending ? t('settings.publishLoggingOut') : t('settings.publishLogout')}
-                    </button>
-                  </div>
+              {/* Actions get their own full-width line instead of squeezing in
+                  beside the name: at this panel width the four controls cannot
+                  share a line with the badge and still fit, and a container
+                  that shrinks per row wrapped the 删除 button on one row but
+                  not the other. Login/退出登录 stay in the editor, so both
+                  platforms share this exact button set. */}
+              <div className="publish-target-actions">
+                <button
+                  type="button"
+                  className="st-btn-cancel"
+                  onClick={() => void handleTest(target)}
+                  disabled={busyId === target.id}
+                >
+                  {busyId === target.id ? t('settings.publishTesting') : t('settings.publishTest')}
+                </button>
+                <button type="button" className="st-btn-cancel" onClick={() => startEdit(target)}>
+                  {t('settings.publishEdit')}
+                </button>
+                <button
+                  type="button"
+                  className="st-btn-cancel publish-btn-danger"
+                  onClick={() => void handleDelete(target)}
+                >
+                  {t('settings.publishDelete')}
+                </button>
+                {/* The enable switch sits last, at the far right of the row. */}
+                <label
+                  className={`st-switch${switchLocked ? ' publish-switch-locked' : ''}`}
+                  title={lockReason ? t(lockReason) : t('settings.publishEnabled')}
+                >
+                  <input
+                    type="checkbox"
+                    checked={target.enabled}
+                    disabled={switchLocked}
+                    onChange={e => handleToggle(target, e.target.checked, statusView)}
+                  />
+                  <span className="st-slider"></span>
+                </label>
+              </div>
+              {/* Why the switch is locked. Shown under the row (not only in the
+                  tooltip) because a greyed-out control with no explanation is
+                  indistinguishable from a bug. */}
+              {switchLocked && lockReason && (
+                <div className="publish-target-lock-hint">
+                  <span className="publish-editor-lock-icon">⚑</span>
+                  <span>{t(lockReason)}</span>
                 </div>
               )}
             </div>
