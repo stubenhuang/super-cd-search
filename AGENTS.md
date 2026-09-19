@@ -1,10 +1,18 @@
 ## 思维方式
-> 不清楚的地方要随时提问, 不要猜测, 可以渐进式提问
-> 客观理性, 不要讨好任何人
+> 不清楚的地方要主动提问, 不要猜测, 确定好需求
 
 ## 项目定位
 
 Super CD Search 面向 **CD 卖家**：按目录号批量查询多平台 CD 信息，聚合详情、比价、LLM 补全并导出 Excel。
+
+## 技术栈
+
+- 语言：**TypeScript**（`strict`），少量 JavaScript（`scripts/*.mjs` 构建脚本、LAN 移动端内联页面脚本）。
+- 桌面壳：**Electron**，三进程结构 —— 主进程 `src/main/`、预加载 `src/preload/`、渲染进程 `src/renderer/`，共享类型在 `src/shared/`，通过 IPC 通信。
+- 构建/打包：**electron-vite**（Vite）+ `@vitejs/plugin-react`，产物 `out/`；打包用 **electron-builder**。
+- 前端：**React 19**（函数组件 + Hooks），纯 CSS，无路由与状态管理库。
+- 抓取/解析：**Puppeteer**（`puppeteer-extra` + stealth 插件、`socks-proxy-agent` 代理）、**jsdom** + `@mozilla/readability`。
+- 主要依赖：`electron-store`（配置）、`electron-updater`（更新）、`zxing-wasm`（条码）、Node 内置 `http`（局域网移动端服务）。
 
 ## 日志规范
 
