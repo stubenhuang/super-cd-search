@@ -52,8 +52,6 @@ function mockSearchState(overrides: Partial<LanSearchState> = {}): LanSearchStat
     completed: 0,
     percent: 0,
     progress: [],
-    inserted: 0,
-    updated: 0,
     error: null,
     ...overrides
   }
@@ -82,12 +80,11 @@ afterEach(async () => {
 
 describe('setLanSearchState / getLanSearchState', () => {
   it('round-trips the snapshot pushed by the renderer', () => {
-    setLanSearchState(mockSearchState({ phase: 'searching', input: 'TOCP-1', inserted: 2, updated: 1 }))
+    setLanSearchState(mockSearchState({ phase: 'searching', input: 'TOCP-1', total: 1 }))
     expect(getLanSearchState()).toMatchObject({
       phase: 'searching',
       input: 'TOCP-1',
-      inserted: 2,
-      updated: 1
+      total: 1
     })
   })
 })

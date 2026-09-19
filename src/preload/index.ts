@@ -9,21 +9,11 @@ import type {
   LoginResult,
   LoginSessionStatus,
   DetailEnrichmentResult,
-  ExportFileResult,
   QueryResult,
   CDDetails,
   LanCandidate,
   LanServerStatus,
   LanSearchState,
-  CDLibraryRecord,
-  CDLibraryRecordInput,
-  CDLibraryListQuery,
-  CDLibraryListResult,
-  CDLibraryImportResult,
-  CDLibraryUpsertResult,
-  PublishPlatform,
-  PublishResult,
-  PublishSnapshot,
   SettingsTransferResult
 } from '../shared/types'
 import type { UpdateState } from '../shared/updater'
@@ -33,7 +23,6 @@ const validReceiveChannels = [
   'fromMain',
   'query:progress',
   'detail:enrich-progress',
-  'export:progress',
   'lan:catalog-added',
   'lan:input-changed',
   'lan:search-requested',
@@ -41,7 +30,6 @@ const validReceiveChannels = [
   'lan:flow-confirm',
   'lan:flow-skip',
   'lan:flow-close',
-  'library:publish-updated',
   'updater:state'
 ] as const
 
@@ -97,37 +85,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('detail:enrich-cancel'),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
-  listLibraryRecords: (query: CDLibraryListQuery): Promise<CDLibraryListResult> =>
-    ipcRenderer.invoke('library:list', query),
-  createLibraryRecord: (input: CDLibraryRecordInput): Promise<CDLibraryRecord> =>
-    ipcRenderer.invoke('library:create', input),
-  updateLibraryRecord: (catalogNumber: string, input: CDLibraryRecordInput): Promise<CDLibraryRecord> =>
-    ipcRenderer.invoke('library:update', catalogNumber, input),
-  upsertLibraryRecords: (inputs: CDLibraryRecordInput[]): Promise<CDLibraryUpsertResult> =>
-    ipcRenderer.invoke('library:upsert-search-results', inputs),
-  deleteLibraryRecords: (catalogNumbers: string[]): Promise<number> =>
-    ipcRenderer.invoke('library:delete', catalogNumbers),
-  importLibraryExcel: (): Promise<CDLibraryImportResult> =>
-    ipcRenderer.invoke('library:import-excel'),
-  exportLibraryExcel: (
-    catalogNumbers: string[],
-    headers: string[],
-    defaultFileName: string,
-    targetDirectory?: string
-  ): Promise<ExportFileResult> =>
-    ipcRenderer.invoke('library:export-excel', catalogNumbers, headers, defaultFileName, targetDirectory),
-  getLibraryImage: (catalogNumber: string): Promise<{ base64: string; mimeType: string } | null> =>
-    ipcRenderer.invoke('library:image', catalogNumber),
-  publishLibraryRecords: (catalogNumbers: string[]): Promise<PublishResult> =>
-    ipcRenderer.invoke('library:publish', catalogNumbers),
-  finishPublishBatch: (): Promise<PublishResult> =>
-    ipcRenderer.invoke('library:finish-publish'),
-  getPublishSnapshot: (): Promise<PublishSnapshot> =>
-    ipcRenderer.invoke('library:get-publish-snapshot'),
-  setPublishState: (catalogNumber: string, published: boolean): Promise<void> =>
-    ipcRenderer.invoke('library:set-publish-state', catalogNumber, published),
-  setPublishPlatforms: (catalogNumber: string, platforms: PublishPlatform[]): Promise<void> =>
-    ipcRenderer.invoke('library:set-publish-platforms', catalogNumber, platforms),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),

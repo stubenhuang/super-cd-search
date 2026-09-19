@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, CDLibraryRecordInput, LanSearchState, LanSearchPhase, LoginPlatform, DetailEnrichProgress } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, LanSearchState, LanSearchPhase, LoginPlatform, DetailEnrichProgress } from './electron-api'
 import { SettingsPanel } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
@@ -14,8 +14,6 @@ import { useCoverImage } from './hooks/useCoverImage'
 import { useUpdateState } from './hooks/useUpdateState'
 import { UpdateBanner } from './UpdateBanner'
 import { useI18n } from './i18n'
-import { buildExportRows } from './exportData'
-import { CDLibrary } from './CDLibrary'
 import './App.css'
 
 type SearchMode = 'standard' | 'deep'
@@ -289,7 +287,7 @@ function playCompletionSound(): void {
 
 function App() {
   const { t } = useI18n()
-  const [activeTab, setActiveTab] = useState<'search' | 'library'>('search')
+  const [activeTab, setActiveTab] = useState<'search' | 'shimo'>('search')
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [mobileNotice, setMobileNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
@@ -318,17 +316,6 @@ function App() {
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('USD')
   const [usdToCnyRate, setUsdToCnyRate] = useState<number | null>(null)
   const [autoFlow, setAutoFlow] = useState<AutoFlowState>(null)
-  const [libraryRefreshVersion, setLibraryRefreshVersion] = useState(0)
-  const [librarySyncError, setLibrarySyncError] = useState<string | null>(null)
-  // Upsert outcome of the current search pipeline, accumulated across the
-  // standard search / deep dig / smart generation stages.
-  const pipelineUpsertRef = useRef({ inserted: new Set<string>(), updated: new Set<string>() })
-  const [libraryNewCatalogs, setLibraryNewCatalogs] = useState<Set<string>>(new Set())
-  const [libraryToast, setLibraryToast] = useState<string | null>(null)
-  const libraryToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Copy of the pipeline upsert counts that triggers re-renders (the ref does
-  // not), so the LAN search-state snapshot can report them to the phone.
-  const [lanUpsertCounts, setLanUpsertCounts] = useState({ inserted: 0, updated: 0 })
   // Auto-update state mirrored from the main process (banner only shows while
   // a newer build is being pulled in or is ready to install).
   const { state: updateState, install: installUpdate } = useUpdateState()
@@ -343,62 +330,6 @@ function App() {
   }, [])
 
   const MAX_SEARCH_INPUT_CATALOGS = 10
-
-  const persistCatalogsToLibrary = useCallback(async (
-    targets: string[],
-    workingResults: Map<string, QueryResult[]>,
-    workingEnriched: Map<string, CDDetails>
-  ) => {
-    const foundTargets = targets.filter(catalogNumber =>
-      (workingResults.get(catalogNumber) || []).some(result => result.status === 'found')
-    )
-    if (foundTargets.length === 0) return
-    try {
-      const rate = usdToCnyRate ?? await window.electronAPI.getUsdToDisplayRate('CNY')
-      const rows = buildExportRows({
-        catalogNumbers: foundTargets,
-        resultsByCatalog: workingResults,
-        enrichedDetailsByCatalog: workingEnriched,
-        usdToCnyRate: rate,
-        t: t as (key: string) => string
-      })
-      const records: CDLibraryRecordInput[] = rows.map(row => ({ ...row }))
-      const upsert = await window.electronAPI.upsertLibraryRecords(records)
-      for (const cn of upsert.inserted) pipelineUpsertRef.current.inserted.add(cn)
-      for (const cn of upsert.updated) pipelineUpsertRef.current.updated.add(cn)
-      // Mirror the accumulated totals into state so the LAN snapshot reports
-      // them to the phone ("新增 X 条、更新 Y 条已保存到 CD 库").
-      setLanUpsertCounts({
-        inserted: pipelineUpsertRef.current.inserted.size,
-        updated: pipelineUpsertRef.current.updated.size
-      })
-      if (upsert.inserted.length > 0 || upsert.updated.length > 0) {
-        setLibraryNewCatalogs(prev => {
-          const next = new Set(prev)
-          for (const cn of upsert.inserted) next.add(cn)
-          for (const cn of upsert.updated) next.add(cn)
-          return next
-        })
-      }
-      setLibrarySyncError(null)
-      setLibraryRefreshVersion(version => version + 1)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      window.electronAPI.log('warn', 'app.library', 'failed to persist search results', { error: message })
-      setLibrarySyncError(t('library.storageError', { error: message }))
-    }
-  }, [t, usdToCnyRate])
-
-  // Summarize the pipeline's library upserts as a 3-second toast. Called at
-  // every terminal point of the search flow (immediately, or after the last
-  // auto-flow dialog closes).
-  const showLibraryToast = useCallback(() => {
-    const { inserted, updated } = pipelineUpsertRef.current
-    if (inserted.size === 0 && updated.size === 0) return
-    setLibraryToast(t('library.searchUpsertToast', { inserted: inserted.size, updated: updated.size }))
-    if (libraryToastTimerRef.current) clearTimeout(libraryToastTimerRef.current)
-    libraryToastTimerRef.current = setTimeout(() => setLibraryToast(null), 3000)
-  }, [t])
 
   // After the search pipeline settles, offer LLM smart generation for any
   // catalog whose detail fields are still incomplete. Stays silent when the
@@ -469,8 +400,6 @@ function App() {
     setError(null)
     void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     setAutoFlow(null)
-    pipelineUpsertRef.current = { inserted: new Set(), updated: new Set() }
-    setLanUpsertCounts({ inserted: 0, updated: 0 })
     setIsLoading(true)
     setProgressStatus(new Map())
     setCompletedCatalogs(new Set())
@@ -487,11 +416,6 @@ function App() {
       window.electronAPI.log('debug', 'app.search', 'search finished', { resultCount: batchResults.length })
       const completedResults = applyBatchResults(new Map(), batchResults)
       setResults(prev => applyBatchResults(prev, batchResults))
-      await persistCatalogsToLibrary(
-        batchResults.map(batch => batch.catalogNumber),
-        completedResults,
-        new Map()
-      )
       // Standard-search runs that left numbers unfound are offered a deep dig
       // pass (deep mode already queries every platform). Otherwise go straight
       // to the completeness check for smart generation.
@@ -506,8 +430,7 @@ function App() {
         if (emptyTargets.length > 0) {
           setAutoFlow({ kind: 'deep-dig-prompt', catalogs: emptyTargets, platforms: digPlatforms })
         } else {
-          const prompted = await maybePromptSmartGenerate(catalogNumbers, completedResults, new Map())
-          if (!prompted) showLibraryToast()
+          await maybePromptSmartGenerate(catalogNumbers, completedResults, new Map())
         }
       }
     } catch (err) {
@@ -519,7 +442,7 @@ function App() {
       setIsLoading(false)
       setIsCancelling(false)
     }
-  }, [input, maybePromptSmartGenerate, parseCatalogNumbers, persistCatalogsToLibrary, searchMode, showLibraryToast, t])
+  }, [input, maybePromptSmartGenerate, parseCatalogNumbers, searchMode, t])
 
   const handleCancel = useCallback(async () => {
     window.electronAPI.log('debug', 'app.search', 'cancel requested')
@@ -531,7 +454,6 @@ function App() {
   useEffect(() => {
     return () => {
       if (mobileNoticeTimerRef.current) clearTimeout(mobileNoticeTimerRef.current)
-      if (libraryToastTimerRef.current) clearTimeout(libraryToastTimerRef.current)
     }
   }, [])
 
@@ -580,7 +502,7 @@ function App() {
   }, [handleInputChange])
 
   // Phone-triggered remote search runs the exact same pipeline as the desktop
-  // search button (state machine, progress, CD 库 auto-save included).
+  // search button (state machine and progress included).
   useEffect(() => {
     return window.electronAPI.receive('lan:search-requested', () => {
       void handleSearch()
@@ -593,14 +515,6 @@ function App() {
     return window.electronAPI.receive('lan:mode-changed', (...args: unknown[]) => {
       const mode = typeof args[0] === 'string' ? args[0] : 'standard'
       setSearchMode(mode === 'deep' ? 'deep' : 'standard')
-    })
-  }, [])
-
-  useEffect(() => {
-    // Phone-side publish state changes (published flag, platform checkmarks)
-    // should be reflected in the CD library table's publish columns.
-    return window.electronAPI.receive('library:publish-updated', () => {
-      setLibraryRefreshVersion(version => version + 1)
     })
   }, [])
 
@@ -726,8 +640,6 @@ function App() {
       completed: completedCount,
       percent: progressPercent,
       progress,
-      inserted: lanUpsertCounts.inserted,
-      updated: lanUpsertCounts.updated,
       error,
       stageIndex: autoFlow?.kind === 'smart-running' ? autoFlow.current : undefined,
       stageTotal: autoFlow?.kind === 'smart-running' ? autoFlow.total : undefined,
@@ -741,7 +653,7 @@ function App() {
   }, [
     autoFlow, isDeepSearching, isLoading, isCancelling, input, searchMode, results.size,
     progressCatalogs, progressPlatforms, progressByCatalog, totalCount,
-    completedCount, progressPercent, lanUpsertCounts, error
+    completedCount, progressPercent, error
   ])
 
   // Mirror the snapshot to the main process. Debounced so bursts of progress
@@ -783,11 +695,6 @@ function App() {
       window.electronAPI.log('debug', 'app.deepSearch', 'deep search finished', { resultCount: batchResults.length })
       const merged = applyBatchResults(workingResults, batchResults)
       setResults(merged)
-      await persistCatalogsToLibrary(
-        batchResults.map(batch => batch.catalogNumber),
-        merged,
-        workingEnriched
-      )
       deepSearchSucceededRef.current = true
       return merged
     } catch (err) {
@@ -799,27 +706,22 @@ function App() {
       setDeepSearchTargets([])
       setDeepSearchPlatforms([])
     }
-  }, [isDeepSearching, persistCatalogsToLibrary, t])
+  }, [isDeepSearching, t])
 
   const handleDeepDigConfirm = useCallback(async () => {
     if (autoFlow?.kind !== 'deep-dig-prompt') return
     const { catalogs, platforms } = autoFlow
     setAutoFlow(null)
     const merged = await runDeepDig(catalogs, platforms, results, enrichedDetails)
-    if (cancelledRef.current) {
-      showLibraryToast()
-      return
-    }
-    const prompted = await maybePromptSmartGenerate(catalogOrder, merged ?? results, enrichedDetails)
-    if (!prompted) showLibraryToast()
-  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, runDeepDig, showLibraryToast])
+    if (cancelledRef.current) return
+    await maybePromptSmartGenerate(catalogOrder, merged ?? results, enrichedDetails)
+  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, runDeepDig])
 
   const handleDeepDigSkip = useCallback(async () => {
     if (autoFlow?.kind !== 'deep-dig-prompt') return
     setAutoFlow(null)
-    const prompted = await maybePromptSmartGenerate(catalogOrder, results, enrichedDetails)
-    if (!prompted) showLibraryToast()
-  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, showLibraryToast])
+    await maybePromptSmartGenerate(catalogOrder, results, enrichedDetails)
+  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results])
 
   const handleSmartConfirm = useCallback(async () => {
     if (autoFlow?.kind !== 'smart-prompt') return
@@ -871,16 +773,12 @@ function App() {
     smartCurrentCatalogRef.current = null
 
     if (cancelled) {
-      // Persist only the numbers that finished before the abort; the
-      // interrupted one is intentionally not saved.
-      await persistCatalogsToLibrary(completedCatalogs, workingResults, workingEnriched)
       setAutoFlow({ kind: 'smart-cancelled', completed: completedCatalogs.length, total: targets.length })
       return
     }
 
-    await persistCatalogsToLibrary(targets, workingResults, workingEnriched)
     setAutoFlow({ kind: 'smart-done', failed })
-  }, [autoFlow, enrichedDetails, persistCatalogsToLibrary, results])
+  }, [autoFlow, enrichedDetails, results])
 
   const handleSmartCancel = useCallback(() => {
     if (autoFlow?.kind !== 'smart-running') return
@@ -892,14 +790,12 @@ function App() {
   const handleSmartSkip = useCallback(() => {
     if (autoFlow?.kind !== 'smart-prompt') return
     setAutoFlow(null)
-    showLibraryToast()
-  }, [autoFlow, showLibraryToast])
+  }, [autoFlow])
 
   const handleFlowClose = useCallback(() => {
     if (autoFlow?.kind !== 'smart-done' && autoFlow?.kind !== 'smart-cancelled') return
     setAutoFlow(null)
-    showLibraryToast()
-  }, [autoFlow, showLibraryToast])
+  }, [autoFlow])
 
   // Remote actions on the post-search dialogs (deep dig / smart generation).
   // Each handler re-checks the current dialog kind, so stale actions from a
@@ -936,10 +832,6 @@ function App() {
         return { ...prev, phase: progress.status, platform: progress.platform }
       })
     })
-  }, [])
-
-  const handleNewCatalogsViewed = useCallback(() => {
-    setLibraryNewCatalogs(new Set())
   }, [])
 
   const handleTitleClick = useCallback((catalogNumber: string) => {
@@ -997,9 +889,8 @@ function App() {
       </header>
       <nav className="app-tabs" aria-label="Main sections">
         <button className={activeTab === 'search' ? 'active' : ''} onClick={() => setActiveTab('search')}>{t('tab.search')}</button>
-        <button className={activeTab === 'library' ? 'active' : ''} onClick={() => setActiveTab('library')}>{t('tab.library')}</button>
+        <button className={activeTab === 'shimo' ? 'active' : ''} onClick={() => setActiveTab('shimo')}>{t('tab.shimo')}</button>
       </nav>
-      {librarySyncError && <div className="library-sync-error">{librarySyncError}</div>}
       {activeTab === 'search' ? (
       <main className="app-main">
         <aside className="left-panel">
@@ -1187,16 +1078,12 @@ function App() {
         </section>
       </main>
       ) : (
-        <main className="app-main library-main">
-          <CDLibrary
-            refreshVersion={libraryRefreshVersion}
-            newCatalogs={libraryNewCatalogs}
-            onNewCatalogsViewed={handleNewCatalogsViewed}
-          />
+        <main className="app-main shimo-main">
+          <div className="shimo-placeholder" role="status">
+            <p className="shimo-line">{t('shimo.planning')}</p>
+            <p className="shimo-line">{t('shimo.comingSoon')}</p>
+          </div>
         </main>
-      )}
-      {libraryToast && (
-        <div className="app-toast" role="status" aria-live="polite">{libraryToast}</div>
       )}
       <UpdateBanner state={updateState} onInstall={() => void installUpdate()} />
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />

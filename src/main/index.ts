@@ -7,7 +7,6 @@ import { registerCurrencyIpc } from './ipc/currency'
 import { registerLoginIpc } from './ipc/login'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
-import { registerLibraryIpc } from './ipc/library'
 import { registerUpdaterIpc } from './ipc/updater'
 import { initUpdater, disposeUpdater } from './updater'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
@@ -19,7 +18,6 @@ import { applyLanServer, closeLanServer } from './lan'
 import { initCachePersistence, flushCacheToDisk } from './queries/cache'
 import { prewarmExchangeRates } from './currency'
 import { isAllowedRendererNavigation, isSafeExternalUrl } from './security/urls'
-import { initCDLibrary, closeCDLibrary } from './library'
 import { TITLE_BAR_OVERLAY_COLORS, TITLE_BAR_OVERLAY_HEIGHT } from '../shared/theme'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
@@ -99,14 +97,12 @@ app.whenReady().then(async () => {
   logger.info('main', 'application ready', { logLevel: getLogLevel() })
 
   initCachePersistence(app.getPath('userData'))
-  initCDLibrary(app.getPath('userData'))
   initLoginSession(app.getPath('userData'))
   prewarmExchangeRates()
   registerSettingsIpc()
   registerOrchestratorIpc()
   registerEnrichmentIpc()
   registerLoggingIpc()
-  registerLibraryIpc()
   registerImageIpc()
   registerThrottleIpc()
   registerLanIpc()
@@ -172,6 +168,5 @@ app.on('before-quit', () => {
   logger.debug('main', 'before-quit: flushing cache and stopping LAN server')
   disposeUpdater()
   flushCacheToDisk()
-  closeCDLibrary()
   void closeLanServer()
 })

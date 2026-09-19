@@ -14,8 +14,6 @@ import type {
   DetailEnrichProgress,
   DetailEnrichProgressStatus,
   DetailEnrichmentResult,
-  ExportFileResult,
-  ExcelExportRow,
   LanCandidate,
   LanServerStatus,
   LanCatalogAddedEvent,
@@ -25,17 +23,6 @@ import type {
   LanSearchStatusResponse,
   BarcodeProvider,
   BarcodeCatalogCandidate,
-  CDLibraryRecord,
-  CDLibraryRecordInput,
-  CDLibraryListQuery,
-  CDLibraryListResult,
-  CDLibraryImportResult,
-  CDLibraryUpsertResult,
-  LibraryPublishStatusFilter,
-  PublishItem,
-  PublishPlatform,
-  PublishResult,
-  PublishSnapshot,
   SettingsTransferResult
 } from '../../shared/types'
 import type { UpdateState } from '../../shared/updater'
@@ -56,8 +43,6 @@ export type {
   DetailEnrichProgress,
   DetailEnrichProgressStatus,
   DetailEnrichmentResult,
-  ExportFileResult,
-  ExcelExportRow,
   LanCandidate,
   LanServerStatus,
   LanCatalogAddedEvent,
@@ -67,17 +52,6 @@ export type {
   LanSearchStatusResponse,
   BarcodeProvider,
   BarcodeCatalogCandidate,
-  CDLibraryRecord,
-  CDLibraryRecordInput,
-  CDLibraryListQuery,
-  CDLibraryListResult,
-  CDLibraryImportResult,
-  CDLibraryUpsertResult,
-  LibraryPublishStatusFilter,
-  PublishItem,
-  PublishPlatform,
-  PublishResult,
-  PublishSnapshot,
   SettingsTransferResult
 }
 
@@ -114,24 +88,6 @@ export interface IElectronAPI {
   ) => Promise<DetailEnrichmentResult>
   cancelEnrichDetails: () => Promise<void>
   cancelBatchQuery: () => Promise<void>
-  listLibraryRecords: (query: CDLibraryListQuery) => Promise<CDLibraryListResult>
-  createLibraryRecord: (input: CDLibraryRecordInput) => Promise<CDLibraryRecord>
-  updateLibraryRecord: (catalogNumber: string, input: CDLibraryRecordInput) => Promise<CDLibraryRecord>
-  upsertLibraryRecords: (inputs: CDLibraryRecordInput[]) => Promise<CDLibraryUpsertResult>
-  deleteLibraryRecords: (catalogNumbers: string[]) => Promise<number>
-  importLibraryExcel: () => Promise<CDLibraryImportResult>
-  exportLibraryExcel: (
-    catalogNumbers: string[],
-    headers: string[],
-    defaultFileName: string,
-    targetDirectory?: string
-  ) => Promise<ExportFileResult>
-  getLibraryImage: (catalogNumber: string) => Promise<{ base64: string; mimeType: string } | null>
-  publishLibraryRecords: (catalogNumbers: string[]) => Promise<PublishResult>
-  finishPublishBatch: () => Promise<PublishResult>
-  getPublishSnapshot: () => Promise<PublishSnapshot>
-  setPublishState: (catalogNumber: string, published: boolean) => Promise<void>
-  setPublishPlatforms: (catalogNumber: string, platforms: PublishPlatform[]) => Promise<void>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
   startLogin: (platform: LoginPlatform) => Promise<LoginResult>

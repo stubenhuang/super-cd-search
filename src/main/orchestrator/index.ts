@@ -9,7 +9,6 @@ import { queryTower } from '../queries/tower'
 import { queryXianyu } from '../queries/xianyu'
 import { queryTaobaoImage } from '../queries/taobao'
 import { notFound } from '../queries/types'
-import { getEmbeddedLibraryImage } from '../library'
 import { downloadImage } from '../image'
 import { throwIfAborted } from '../browser/abort'
 import { normalizeCatalogNumber } from '../../shared/utils'
@@ -90,9 +89,8 @@ async function runPlatformQuery(
 }
 
 /**
- * Cover art for the Taobao image-search channel: the library's embedded cover
- * wins; otherwise fall back to the first cover URL returned by the text
- * platforms (downloaded and resized through the image cache).
+ * Cover art for the Taobao image-search channel: the first cover URL returned
+ * by the text platforms (downloaded and resized through the image cache).
  */
 async function resolveTaobaoSearchImage(
   catalogNumber: string,
@@ -100,11 +98,6 @@ async function resolveTaobaoSearchImage(
   signal: AbortSignal
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
   throwIfAborted(signal)
-  const embedded = getEmbeddedLibraryImage(catalogNumber)
-  if (embedded) {
-    logger.debug('orchestrator', 'taobao image source: library', { catalogNumber })
-    return { buffer: embedded.buffer, mimeType: embedded.mimeType }
-  }
   for (const result of textResults) {
     if (!result.coverUrl) continue
     const downloaded = await downloadImage(result.coverUrl, 500, true)

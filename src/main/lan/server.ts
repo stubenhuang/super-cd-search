@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { timingSafeEqual } from 'crypto'
 import type { AddressInfo } from 'net'
-import type { PublishPlatform, PublishSnapshot, LanBarcodeLookupResponse, LanSearchState, LanSearchStatusResponse } from '../../shared/types'
+import type { LanBarcodeLookupResponse, LanSearchState, LanSearchStatusResponse } from '../../shared/types'
 import { MOBILE_APP_JS, MOBILE_PAGE_HTML, MOBILE_ZXING_JS } from './mobile'
 
 export type LanBarcodeLookupHandler = (barcode: string) => Promise<LanBarcodeLookupResponse>
@@ -10,29 +10,6 @@ export type LanBarcodeSelectionHandler = (
   barcode: string,
   catalogNumber: string
 ) => Promise<LanBarcodeLookupResponse>
-
-/** Cover image bytes served to the phone for one publish item. */
-export interface LanPublishImage {
-  buffer: Buffer
-  mimeType: 'image/png' | 'image/jpeg'
-}
-
-export interface LanPublishStatusResponse {
-  status: 'ok' | 'error'
-  message?: string
-}
-
-export type PublishChangeKind = 'changed' | 'finished'
-
-/** Phone/desktop-facing publish batch API backed by the desktop library storage. */
-export interface LanPublishHandlers {
-  list: () => Promise<PublishSnapshot>
-  setPublished: (catalogNumber: string, published: boolean) => Promise<LanPublishStatusResponse>
-  setPlatforms: (catalogNumber: string, platforms: PublishPlatform[]) => Promise<LanPublishStatusResponse>
-  image: (catalogNumber: string) => Promise<LanPublishImage | null>
-  /** SSE subscription: the returned unsubscribe drops the connection's listener. */
-  subscribe: (listener: (kind: PublishChangeKind) => void) => () => void
-}
 
 /**
  * Phone-facing remote-search API backed by the desktop search state machine.
@@ -60,8 +37,6 @@ export interface LanServerBindOptions {
   handleBarcodeLookup?: LanBarcodeLookupHandler
   /** Confirms one of the low-confidence catalog-number candidates. */
   handleBarcodeSelection?: LanBarcodeSelectionHandler
-  /** Publish batch API for the phone "发布" tab. */
-  publishHandlers?: LanPublishHandlers
   /** Remote-search API for the phone "搜索" tab. */
   searchHandlers?: LanSearchHandlers
 }
@@ -178,9 +153,7 @@ export function createLanRequestHandler(
   token: string,
   handleBarcodeLookup?: LanBarcodeLookupHandler,
   handleBarcodeSelection?: LanBarcodeSelectionHandler,
-  publishHandlers?: LanPublishHandlers,
-  searchHandlers?: LanSearchHandlers,
-  sseConnections: Set<ServerResponse> = new Set()
+  searchHandlers?: LanSearchHandlers
 ): (req: IncomingMessage, res: ServerResponse) => void {
   return (req, res) => {
     void (async () => {
@@ -219,117 +192,6 @@ export function createLanRequestHandler(
           securityHeaders(res)
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify({ ok: true, service: 'super-cd-search' }))
-          return
-        }
-
-        if (url.pathname === '/api/publish/list' && (req.method ?? 'GET') === 'GET') {
-          if (!publishHandlers) {
-            sendJson(res, 404, { status: 'error', message: 'Publish is disabled' })
-            return
-          }
-          try {
-            sendJson(res, 200, await publishHandlers.list())
-          } catch {
-            sendJson(res, 500, { status: 'error', message: '无法读取发布内容' })
-          }
-          return
-        }
-
-        if (url.pathname === '/api/publish/state' && req.method === 'POST') {
-          if (!publishHandlers) {
-            sendJson(res, 404, { status: 'error', message: 'Publish is disabled' })
-            return
-          }
-          let body: Record<string, unknown>
-          try {
-            body = await readJsonBody(req)
-          } catch {
-            sendJson(res, 400, { status: 'error', message: 'Invalid JSON body' })
-            return
-          }
-          const rawCatalog = typeof body.catalogNumber === 'string' ? body.catalogNumber.trim() : ''
-          if (!rawCatalog || typeof body.published !== 'boolean') {
-            sendJson(res, 400, { status: 'error', message: 'Missing catalogNumber or published' })
-            return
-          }
-          sendJson(res, 200, await publishHandlers.setPublished(rawCatalog, body.published))
-          return
-        }
-
-        if (url.pathname === '/api/publish/platforms' && req.method === 'POST') {
-          if (!publishHandlers) {
-            sendJson(res, 404, { status: 'error', message: 'Publish is disabled' })
-            return
-          }
-          let body: Record<string, unknown>
-          try {
-            body = await readJsonBody(req)
-          } catch {
-            sendJson(res, 400, { status: 'error', message: 'Invalid JSON body' })
-            return
-          }
-          const rawCatalog = typeof body.catalogNumber === 'string' ? body.catalogNumber.trim() : ''
-          const platforms = body.platforms
-          if (!rawCatalog || !Array.isArray(platforms) || platforms.some(item => typeof item !== 'string')) {
-            sendJson(res, 400, { status: 'error', message: 'Missing catalogNumber or platforms' })
-            return
-          }
-          sendJson(res, 200, await publishHandlers.setPlatforms(rawCatalog, platforms as PublishPlatform[]))
-          return
-        }
-
-        if (url.pathname === '/api/publish/events' && (req.method ?? 'GET') === 'GET') {
-          if (!publishHandlers) {
-            sendText(res, 404, 'Not Found')
-            return
-          }
-          securityHeaders(res)
-          res.writeHead(200, {
-            'Content-Type': 'text/event-stream; charset=utf-8',
-            'Cache-Control': 'no-store',
-            Connection: 'keep-alive'
-          })
-          res.write('retry: 2000\n\n')
-          sseConnections.add(res)
-          const unsubscribe = publishHandlers.subscribe(kind => {
-            res.write(`event: ${kind}\ndata: {}\n\n`)
-          })
-          // Comment frames keep proxies/NATs from closing the idle stream.
-          const heartbeat = setInterval(() => {
-            res.write(': ping\n\n')
-          }, 15000)
-          const cleanup = (): void => {
-            clearInterval(heartbeat)
-            unsubscribe()
-            sseConnections.delete(res)
-          }
-          req.on('close', cleanup)
-          res.on('close', cleanup)
-          return
-        }
-
-        if (url.pathname === '/publish/image' && (req.method ?? 'GET') === 'GET') {
-          if (!publishHandlers) {
-            sendText(res, 404, 'Not Found')
-            return
-          }
-          const catalog = (url.searchParams.get('catalog') ?? '').trim()
-          if (!catalog) {
-            sendText(res, 400, 'Missing catalog')
-            return
-          }
-          try {
-            const image = await publishHandlers.image(catalog)
-            if (!image) {
-              sendText(res, 404, 'Not Found')
-              return
-            }
-            securityHeaders(res)
-            res.writeHead(200, { 'Content-Type': image.mimeType })
-            res.end(image.buffer)
-          } catch {
-            sendText(res, 500, 'Internal Server Error')
-          }
           return
         }
 
@@ -496,20 +358,16 @@ export class LanHttpServer {
   private boundHost = ''
   private boundPort = 0
   private token = ''
-  private sseConnections = new Set<ServerResponse>()
 
   async start(options: LanServerBindOptions): Promise<number> {
     await this.stop()
 
-    const sseConnections = new Set<ServerResponse>()
     const handler = createLanRequestHandler(
       options.host,
       options.token,
       options.handleBarcodeLookup,
       options.handleBarcodeSelection,
-      options.publishHandlers,
-      options.searchHandlers,
-      sseConnections
+      options.searchHandlers
     )
     const server = createServer(handler)
     server.keepAliveTimeout = 5000
@@ -537,7 +395,6 @@ export class LanHttpServer {
     this.boundHost = options.host
     this.boundPort = address.port
     this.token = options.token
-    this.sseConnections = sseConnections
     return this.boundPort
   }
 
@@ -546,9 +403,6 @@ export class LanHttpServer {
     this.server = null
     this.boundPort = 0
     this.token = ''
-    // SSE streams never end on their own; destroy them or close() hangs forever.
-    for (const res of this.sseConnections) res.destroy()
-    this.sseConnections = new Set()
     if (!server) return
     await new Promise<void>(resolve => {
       server.close(() => resolve())

@@ -182,9 +182,6 @@ export interface LanSearchState {
   completed: number
   percent: number
   progress: LanSearchCatalogProgress[]
-  /** Library upserts accumulated across the whole pipeline (standard + deep + smart). */
-  inserted: number
-  updated: number
   error: string | null
   /** Smart-generation stage counter (phase `smart-running`). */
   stageIndex?: number
@@ -336,126 +333,6 @@ export interface DetailEnrichmentResult {
 export interface BatchQueryResult {
   catalogNumber: string
   results: QueryResult[]
-}
-
-export interface ExportFileResult {
-  status: 'saved' | 'cancelled' | 'error'
-  filePath?: string
-  error?: string
-}
-
-export interface ExcelExportRow {
-  catalogNumber: string
-  imageUrl: string
-  details: string
-  lowestPriceUsd: number | null
-  highestPriceUsd: number | null
-  lowestPriceCny: number | null
-  highestPriceCny: number | null
-}
-
-export interface ExcelExportPayload {
-  headers: string[]
-  rows: ExcelExportRow[]
-}
-
-export interface ExportProgress {
-  phase: 'images'
-  current: number
-  total: number
-}
-
-export interface CDLibraryRecordInput {
-  catalogNumber: string
-  imageUrl: string
-  details: string
-  lowestPriceUsd: number | null
-  highestPriceUsd: number | null
-  lowestPriceCny: number | null
-  highestPriceCny: number | null
-  /** Internal edit hint; never exported as a business field. */
-  preserveEmbeddedImage?: boolean
-}
-
-export interface CDLibraryRecord extends CDLibraryRecordInput {
-  hasEmbeddedImage: boolean
-  createdAt: number
-  updatedAt: number
-  /** Persistent "published" flag, maintained by the user across publish rounds. */
-  published?: boolean
-  /** Platforms the user already published this record to (persistent). */
-  platforms?: PublishPlatform[]
-}
-
-/** Outcome of upserting search results: which catalog numbers were new vs updated. */
-export interface CDLibraryUpsertResult {
-  inserted: string[]
-  updated: string[]
-}
-
-/** Marketplaces the user can mark a published CD as listed on. User-maintained only. */
-export type PublishPlatform = 'taobao' | 'xianyu' | 'discogs'
-
-/** One CD of the current in-memory publish round, with live library fields joined in. */
-export interface PublishItem {
-  catalogNumber: string
-  imageUrl: string
-  hasEmbeddedImage: boolean
-  details: string
-  lowestPriceUsd: number | null
-  highestPriceUsd: number | null
-  lowestPriceCny: number | null
-  highestPriceCny: number | null
-  /** User-maintained persistent "published" flag. */
-  published: boolean
-  platforms: PublishPlatform[]
-}
-
-/** Phone/desktop view of the current publish round (empty when no round is active). */
-export interface PublishSnapshot {
-  publishedAt: number | null
-  items: PublishItem[]
-}
-
-/** Result of the desktop "publish selected" / "finish batch" actions (IPC-facing). */
-export interface PublishResult {
-  status: 'published' | 'finished' | 'error'
-  count?: number
-  error?: string
-}
-
-export interface CDLibraryListQuery {
-  catalogQuery: string
-  page: number
-  pageSize: 20 | 50 | 100
-  /** Filter by the persistent publish-status column; omit or 'all' for no filter. */
-  publishStatus?: LibraryPublishStatusFilter
-  /** Filter by a checked publish platform; omit or 'all' for no filter. */
-  publishPlatform?: PublishPlatform | 'all'
-}
-
-/** Filter values for the library list's publish-status column. */
-export type LibraryPublishStatusFilter = 'all' | 'published' | 'unpublished'
-
-export interface CDLibraryListResult {
-  records: CDLibraryRecord[]
-  total: number
-  page: number
-  pageSize: number
-}
-
-export interface CDLibraryImportError {
-  row: number
-  message: string
-}
-
-export interface CDLibraryImportResult {
-  status: 'imported' | 'cancelled' | 'error'
-  added: number
-  updated: number
-  skipped: number
-  errors: CDLibraryImportError[]
-  error?: string
 }
 
 export interface ThrottleStatus {
