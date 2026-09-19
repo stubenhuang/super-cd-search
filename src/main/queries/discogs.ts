@@ -11,14 +11,14 @@ import { waitForResultOrNoResult } from './wait'
 import { normalizeCatalogNumber } from '../../shared/utils'
 import { logger } from '../logger'
 
-const DISCOGS_API_URL = 'https://api.discogs.com'
+export const DISCOGS_API_URL = 'https://api.discogs.com'
 const DISCOGS_WEB_URL = 'https://www.discogs.com'
 /** Discogs requires a descriptive User-Agent; requests without one may be rejected. */
-const DISCOGS_USER_AGENT = 'SuperCDSearch/1.0 (+https://github.com/stubenhuang/super-cd-search)'
+export const DISCOGS_USER_AGENT = 'SuperCDSearch/1.0 (+https://github.com/stubenhuang/super-cd-search)'
 
 // Light throttle for token-authenticated API calls (the default 2-6s delay is
 // meant for anonymous web traffic).
-const API_THROTTLE = { minDelay: 300, maxDelay: 800 }
+export const DISCOGS_API_THROTTLE = { minDelay: 300, maxDelay: 800 }
 
 /**
  * Build the fetch init for an authenticated Discogs API call.
@@ -29,13 +29,17 @@ const API_THROTTLE = { minDelay: 300, maxDelay: 800 }
  * token would only be protected by a single logger redaction rule. Keeping it
  * out of the URL removes the leak path entirely.
  */
-function discogsRequestInit(token: string, signal?: AbortSignal): RequestInit {
+export function discogsRequestInit(token: string, signal?: AbortSignal): RequestInit {
+  const headers: Record<string, string> = {
+    'User-Agent': DISCOGS_USER_AGENT,
+    'Accept': 'application/json'
+  }
+  // `/database/search` is public (25 req/min unauthenticated); sending an empty
+  // `Authorization: Discogs token=` header makes Discogs reject the request, so
+  // the header is only added when a token actually exists.
+  if (token) headers['Authorization'] = `Discogs token=${token}`
   return {
-    headers: {
-      'Authorization': `Discogs token=${token}`,
-      'User-Agent': DISCOGS_USER_AGENT,
-      'Accept': 'application/json'
-    },
+    headers,
     ...(signal ? { signal } : {})
   }
 }
@@ -49,11 +53,12 @@ interface ReleaseCacheEntry {
 const releaseCache = new Map<number, ReleaseCacheEntry>()
 const RELEASE_CACHE_TTL = 24 * 60 * 60 * 1000 // 1 day
 
-interface DiscogsSearchHit {
+export interface DiscogsSearchHit {
   id: number
   title: string
   catno?: string
   year?: string
+  format?: string[]
   cover_image?: string
   uri?: string
   community?: { have: number; want: number }
@@ -131,7 +136,7 @@ async function getDiscogsLowestPrice(releaseId: number, token: string, signal?: 
 
   try {
     const url = `${DISCOGS_API_URL}/marketplace/stats/${releaseId}`
-    const response = await throttledFetch('api.discogs.com', url, discogsRequestInit(token, signal), API_THROTTLE)
+    const response = await throttledFetch('api.discogs.com', url, discogsRequestInit(token, signal), DISCOGS_API_THROTTLE)
 
     if (response.ok) {
       const data = await response.json() as {
@@ -164,7 +169,7 @@ async function getReleaseDetails(releaseId: number, token: string, signal?: Abor
   try {
     const url = `${DISCOGS_API_URL}/releases/${releaseId}`
     logger.debug('queries.discogs', 'fetch release details', { releaseId })
-    const response = await throttledFetch('api.discogs.com', url, discogsRequestInit(token, signal), API_THROTTLE)
+    const response = await throttledFetch('api.discogs.com', url, discogsRequestInit(token, signal), DISCOGS_API_THROTTLE)
 
     if (!response.ok) {
       logger.debug('queries.discogs', 'release details request failed', { releaseId, status: response.status })
@@ -210,7 +215,8 @@ async function getReleaseDetails(releaseId: number, token: string, signal?: Abor
   }
 }
 
-function compactCatalog(value: string): string {
+/** Compare catalog numbers ignoring the separators Discogs varies on. */
+export function compactCatalog(value: string): string {
   return value.replace(/[\s-]+/g, '').toUpperCase()
 }
 
@@ -255,7 +261,7 @@ async function queryDiscogsApi(catalogNumber: string, token: string, signal?: Ab
   const url = `${DISCOGS_API_URL}/database/search?catno=${encodeURIComponent(catalogNumber)}&type=release`
   logger.debug('queries.discogs', 'search API request', { catalogNumber })
 
-  const response = await throttledFetch('api.discogs.com', url, discogsRequestInit(token, signal), API_THROTTLE)
+  const response = await throttledFetch('api.discogs.com', url, discogsRequestInit(token, signal), DISCOGS_API_THROTTLE)
 
   if (!response.ok) {
     throw new Error(`Discogs API returned ${response.status}`)
@@ -320,7 +326,7 @@ export async function queryDiscogsByBarcode(barcode: string): Promise<DiscogsBar
   logger.debug('queries.discogs', 'barcode lookup request', { barcode: normalized })
   try {
     const url = `${DISCOGS_API_URL}/database/search?barcode=${encodeURIComponent(normalized)}&type=release`
-    const response = await throttledFetch('api.discogs.com', url, discogsRequestInit(token), API_THROTTLE)
+    const response = await throttledFetch('api.discogs.com', url, discogsRequestInit(token), DISCOGS_API_THROTTLE)
 
     if (!response.ok) {
       throw new Error(`Discogs API returned ${response.status}`)

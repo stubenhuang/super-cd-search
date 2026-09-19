@@ -17,6 +17,16 @@ import type {
   SettingsTransferResult
 } from '../shared/types'
 import type { UpdateState } from '../shared/updater'
+import type {
+  PublishDraft,
+  PublishOutcome,
+  PublishPrepareRequest,
+  PublishRunRequest,
+  PublishTarget,
+  PublishTargetLoginResult,
+  PublishTargetStatus,
+  PublishTargetTestResult
+} from '../shared/publish'
 
 const validSendChannels = ['toMain', 'renderer:log'] as const
 const validReceiveChannels = [
@@ -30,6 +40,7 @@ const validReceiveChannels = [
   'lan:flow-confirm',
   'lan:flow-skip',
   'lan:flow-close',
+  'publish:progress',
   'updater:state'
 ] as const
 
@@ -85,6 +96,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('detail:enrich-cancel'),
   cancelBatchQuery: (): Promise<void> =>
     ipcRenderer.invoke('cancelBatchQuery'),
+  listPublishTargets: (): Promise<PublishTarget[]> =>
+    ipcRenderer.invoke('publish:list-targets'),
+  testPublishTarget: (targetId: string): Promise<PublishTargetTestResult> =>
+    ipcRenderer.invoke('publish:test-target', targetId),
+  publishTargetStatus: (targetId: string): Promise<PublishTargetStatus> =>
+    ipcRenderer.invoke('publish:target-status', targetId),
+  loginPublishTarget: (targetId: string): Promise<PublishTargetLoginResult> =>
+    ipcRenderer.invoke('publish:login-target', targetId),
+  forgetPublishTarget: (targetId: string): Promise<PublishTargetLoginResult> =>
+    ipcRenderer.invoke('publish:forget-target', targetId),
+  preparePublish: (request: PublishPrepareRequest): Promise<PublishDraft> =>
+    ipcRenderer.invoke('publish:prepare', request),
+  runPublish: (request: PublishRunRequest): Promise<PublishOutcome> =>
+    ipcRenderer.invoke('publish:run', request),
+  cancelPublish: (): Promise<void> =>
+    ipcRenderer.invoke('publish:cancel'),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),

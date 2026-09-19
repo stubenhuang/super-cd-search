@@ -70,3 +70,37 @@ export function aggregateDetails(sources: readonly DetailSource[]): DetailAggreg
     best: scored[0]?.source ?? null
   }
 }
+
+/** Localized labels used when composing the human-readable details text. */
+export interface DetailsTextLabels {
+  catalogNumber: string
+  album: string
+  artist: string
+  fields: Record<DetailKey, string>
+}
+
+export interface BuildDetailsTextOptions {
+  catalogNumber: string
+  /** Album title; skipped when missing or identical to the catalog number. */
+  album?: string | null
+  artist?: string | null
+  details: CDDetails
+  labels: DetailsTextLabels
+}
+
+/**
+ * Compose the multi-line details text shared by the detail modal's「复制信息」
+ * and the publish preview's description field. Renderer-owned because it needs
+ * localized labels; the main process receives the finished text.
+ */
+export function buildDetailsText(options: BuildDetailsTextOptions): string {
+  const { catalogNumber, album, artist, details, labels } = options
+  const lines: string[] = [`${labels.catalogNumber}: ${catalogNumber}`]
+  if (album && album !== catalogNumber) lines.push(`${labels.album}: ${album}`)
+  if (artist) lines.push(`${labels.artist}: ${artist}`)
+  for (const key of DETAIL_KEYS) {
+    const value = details[key]
+    if (isValidDetailValue(value)) lines.push(`${labels.fields[key]}: ${value}`)
+  }
+  return lines.join('\n')
+}

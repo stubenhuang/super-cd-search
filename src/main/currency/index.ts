@@ -81,6 +81,22 @@ export async function convertToUSD(amount: number, fromCurrency: Currency): Prom
   return Math.round(amount * rate * 100) / 100 // Round to 2 decimal places
 }
 
+/**
+ * Convert a USD amount into another currency — the inverse of `convertToUSD`.
+ * Search results are stored in USD, so prefill for a marketplace that prices in
+ * CNY/EUR/… needs this direction. Never rejects: it falls back to the static
+ * table when the rate API is unavailable.
+ */
+export async function convertFromUSD(amount: number, to: Currency): Promise<number> {
+  if (to === 'USD') return amount
+
+  const rates = await getExchangeRates()
+  const rateToUsd = rates?.[to] ?? FALLBACK_RATES[to]
+  if (!rateToUsd) return amount
+
+  return Math.round((amount / rateToUsd) * 100) / 100
+}
+
 export function formatPriceUSD(price: number | null): string {
   if (price === null) return '-'
   return `$${price.toFixed(2)}`

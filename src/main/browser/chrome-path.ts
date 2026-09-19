@@ -37,3 +37,28 @@ export function findChromeExecutable(): string | null {
   }
   return null
 }
+
+/**
+ * Extra flags for the Chrome the app launches itself (QR login, scraping,
+ * publishing) when the app runs inside a *restricted host* — a CI runner, or a
+ * restricted dev shell such as the automated UI smoke run.
+ *
+ * Two things break there, both of which plain `puppeteer.launch()` would have
+ * handled for us (the app spawns Chrome itself and then connects over CDP, so
+ * puppeteer's default args never apply):
+ *
+ *  - Chromium initialises its own sandbox at startup; inside an outer sandbox
+ *    that fails and the process aborts with SIGTRAP within seconds, making
+ *    macOS show a「Google Chrome 意外退出」dialog on every launch.
+ *  - Chrome stores its "Safe Storage" key in the login Keychain. With no
+ *    reachable Keychain, macOS shows a「找不到钥匙串」sheet. Puppeteer passes
+ *    `--use-mock-keychain` by default; we have to do it ourselves.
+ *
+ * Opt in with `SUPER_CD_CHROME_RESTRICTED=1`. Production never sets it, so real
+ * users keep both the Chromium sandbox and the real Keychain.
+ */
+export function restrictedHostChromeArgs(): string[] {
+  return process.env.SUPER_CD_CHROME_RESTRICTED === '1'
+    ? ['--no-sandbox', '--use-mock-keychain']
+    : []
+}

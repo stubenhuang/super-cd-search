@@ -3,6 +3,7 @@ import type { Settings, Platform, LoginPlatform, LoginSessionStatus, BarcodeProv
 import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { useI18n } from './i18n'
 import { useUpdateState } from './hooks/useUpdateState'
+import { PublishTargetsSection } from './Publish'
 import { GITHUB_REPO_URL } from '../../shared/updater'
 import './Settings.css'
 
@@ -11,7 +12,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'login' | 'backup' | 'about'
+type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'publish' | 'llm' | 'login' | 'backup' | 'about'
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const { t } = useI18n()
@@ -300,6 +301,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     { key: 'proxy', icon: '◉', label: t('nav.proxy') },
     { key: 'barcode', icon: '▣', label: t('nav.barcodeProviders') },
     { key: 'sources', icon: '◎', label: t('nav.sources') },
+    { key: 'publish', icon: '⚑', label: t('nav.publish') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
     { key: 'login', icon: '◈', label: t('nav.login') },
     { key: 'backup', icon: '⇅', label: t('nav.backup') },
@@ -585,6 +587,16 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
             </div>
           </div>
+        )
+
+      case 'publish':
+        // Target list changes are persisted immediately inside the section, so
+        // the panel-level 保存 button has nothing to stage for it.
+        return (
+          <PublishTargetsSection
+            onToast={showToast}
+            onGoLogin={() => setActiveSection('login')}
+          />
         )
 
       case 'llm':

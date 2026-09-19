@@ -124,3 +124,52 @@ describe('currency', () => {
     expect(await getUsdToDisplayRate('CNY')).toBeCloseTo(1 / 0.14, 5)
   })
 })
+
+describe('convertFromUSD', () => {
+  it('returns the amount unchanged for USD without fetching', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { convertFromUSD } = await loadCurrency()
+    expect(await convertFromUSD(42.5, 'USD')).toBe(42.5)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('inverts the fetched rate and rounds to 2 decimals', async () => {
+    mockRatesFetch() // JPY:150, EUR:0.92, GBP:0.79, CNY:7.2 (foreign -> USD)
+    const { convertFromUSD } = await loadCurrency()
+    // rates.JPY = 1/150, so 15 / (1/150) = 2250
+    expect(await convertFromUSD(15, 'JPY')).toBe(2250)
+    // rates.CNY = 1/7.2, so 10 * 7.2 = 72
+    expect(await convertFromUSD(10, 'CNY')).toBe(72)
+    // rates.GBP = 1/0.79, so 10 * 0.79 = 7.9
+    expect(await convertFromUSD(10, 'GBP')).toBe(7.9)
+    // 1.37 * 7.2 = 9.864 -> 9.86
+    expect(await convertFromUSD(1.37, 'CNY')).toBe(9.86)
+  })
+
+  it('uses the static fallback table when the rate API fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+    const { convertFromUSD } = await loadCurrency()
+    // FALLBACK_RATES: CNY 0.14, JPY 0.0067
+    expect(await convertFromUSD(10, 'CNY')).toBe(71.43)
+    expect(await convertFromUSD(1, 'JPY')).toBe(149.25)
+    expect(await convertFromUSD(10.8, 'EUR')).toBe(10)
+  })
+
+  it('uses the static fallback table for a non-ok rate response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('bad', { status: 500 })))
+    const { convertFromUSD } = await loadCurrency()
+    expect(await convertFromUSD(10, 'CNY')).toBe(71.43)
+  })
+
+  it('returns the original amount for an unknown currency', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+    const first = await loadCurrency()
+    expect(await first.convertFromUSD(7, 'ZZZ' as never)).toBe(7)
+
+    vi.resetModules()
+    mockRatesFetch()
+    const second = await loadCurrency()
+    expect(await second.convertFromUSD(7, 'ZZZ' as never)).toBe(7)
+  })
+})

@@ -1,0 +1,961 @@
+/* ============================================================
+   PUBLISH — 发布到闲鱼 / Discogs
+   Result-card menu, preview/progress/result dialog and the
+   settings「发布目标」section styles live here.
+   ============================================================ */
+
+/* === Result header layout ==================================================
+   App.css styles .result-header as a plain block; the publish menu needs to
+   sit on the right edge, so the text nodes move into a flex child instead of
+   touching the card styles themselves. */
+
+.result-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.result-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* === Result-card dropdown (发布 ▾) === */
+.publish-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.publish-menu-button {
+  padding: 5px 10px;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.publish-menu-button:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.publish-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 190px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+}
+
+.publish-menu-group + .publish-menu-group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+}
+
+.publish-menu-group-title {
+  padding: 4px 8px 6px;
+}
+
+.publish-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.publish-menu-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+/* Platform pill, shared by the dropdown and the settings list.
+   Both platforms use the same 金/强调 treatment (border + soft fill + colored
+   text); only the text differs, and the fixed width keeps the name column of
+   every settings row starting at the same x. */
+.publish-platform-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 76px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--st-accent-border);
+  border-radius: 999px;
+  background: var(--st-accent-soft);
+  color: var(--st-accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* === Settings section: 发布目标 === */
+.publish-target-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* One row is always「[head: badge + text ... actions]」+ an optional full-width
+   hint. The head is a single flex line so both platforms share the exact same
+   left/right bounds, padding and gap. */
+.publish-target-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--st-bg-secondary);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-lg);
+  transition: border-color var(--st-transition);
+}
+
+.publish-target-row:hover {
+  border-color: var(--st-border-medium);
+}
+
+.publish-target-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.publish-target-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.publish-target-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.publish-target-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.publish-target-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--st-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--st-text-primary);
+}
+
+.publish-target-account {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--st-font-mono);
+  font-size: 11px;
+  color: var(--st-text-muted);
+}
+
+/* Buttons keep their natural size and wrap inside this container only, so a
+   crowded 闲鱼 row never pushes the platform badge onto its own line. */
+.publish-target-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.publish-target-actions > * {
+  flex-shrink: 0;
+}
+
+.publish-target-actions .st-btn-cancel {
+  padding: 6px 12px;
+}
+
+.publish-target-actions .st-btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.publish-btn-login {
+  color: var(--st-accent);
+  border-color: var(--st-accent-border);
+}
+
+/* === Settings section: 闲鱼 per-target login state === */
+.publish-status-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--st-font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.publish-status-badge.success {
+  background: var(--status-success-bg);
+  color: var(--st-success);
+}
+
+.publish-status-badge.warning {
+  background: var(--warning-icon-bg);
+  color: var(--warning-icon);
+}
+
+.publish-status-badge.muted {
+  background: var(--st-bg-tertiary);
+  color: var(--st-text-muted);
+}
+
+/* 闲鱼-only footer under the dashed separator: the explainer on the left, the
+   target's own login controls on the right. Keeping those two buttons out of the
+   head is what lets both rows' action columns line up. */
+.publish-target-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--st-border);
+}
+
+.publish-target-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--st-font-body);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--st-text-muted);
+}
+
+.publish-target-actions-login {
+  margin-left: 0;
+  flex-wrap: nowrap;
+}
+
+.publish-link-btn {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--st-accent);
+  font-family: var(--st-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.publish-empty {
+  padding: 16px;
+  border: 1px dashed var(--st-border-medium);
+  border-radius: var(--st-radius-md);
+  font-family: var(--st-font-body);
+  font-size: 12px;
+  color: var(--st-text-muted);
+  text-align: center;
+}
+
+.publish-btn-danger {
+  color: var(--st-error);
+}
+
+.publish-add-row {
+  justify-content: flex-end;
+}
+
+/* === Settings section: target editor === */
+.publish-editor {
+  padding: 16px;
+  background: var(--st-bg-secondary);
+  border: 1px solid var(--st-border-medium);
+  border-radius: var(--st-radius-lg);
+  animation: st-section-in 0.25s ease;
+}
+
+.publish-editor-title {
+  margin-bottom: 14px;
+  font-family: var(--st-font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--st-text-primary);
+}
+
+.publish-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+
+.publish-editor-group {
+  background: var(--st-bg-primary);
+}
+
+.publish-editor-toggle {
+  margin: 14px 0 0;
+  background: var(--st-bg-tertiary);
+}
+
+.publish-editor-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.publish-editor-error {
+  margin: 4px 0 0;
+}
+
+/* Independent-account notice + the read-only account detected at login. */
+.publish-editor-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--st-accent-soft);
+  border: 1px solid var(--st-accent-border);
+  border-radius: var(--st-radius-md);
+  font-family: var(--st-font-body);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--st-text-secondary);
+}
+
+/* Read-only account block in the editor: an explainer plus, when the app has
+   already detected it, the current account. Never an input. */
+.publish-editor-account {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-family: var(--st-font-body);
+  font-size: 12px;
+  color: var(--st-text-secondary);
+}
+
+.publish-editor-account-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--st-bg-tertiary);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-md);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--st-text-muted);
+}
+
+.publish-editor-account-note-icon {
+  flex-shrink: 0;
+  color: var(--st-accent);
+}
+
+.publish-editor-account-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.publish-editor-account-label {
+  color: var(--st-text-muted);
+}
+
+.publish-editor-account-value {
+  font-family: var(--st-font-mono);
+  color: var(--st-text-primary);
+  word-break: break-all;
+}
+
+.publish-editor-account-detect {
+  font-size: 11px;
+  color: var(--st-text-muted);
+}
+
+/* === Publish dialog === */
+.publish-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(4px);
+  animation: overlay-fade-in 0.25s ease;
+}
+
+.publish-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-radius: 20px;
+  box-shadow:
+    0 24px 80px rgba(44, 37, 32, 0.25),
+    0 8px 24px rgba(44, 37, 32, 0.15),
+    inset 0 1px 0 var(--card-highlight);
+  animation: modal-slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.publish-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, transparent 100%);
+}
+
+.publish-dialog-heading {
+  min-width: 0;
+}
+
+.publish-dialog-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.publish-dialog-subtitle {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.publish-dialog-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.publish-dialog-close:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-medium);
+  color: var(--text-primary);
+}
+
+.publish-dialog-body {
+  flex: 1;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.publish-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.publish-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.publish-field-inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.publish-checkbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.publish-label {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.publish-label-inline {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.publish-required {
+  color: var(--error);
+}
+
+.publish-input,
+.publish-textarea,
+.publish-select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.publish-textarea {
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.55;
+}
+
+.publish-input:focus,
+.publish-textarea:focus,
+.publish-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.publish-readonly {
+  padding: 8px 12px;
+  border: 1px dashed var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.publish-hint {
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* Image field */
+.publish-image {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.publish-image-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+}
+
+.publish-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.publish-image-placeholder {
+  font-size: 26px;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.publish-image-url {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+/* Checkbox switch */
+.publish-switch {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+}
+
+.publish-switch input {
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.publish-switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.publish-switch-slider::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.publish-switch input:checked + .publish-switch-slider {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.publish-switch input:checked + .publish-switch-slider::before {
+  transform: translateX(18px);
+  background: var(--on-accent);
+}
+
+/* Callouts */
+.publish-block {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.publish-block.error {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--error);
+}
+
+.publish-block.warning {
+  background: var(--warning-icon-bg);
+  border: 1px solid var(--warning-icon);
+  color: var(--warning-icon);
+}
+
+.publish-block-title {
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.publish-block-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.publish-artifacts,
+.publish-artifacts-list {
+  margin: 0;
+}
+
+.publish-artifacts {
+  margin-top: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.publish-artifacts-title {
+  margin-bottom: 6px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.publish-artifacts-list {
+  padding-left: 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* Loading + error states */
+.publish-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 30px 0;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+
+.publish-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-medium);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.publish-error-state .publish-block {
+  margin-top: 4px;
+}
+
+/* Progress view */
+.publish-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.publish-progress-track {
+  height: 8px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+}
+
+.publish-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-light) 100%);
+  transition: width var(--transition-base);
+}
+
+.publish-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.publish-progress-message {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.publish-awaiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--status-loading-bg);
+  border: 1px solid var(--accent-primary);
+  border-radius: 10px;
+  color: var(--accent-primary);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.publish-awaiting-icon {
+  font-size: 15px;
+}
+
+/* Result view */
+.publish-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  text-align: center;
+}
+
+.publish-result-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 24px;
+}
+
+.publish-result.published .publish-result-icon {
+  background: var(--status-success-bg);
+  color: var(--success);
+}
+
+.publish-result.error .publish-result-icon {
+  background: var(--status-error-bg);
+  color: var(--error);
+}
+
+.publish-result.cancelled .publish-result-icon {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.publish-result-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.publish-result-subtitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.publish-result-url {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.publish-result .publish-block {
+  width: 100%;
+  text-align: left;
+}
+
+.publish-shimo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 14px;
+  background: var(--status-loading-bg);
+  border: 1px solid var(--accent-primary);
+  border-radius: 12px;
+}
+
+.publish-shimo-text {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+/* Buttons + action rows */
+.publish-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.publish-dialog-actions-progress,
+.publish-dialog-actions-result {
+  margin-top: 0;
+  padding: 0 24px 20px;
+}
+
+.publish-btn {
+  padding: 9px 20px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.publish-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.publish-btn-primary {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.publish-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md), 0 4px 12px var(--accent-glow);
+}
+
+.publish-btn-ghost {
+  background: var(--bg-card);
+  border-color: var(--border-medium);
+  color: var(--text-secondary);
+}
+
+.publish-btn-ghost:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}

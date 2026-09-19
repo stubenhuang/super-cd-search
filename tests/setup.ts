@@ -49,7 +49,16 @@ vi.mock('electron-store', () => {
       return this.data[key]
     }
 
-    set(key: string, value: unknown) {
+    /**
+     * electron-store accepts both `set(key, value)` and `set(object)`, and the
+     * app relies on the object form (`updateSettings`). Supporting only the
+     * two-argument form would silently drop those writes in tests.
+     */
+    set(key: string | Record<string, unknown>, value?: unknown) {
+      if (typeof key === 'object' && key !== null) {
+        Object.assign(this.data, key)
+        return
+      }
       this.data[key] = value
     }
 

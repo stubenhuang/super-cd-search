@@ -5,6 +5,7 @@ import { join } from 'path'
 import { hostname, userInfo } from 'os'
 import electronStore from 'electron-store'
 import type { Settings, LLMSettings, Platform, DisplayCurrency, BarcodeProvider } from '../../shared/types'
+import type { PublishTarget } from '../../shared/publish'
 import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 
 export type { Settings, LLMSettings }
@@ -28,6 +29,7 @@ const schema = {
   barcodeProviders: { type: 'array' as const, default: DEFAULT_BARCODE_PROVIDERS },
   lastExportDirectory: { type: 'string' as const, default: '' },
   autoUpdateEnabled: { type: 'boolean' as const, default: true },
+  publishTargets: { type: 'array' as const, default: [] },
   llm: {
     type: 'object' as const,
     properties: {
@@ -228,7 +230,8 @@ export function getSettings(): Settings {
     lanPort: store.get('lanPort') as number || undefined,
     barcodeProviders: store.get('barcodeProviders') as BarcodeProvider[] || DEFAULT_BARCODE_PROVIDERS,
     lastExportDirectory: store.get('lastExportDirectory') as string || undefined,
-    autoUpdateEnabled: store.get('autoUpdateEnabled') !== false
+    autoUpdateEnabled: store.get('autoUpdateEnabled') !== false,
+    publishTargets: (store.get('publishTargets') as PublishTarget[] | undefined) ?? []
   }
 }
 
@@ -255,7 +258,7 @@ export const PUBLIC_SETTING_KEYS = new Set<keyof Settings>([
   'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
   'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
   'lanEnabled', 'lanHost', 'lanPort',
-  'barcodeProviders', 'lastExportDirectory', 'autoUpdateEnabled'
+  'barcodeProviders', 'lastExportDirectory', 'autoUpdateEnabled', 'publishTargets'
 ])
 
 export function deleteSetting<K extends keyof Settings>(key: K): void {

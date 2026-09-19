@@ -49,7 +49,8 @@ describe('settings', () => {
       lanPort: undefined,
       barcodeProviders: DEFAULT_BARCODE_PROVIDERS,
       lastExportDirectory: undefined,
-      autoUpdateEnabled: true
+      autoUpdateEnabled: true,
+      publishTargets: []
     })
     expect(getSetting('discogsToken')).toBeUndefined()
   })

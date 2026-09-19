@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import puppeteer from 'puppeteer-core'
 import type { Browser, Page } from 'puppeteer-core'
 import { LOGIN_DEFS, checkLoginState } from './defs'
-import { findChromeExecutable } from '../browser/chrome-path'
+import { restrictedHostChromeArgs, findChromeExecutable } from '../browser/chrome-path'
 import { logger } from '../logger'
 import type { LoginPlatform, LoginResult, LoginSessionStatus } from '../../shared/types'
 
@@ -65,7 +65,7 @@ export function initLoginSession(userDataDir: string): void {
   profileDir = join(userDataDir, 'cloudflare-chrome')
 }
 
-function waitForDevToolsPort(dir: string): Promise<number> {
+export function waitForDevToolsPort(dir: string): Promise<number> {
   const file = join(dir, 'DevToolsActivePort')
   const deadline = Date.now() + 20000
   return new Promise((resolve, reject) => {
@@ -92,7 +92,7 @@ function waitForDevToolsPort(dir: string): Promise<number> {
  * even belong to a Chrome that has since been replaced), so retry the connect
  * for a few seconds instead of failing the whole login on the first attempt.
  */
-async function connectWithRetry(port: number): Promise<Browser> {
+export async function connectWithRetry(port: number): Promise<Browser> {
   const deadline = Date.now() + 10_000
   let lastError: unknown
   while (Date.now() < deadline) {
@@ -192,6 +192,7 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
     [
       '--remote-debugging-port=0',
       `--user-data-dir=${dir}`,
+      ...restrictedHostChromeArgs(),
       '--no-first-run',
       '--no-default-browser-check',
       // Headless sessions have no window at all; headed ones get parked
@@ -217,7 +218,7 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
   const maskedUa = describeBrowserSessionFromUa(ua).maskedUa
   if (mode === 'headed') {
     // Park the window immediately so even the launch is not a disturbance.
-    await setMainWindowVisible(page, false)
+    await setChromeWindowVisible(page, false)
   }
 
   // If the user closes the Chrome window manually, clear the session so the
@@ -303,7 +304,7 @@ const WINDOW_OFF_SCREEN = { left: -32000, top: -32000 }
  * restores the window while a human is needed, then re-parks. A failed move
  * must never break the flow that triggered it.
  */
-async function setMainWindowVisible(page: Page, visible: boolean): Promise<void> {
+export async function setChromeWindowVisible(page: Page, visible: boolean): Promise<void> {
   try {
     const cdp = await page.createCDPSession()
     try {
@@ -346,7 +347,7 @@ export async function startLogin(platform: LoginPlatform): Promise<LoginResult> 
   try {
     return await withPage(async (page) => {
       // Interactive flow: the user must see and operate the login window.
-      await setMainWindowVisible(page, true)
+      await setChromeWindowVisible(page, true)
       await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 })
 
       const deadline = Date.now() + LOGIN_TIMEOUT_MS
@@ -370,7 +371,7 @@ export async function startLogin(platform: LoginPlatform): Promise<LoginResult> 
   } finally {
     // Park the window off-screen again — scraping runs invisibly. Best-effort
     // on the session: a failed launch has nothing to move.
-    if (session) await setMainWindowVisible(session.page, false)
+    if (session) await setChromeWindowVisible(session.page, false)
   }
 }
 

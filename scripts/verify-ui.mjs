@@ -11,6 +11,10 @@
  *   artifacts/ui/shot-2-shimo.png    desktop 石墨文档 placeholder tab
  *   artifacts/ui/shot-3-mobile.png   LAN phone search page (rendered in a
  *                                    throwaway hidden Electron window)
+ *   artifacts/ui/shot-4-publish-settings.png  发布目标 settings section
+ *   artifacts/ui/shot-5-result-card.png        result card with the publish menu
+ *   artifacts/ui/shot-6-publish-menu.png       publish target dropdown
+ *   artifacts/ui/shot-7-publish-dialog.png     prefilled publish preview dialog
  *   artifacts/ui/console.log         main-process + renderer console output
  *
  * Everything runs against a throwaway profile inside `artifacts/`, so the
@@ -26,7 +30,7 @@
  *   2  usage/precondition problem (no build output)
  */
 import { _electron as electron } from 'playwright-core'
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -37,6 +41,10 @@ const ARTIFACTS = join(REPO_ROOT, 'artifacts', 'ui')
 const PROFILE = join(REPO_ROOT, 'artifacts', 'ui-profile')
 const ISOLATED_HOME = join(REPO_ROOT, 'artifacts', 'ui-home')
 const CONSOLE_LOG = join(ARTIFACTS, 'console.log')
+const CACHE_FILE = join(PROFILE, 'search-cache.json')
+
+/** Catalog number whose query result is seeded into the search cache. */
+const SEEDED_CATALOG = 'SICP-6480'
 
 const TAG = '[verify-ui]'
 /** A screenshot smaller than this is almost certainly a blank frame. */
@@ -61,6 +69,45 @@ for (const dir of [PROFILE, ISOLATED_HOME]) {
   mkdirSync(dir, { recursive: true })
 }
 mkdirSync(ARTIFACTS, { recursive: true })
+
+/**
+ * Seed the persistent query cache so a search returns a result without touching
+ * the network. That is what lets this script render a real result card (and
+ * therefore the publish menu and dialog). The cache key embeds the app's
+ * QUERY_CACHE_VERSION, so read it from source instead of hardcoding it.
+ */
+function seedQueryCache() {
+  const cacheSource = readFileSync(join(REPO_ROOT, 'src', 'main', 'queries', 'cache.ts'), 'utf8')
+  const version = /QUERY_CACHE_VERSION\s*=\s*(\d+)/.exec(cacheSource)?.[1] ?? '5'
+  // Without a Discogs token the app uses the 'web' cache context.
+  const key = `v${version}:discogs:web:${SEEDED_CATALOG}`
+  writeFileSync(
+    CACHE_FILE,
+    JSON.stringify({
+      queryResults: {
+        [key]: {
+          value: {
+            platform: 'discogs',
+            name: 'Animals (2018 Remix)',
+            artist: 'Pink Floyd',
+            priceMin: 159.19,
+            priceMax: 159.19,
+            coverUrl: '',
+            link: 'https://www.discogs.com/release/24580325',
+            status: 'found'
+          },
+          fetchedAt: Date.now()
+        }
+      },
+      productDetails: {},
+      enrichments: {}
+    }),
+    'utf8'
+  )
+  console.log(`${TAG} seeded query cache entry ${key}`)
+}
+
+seedQueryCache()
 
 const results = []
 const logLines = []
@@ -122,7 +169,16 @@ try {
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding'
     ],
-    env: { ...process.env, HOME: ISOLATED_HOME },
+    env: {
+      ...process.env,
+      HOME: ISOLATED_HOME,
+      // The app launches its own real Chrome (login status, publishing) from
+      // inside this script's sandbox, where it can neither initialise
+      // Chromium's own sandbox (SIGTRAP within seconds → macOS
+      // 「Google Chrome 意外退出」) nor reach the login Keychain (macOS
+      // 「找不到钥匙串」). The flag adds --no-sandbox + --use-mock-keychain.
+      SUPER_CD_CHROME_RESTRICTED: '1'
+    },
     timeout: 60000
   })
 
@@ -196,11 +252,7 @@ try {
   await window.screenshot({ path: join(ARTIFACTS, 'shot-2-shimo.png') })
   checkScreenshot('石墨文档占位页', join(ARTIFACTS, 'shot-2-shimo.png'))
 
-  // 5. No renderer-side errors during any of the above.
-  check('渲染进程无 console.error', consoleErrors.length === 0, consoleErrors.join(' | '))
-  check('渲染进程无未捕获异常', pageErrors.length === 0, pageErrors.join(' | '))
-
-  // 6. The LAN phone page. Electron is itself a Chromium, so the page is
+  // 5. The LAN phone page. Electron is itself a Chromium, so the page is
   //    rendered in a throwaway hidden window instead of requiring a separate
   //    browser download (playwright-core ships no browser of its own).
   let status = await enableLan(window, await freePort())
@@ -238,10 +290,227 @@ try {
     await mobileWindow.close()
   }
 
-  // 7. Going back must still work (the app stays interactive after tab switches).
+  // 6. Going back must still work (the app stays interactive after tab switches).
   await window.locator('.app-tabs button', { hasText: '搜索' }).click()
   await window.waitForTimeout(200)
   check('切回搜索页仍可交互', await window.locator('.left-panel .catalog-input').isVisible())
+
+  // 7. Publish targets: the settings section must list every configured target,
+  //    including disabled ones (a disabled target that vanishes can never be
+  //    re-enabled), and the editor must open.
+  await window.evaluate(async () => {
+    await window.electronAPI.updateSettings({
+      // Only Discogs is searched: its result comes from the seeded cache, so the
+      // publish UI can be exercised without any network traffic.
+      standardPlatforms: ['discogs'],
+      publishTargets: [
+        {
+          id: 'ui-smoke-xianyu',
+          platform: 'xianyu',
+          name: '冒烟-闲鱼号',
+          // `account` is auto-detected by the app, never typed by the user.
+          account: '',
+          enabled: true,
+          createdAt: Date.now(),
+          xianyuCondition: '几乎全新',
+          uploadCover: true
+        },
+        {
+          id: 'ui-smoke-discogs',
+          platform: 'discogs',
+          name: '冒烟-Discogs停用',
+          account: 'demo-user',
+          enabled: false,
+          createdAt: Date.now(),
+          currency: 'USD',
+          condition: 'Very Good Plus (VG+)',
+          status: 'For Sale'
+        }
+      ]
+    })
+  })
+
+  await window.locator('.settings-button').click()
+  await window.locator('.settings-nav-item', { hasText: '发布目标' }).click()
+  await window.waitForSelector('.publish-target-row', { timeout: 10000 })
+
+  const targetNames = await window.locator('.publish-target-name').allTextContents()
+  check(
+    '设置·发布目标列出全部目标（含已停用）',
+    targetNames.includes('冒烟-闲鱼号') && targetNames.includes('冒烟-Discogs停用'),
+    JSON.stringify(targetNames)
+  )
+  check('设置·发布目标条目数为 2', targetNames.length === 2, String(targetNames.length))
+
+  // Every 闲鱼 target owns an independent login: its row must expose a status
+  // badge plus its own 扫码登录 / 退出登录 buttons (never the search channel's).
+  const xianyuRow = window.locator('.publish-target-row', { hasText: '冒烟-闲鱼号' })
+  await xianyuRow.locator('.publish-status-badge').first().waitFor({ timeout: 20000 })
+  const xianyuBadge = await xianyuRow.locator('.publish-status-badge').first().innerText()
+  check(
+    '闲鱼目标显示独立登录状态徽标',
+    ['Chrome 未启动', '未登录', '状态未知', '已登录'].some(text => xianyuBadge.includes(text)),
+    xianyuBadge
+  )
+  check(
+    '闲鱼目标有「扫码登录」按钮',
+    await xianyuRow.locator('button', { hasText: '扫码登录' }).first().isVisible()
+  )
+  check(
+    '闲鱼目标有「退出登录」按钮',
+    await xianyuRow.locator('button', { hasText: '退出登录' }).first().isVisible()
+  )
+  check(
+    'Discogs 目标不显示闲鱼扫码登录按钮',
+    (await window.locator('.publish-target-row', { hasText: '冒烟-Discogs停用' }).locator('button', { hasText: '扫码登录' }).count()) === 0
+  )
+
+  // Review feedback: rows must line up, both platform tags must share one
+  // colour treatment, and the enable toggle belongs at the very end.
+  const rowBoxes = await window.locator('.publish-target-row').evaluateAll(rows =>
+    rows.map(row => {
+      const box = row.getBoundingClientRect()
+      return { left: Math.round(box.left), width: Math.round(box.width) }
+    })
+  )
+  check(
+    '两条目标行宽度/左边界对齐',
+    rowBoxes.length === 2 && rowBoxes.every(box => box.left === rowBoxes[0].left && Math.abs(box.width - rowBoxes[0].width) <= 1),
+    JSON.stringify(rowBoxes)
+  )
+
+  const badgeColors = await window.locator('.publish-platform-badge').evaluateAll(badges =>
+    badges.map(badge => {
+      const style = getComputedStyle(badge)
+      return `${style.color}|${style.backgroundColor}|${style.borderColor}`
+    })
+  )
+  check(
+    '闲鱼/Discogs 标签颜色一致',
+    badgeColors.length >= 2 && badgeColors.every(color => color === badgeColors[0]),
+    JSON.stringify(badgeColors)
+  )
+
+  // Scope to the head row: 闲鱼's footer holds its login buttons in a second
+  // actions container, which legitimately has no switch.
+  const headActionCounts = await window.locator('.publish-target-head .publish-target-actions').evaluateAll(actions =>
+    actions.map(action => {
+      const last = action.lastElementChild
+      const buttons = [...action.querySelectorAll('button')].map(button => button.textContent?.trim() ?? '')
+      return {
+        switchLast: Boolean(last && last.querySelector('input[type="checkbox"]')),
+        hasLogin: buttons.some(label => label.includes('扫码登录') || label.includes('退出登录')),
+        buttonCount: buttons.length
+      }
+    })
+  )
+  check('上半部分每行「开关」都在最后', headActionCounts.every(item => item.switchLast), JSON.stringify(headActionCounts))
+
+  // The head row must stay a single line for both platforms; a wrapped switch
+  // was exactly the misalignment this layout fixes.
+  const headSingleLine = await window.locator('.publish-target-head .publish-target-actions').evaluateAll(actions =>
+    actions.every(action => {
+      // Vertically centred items of different heights share a centre, not a top,
+      // when they sit on one line; a wrapped line shifts the centre by ~half the
+      // container height.
+      const centres = [...action.children].map(child => child.offsetTop + child.offsetHeight / 2)
+      return centres.length > 0 && Math.max(...centres) - Math.min(...centres) <= 3
+    })
+  )
+  check('上半部分按钮与开关在同一行（未换行）', headSingleLine)
+  check(
+    '闲鱼行上半部分与 Discogs 按钮数一致（登录按钮已下移）',
+    headActionCounts.length === 2 && headActionCounts[0].buttonCount === headActionCounts[1].buttonCount,
+    JSON.stringify(headActionCounts)
+  )
+  check('上半部分不含扫码登录/退出登录', headActionCounts.every(item => !item.hasLogin), JSON.stringify(headActionCounts))
+
+  // The 闲鱼-only footer (below the dashed separator) carries those buttons.
+  const xianyuFoot = await window.locator('.publish-target-row', { hasText: '冒烟-闲鱼号' }).locator('.publish-target-foot')
+  const footButtons = await xianyuFoot.locator('button').allTextContents()
+  check(
+    '登录按钮位于虚线下的页脚区',
+    await xianyuFoot.isVisible() &&
+      footButtons.some(label => label.includes('扫码登录')) &&
+      footButtons.some(label => label.includes('退出登录')),
+    JSON.stringify(footButtons)
+  )
+
+  // Look for a labelled「账户」field rather than a specific id/placeholder, so the
+  // assertion cannot go vacuous when the markup is refactored.
+  const accountFields = await window.locator('.publish-editor .st-field').evaluateAll(fields =>
+    fields.filter(field => (field.querySelector('label')?.textContent ?? '').includes('账户')).length
+  )
+  check('编辑器不再有手填「账户」输入项', accountFields === 0, `fields=${accountFields}`)
+
+  await window.locator('button', { hasText: '新增发布目标' }).first().click()
+  await window.waitForSelector('.publish-editor', { timeout: 5000 })
+  check('新增发布目标编辑器可打开', await window.locator('.publish-editor').isVisible())
+  await window.waitForTimeout(300)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-4-publish-settings.png') })
+  checkScreenshot('发布目标设置页', join(ARTIFACTS, 'shot-4-publish-settings.png'))
+
+  // Closing the panel must leave the app usable again.
+  await window.locator('.st-close-button').click()
+  await window.waitForTimeout(200)
+  check('关闭设置面板后回到搜索页', await window.locator('.left-panel .catalog-input').isVisible())
+
+  // 8. A real result card (from the seeded cache) must expose the publish menu,
+  //    and picking a target must open the prefilled preview dialog.
+  await window.locator('.left-panel .catalog-input').fill(SEEDED_CATALOG)
+  // `.search-button` specifically: a text match would hit the 搜索 tab button.
+  await window.locator('.search-button').click()
+  await window.waitForSelector('.result-card', { timeout: 30000 })
+  // .result-card enters with `card-enter 0.5s ... backwards`, so a screenshot
+  // taken immediately would capture a nearly transparent card.
+  await window.waitForTimeout(700)
+
+  const cardText = await window.locator('.result-card').first().innerText()
+  check('搜索结果卡片渲染（标题来自缓存结果）', cardText.includes('Animals (2018 Remix)'), cardText.slice(0, 80))
+  check('卡片右上角出现「发布 ▾」按钮', await window.locator('.publish-menu-button').first().isVisible())
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-5-result-card.png') })
+  checkScreenshot('搜索结果卡片', join(ARTIFACTS, 'shot-5-result-card.png'))
+
+  await window.locator('.publish-menu-button').first().click()
+  await window.waitForSelector('.publish-menu-item', { timeout: 5000 })
+  await window.waitForTimeout(250)
+  const menuItems = await window.locator('.publish-menu-item').allTextContents()
+  check(
+    '发布下拉只列启用中的目标',
+    menuItems.some(item => item.includes('冒烟-闲鱼号')) && !menuItems.some(item => item.includes('冒烟-Discogs停用')),
+    JSON.stringify(menuItems)
+  )
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-6-publish-menu.png') })
+  checkScreenshot('发布下拉', join(ARTIFACTS, 'shot-6-publish-menu.png'))
+
+  // 闲鱼 draft building is offline (no release lookup), so this stays deterministic.
+  await window.locator('.publish-menu-item', { hasText: '冒烟-闲鱼号' }).first().click()
+  await window.waitForSelector('.publish-dialog', { timeout: 20000 })
+  // The draft waits for the exchange-rate lookup before the CNY price lands, so
+  // wait for the rendered form rather than reading the loading state.
+  await window.waitForSelector('.publish-dialog .publish-input', { timeout: 30000 })
+  // The dialog slides in (modal-slide-up 0.35s); let it settle before shooting.
+  await window.waitForTimeout(400)
+  // Field values live in inputs (innerText does not include them), so read the
+  // prefilled title/price directly.
+  const titleValue = await window.locator('#publish-field-title').inputValue()
+  const priceValue = await window.locator('#publish-field-price').inputValue()
+  check(
+    '发布预览弹层已按结果预填（标题/价格）',
+    titleValue.includes('Pink Floyd') && titleValue.includes('Animals') && Number(priceValue) > 0,
+    `title="${titleValue}" price="${priceValue}"`
+  )
+  check('预览弹层包含标题输入框', await window.locator('.publish-dialog .publish-input').first().isVisible())
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-7-publish-dialog.png') })
+  checkScreenshot('发布预览弹层', join(ARTIFACTS, 'shot-7-publish-dialog.png'))
+
+  await window.locator('.publish-dialog-close').click()
+  await window.waitForTimeout(200)
+  check('关闭发布弹层后回到搜索页', await window.locator('.left-panel .catalog-input').isVisible())
+
+  // 9. No renderer-side errors across every step above.
+  check('渲染进程无 console.error', consoleErrors.length === 0, consoleErrors.join(' | '))
+  check('渲染进程无未捕获异常', pageErrors.length === 0, pageErrors.join(' | '))
 } catch (error) {
   check('冒烟脚本执行完成', false, error instanceof Error ? `${error.message}` : String(error))
 } finally {
