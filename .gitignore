@@ -28,6 +28,9 @@ npm-debug.log*
 # Test
 coverage/
 
+# UI 冒烟测试产物（截图 / 隔离 profile / 日志）
+artifacts/
+
 # Test data files
 *.json
 !package.json

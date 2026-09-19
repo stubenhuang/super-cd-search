@@ -33,3 +33,15 @@ Super CD Search 面向 **CD 卖家**：按目录号批量查询多平台 CD 信�
   - `npm test`
   - `npm run test:coverage`
   - `npm run typecheck`
+  - `npm run verify:ui`（界面冒烟，见下节；不在 `npm test` 内）
+
+## 界面验证（UI 冒烟）
+
+- **触发条件**：改动涉及界面时必须跑，不能只跑单测 —— `src/renderer/**`、`src/renderer/src/i18n.tsx`、任何 `*.css`、`src/main/lan/mobile.ts`（局域网手机端内联页面）。
+- **命令**：`npm run verify:ui`（先 `npm run build`，再用 playwright-core 的 `_electron` 启动真实 Electron 跑 `scripts/verify-ui.mjs`）。
+- **必须看图**：截图输出到 `artifacts/ui/*.png`，用 `read_image` 打开确认视觉效果；**断言通过不等于界面没问题**（排版、居中、遮挡只有看图才知道）。
+- **产物**：`artifacts/ui/` 下有 3 张截图（搜索页 / 石墨文档占位页 / 手机端搜索页）与 `console.log`（主进程 + 渲染进程日志）。目录已 gitignore。
+- **隔离要求**：脚本强制使用工作区内的临时 profile（`artifacts/ui-profile/`、`artifacts/ui-home/`），禁止读写用户真实 userData（`~/Library/Application Support/super-cd-search`）。
+- **失败处理**：断言失败时命令以非 0 退出，产物保留；先看 `console.log`，再按需补断言。
+- **维护**：新增/修改界面功能时，在 `scripts/verify-ui.mjs` 里补一条对应断言（沿用 `check(name, ok, detail)`），让后续改动可以被同一条命令验证。
+- `_electron` 是 Playwright 的 experimental API，依赖组合固定为 `playwright-core ^1.63.0` + `Electron 41.x`（已验证可用）。

@@ -64,6 +64,10 @@ npm test
 
 # 运行单元测试并检查覆盖率（要求各指标 ≥ 70%）
 npm run test:coverage
+
+# 界面冒烟：构建后启动真实 Electron，检查标签页/关键元素并截图（需要图形会话）
+# 产物：artifacts/ui/（3 张截图 + console.log，已在 .gitignore 中）
+npm run verify:ui
 ```
 
 ### 构建与打包
