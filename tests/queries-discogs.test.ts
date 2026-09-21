@@ -89,7 +89,8 @@ describe('queryDiscogs', () => {
         if (url.includes('/releases/')) {
           return okJson({
             labels: [{ name: 'Test Label' }],
-            formats: [{ name: 'CD', descriptions: ['Album', 'Reissue'] }],
+            // Discogs puts UHQCD/SHM-CD style specs in `text`, not `descriptions`.
+            formats: [{ name: 'CD', descriptions: ['Album', 'Reissue'], text: 'UHQCD' }],
             country: 'Japan',
             released: '2024-03-01',
             released_formatted: '01 Mar 2024',
@@ -114,13 +115,45 @@ describe('queryDiscogs', () => {
         status: 'found',
         details: {
           label: 'Test Label',
-          format: 'CD, Album, Reissue',
+          format: 'CD, Album, Reissue, UHQCD',
           country: 'Japan',
           released: '2024-03-01',
           genre: 'Jazz, Hard Bop'
         }
       })
       expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
+    })
+
+    it('appends the format free-text field across entries and skips blank ones', async () => {
+      mockThrottledFetch.mockImplementation(async (_domain: string, url: string) => {
+        if (url.includes('/database/search')) {
+          return okJson({
+            results: [{ id: 42, title: 'Artist - UCCI-9349 Let It Go', catno: 'UCCI-9349', uri: '/release/42' }]
+          })
+        }
+        if (url.includes('/marketplace/stats')) return okJson({})
+        if (url.includes('/releases/42')) {
+          return okJson({
+            labels: [{ name: 'Impulse!' }],
+            formats: [
+              { name: 'CD', descriptions: ['Album', 'Reissue', 'Stereo'], text: 'UHQCD' },
+              { name: 'DVD', descriptions: ['NTSC'], text: '   ' }
+            ],
+            country: 'Japan',
+            released: '2020-06-24',
+            genres: ['Jazz'],
+            styles: ['Bop', 'Soul-Jazz']
+          })
+        }
+        return { ok: false, status: 404 }
+      })
+
+      const first = await queryDiscogs('UCCI-9349')
+      expect(first.details?.format).toBe('CD, Album, Reissue, Stereo, UHQCD, DVD, NTSC')
+
+      // Second lookup for the same catalog number must not re-fetch or drop the free text.
+      const second = await queryDiscogs('UCCI-9349')
+      expect(second.details?.format).toBe(first.details?.format)
     })
 
     it('falls back to released_formatted and then year', async () => {

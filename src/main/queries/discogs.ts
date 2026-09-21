@@ -178,7 +178,13 @@ async function getReleaseDetails(releaseId: number, token: string, signal?: Abor
 
     const data = await response.json() as {
       labels?: Array<{ name?: string }>
-      formats?: Array<{ name?: string; descriptions?: string[] }>
+      /**
+       * `descriptions` holds the enumerated tags (Album, Reissue, Stereo…)
+       * while `text` is the format's free-text field. Discogs renders both on
+       * the release page ("CD, Album, Reissue, Stereo, UHQCD"), so dropping
+       * `text` loses specs like UHQCD/SHM-CD/Blu-spec CD.
+       */
+      formats?: Array<{ name?: string; descriptions?: string[]; text?: string }>
       country?: string
       /** Full release date, e.g. "2022-09-16". */
       released?: string
@@ -194,6 +200,9 @@ async function getReleaseDetails(releaseId: number, token: string, signal?: Abor
       for (const f of data.formats) {
         if (f.name) formatParts.push(f.name)
         if (f.descriptions?.length) formatParts.push(...f.descriptions)
+        // The free-text field comes last, matching Discogs' own format line.
+        const text = f.text?.trim()
+        if (text) formatParts.push(text)
       }
     }
 
