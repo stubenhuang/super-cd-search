@@ -255,10 +255,11 @@ const zh = {
   'detail.close': '关闭',
   'detail.smartMissing': '缺失: {fields}',
 
-  // Publish targets (settings section)
+  // Publish targets (发布目标 panel, opened from the header button)
   'nav.publish': '发布目标',
   'publish.platform.xianyu': '闲鱼',
   'publish.platform.discogs': 'Discogs',
+  'settings.publishFooterHint': '发布目标的修改会立即保存',
   'settings.publishDesc': '配置「发布到闲鱼 / Discogs」的目标。Discogs 通过官方 API 全自动上架；闲鱼没有开放的上架 API，应用会自动填写卖家工作台并在最后一步停下，由你在浏览器窗口里确认。',
   'settings.publishLoading': '正在加载发布目标…',
   'settings.publishEmpty': '还没有配置发布目标，点击下方按钮新增一个。',
@@ -335,6 +336,9 @@ const zh = {
   // Publish menu on result cards
   'publish.menu': '发布 ▾',
   'publish.menuTitle': '发布到…',
+  // Persistent dropdown entry that opens the 发布目标 panel; the only item
+  // while no target is configured.
+  'publish.addTarget': '发布目标',
 
   // Publish preview dialog
   'publish.title': '发布预览',

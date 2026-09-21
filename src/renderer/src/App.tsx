@@ -4,6 +4,7 @@ import { SettingsPanel } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
 import { PublishDialog, PublishMenu, type PublishDialogRequest } from './Publish'
+import { PublishTargetsPanel } from './PublishTargetsPanel'
 import { FlowDialog, type AutoFlowState } from './FlowDialog'
 import { aggregateDetails, missingDetailKeys, buildDetailsText, DETAIL_KEYS, isValidDetailValue } from '../../shared/details'
 import type { PublishTarget } from '../../shared/publish'
@@ -192,9 +193,11 @@ interface ResultCardProps {
   usdToCnyRate: number | null
   publishTargets: PublishTarget[]
   onPublishTargetSelect: (catalogNumber: string, targetId: string) => void
+  /** Opens the 发布目标 panel from the card's publish menu. */
+  onAddPublishTarget: () => void
 }
 
-const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate, publishTargets, onPublishTargetSelect }: ResultCardProps) {
+const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate, publishTargets, onPublishTargetSelect, onAddPublishTarget }: ResultCardProps) {
   const { t } = useI18n()
   const foundResult = results.find(r => r.status === 'found' && r.name)
   const displayName = foundResult?.name || catalogNumber
@@ -239,6 +242,7 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
           catalogNumber={catalogNumber}
           targets={publishTargets}
           onSelect={onPublishTargetSelect}
+          onAddTarget={onAddPublishTarget}
         />
       </div>
       <div className="platform-results">
@@ -311,6 +315,7 @@ function App() {
   const [completedCatalogs, setCompletedCatalogs] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
   const [showLanPanel, setShowLanPanel] = useState(false)
+  const [showPublishTargets, setShowPublishTargets] = useState(false)
   const cancelledRef = useRef(false)
   const smartCancelRef = useRef(false)
   const smartCurrentCatalogRef = useRef<string | null>(null)
@@ -875,17 +880,16 @@ function App() {
     }
   }, [])
 
-  // Fetch the target list once, then again whenever the settings panel closes
+  // Fetch the target list once, then again whenever the 发布目标 panel closes
   // so a target added there shows up on the cards without restarting the app.
   useEffect(() => {
     void refreshPublishTargets()
   }, [refreshPublishTargets])
 
-  const prevShowSettingsRef = useRef(false)
-  useEffect(() => {
-    if (prevShowSettingsRef.current && !showSettings) void refreshPublishTargets()
-    prevShowSettingsRef.current = showSettings
-  }, [showSettings, refreshPublishTargets])
+  const handleClosePublishTargets = useCallback(() => {
+    setShowPublishTargets(false)
+    void refreshPublishTargets()
+  }, [refreshPublishTargets])
 
   // Description text is composed in the renderer because it owns the i18n
   // labels; the main process receives the finished string.
@@ -1001,6 +1005,16 @@ function App() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="7" y="2" width="10" height="20" rx="2.5"/>
               <line x1="11" y1="18" x2="13" y2="18"/>
+            </svg>
+          </button>
+          <button
+            className="publish-targets-button"
+            onClick={() => setShowPublishTargets(true)}
+            title={t('nav.publish')}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
           </button>
           <button
@@ -1199,6 +1213,7 @@ function App() {
                       usdToCnyRate={usdToCnyRate}
                       publishTargets={publishTargets}
                       onPublishTargetSelect={handlePublishTargetSelect}
+                      onAddPublishTarget={() => setShowPublishTargets(true)}
                     />
                   )
                 })}
@@ -1218,6 +1233,7 @@ function App() {
       <UpdateBanner state={updateState} onInstall={() => void installUpdate()} />
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <PublishTargetsPanel isOpen={showPublishTargets} onClose={handleClosePublishTargets} />
       <FlowDialog
         flow={autoFlow}
         onDeepDigConfirm={handleDeepDigConfirm}

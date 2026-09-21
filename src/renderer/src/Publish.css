@@ -1,7 +1,8 @@
 /* ============================================================
    PUBLISH — 发布到闲鱼 / Discogs
-   Result-card menu, preview/progress/result dialog and the
-   settings「发布目标」section styles live here.
+   Result-card menu, preview/progress/result dialog, the
+   「发布目标」management panel (opened from the header button) and
+   its target-list/editor styles live here.
    ============================================================ */
 
 /* === Result header layout ==================================================
@@ -19,6 +20,18 @@
 .result-header-text {
   flex: 1;
   min-width: 0;
+}
+
+/* === 发布目标面板（头部按钮打开的独立模态，结构同 LanPanel） ==============
+   Mirrors `.settings-panel.lan-settings-panel` in Settings.css: no sidebar,
+   so the panel is a bit narrower and sizes itself to its content. Slightly
+   wider than the LAN panel because the target rows pack four action controls
+   plus the enable switch on one line. */
+.settings-panel.publish-settings-panel {
+  width: 640px;
+  height: auto;
+  min-height: 420px;
+  max-height: 88vh;
 }
 
 /* === Result-card dropdown (发布 ▾) === */
@@ -91,6 +104,19 @@
 }
 
 .publish-menu-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+/* Persistent 「+ 发布目标」 entry at the bottom of the dropdown. It is the
+   only item while no target is configured (that is how users discover the
+   feature), and stays below the target groups afterwards. */
+.publish-menu-item-add {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.publish-menu-item-add:hover {
   background: var(--bg-tertiary);
   color: var(--accent-primary);
 }

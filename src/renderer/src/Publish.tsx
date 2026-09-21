@@ -44,7 +44,9 @@ function PlatformBadge({ platform }: { platform: PublishPlatform }) {
 }
 
 /* ============================================================
-   Settings section — 发布目标
+   Publish targets — 发布目标
+   Rendered inside the 发布目标 panel opened from the header button
+   (previously the settings panel's 发布目标 page).
    ============================================================ */
 
 interface PublishTargetsSectionProps {
@@ -928,13 +930,18 @@ interface PublishMenuProps {
   catalogNumber: string
   targets: PublishTarget[]
   onSelect: (catalogNumber: string, targetId: string) => void
+  /** Opens the 发布目标 panel so a target can be added from a card. */
+  onAddTarget: () => void
 }
 
 /**
- * Compact 「发布 ▾」 menu rendered in the result header. Renders nothing while
- * no enabled target exists, so cards stay clean until publishing is configured.
+ * Compact 「发布 ▾」 menu rendered in the result header. Always rendered —
+ * with no enabled target the dropdown holds only the persistent
+ * 「+ 发布目标」 entry, which is how users discover that publishing can be
+ * configured in the first place. The entry stays below the target groups
+ * once targets exist, so a new one can be added at any time.
  */
-export function PublishMenu({ catalogNumber, targets, onSelect }: PublishMenuProps) {
+export function PublishMenu({ catalogNumber, targets, onSelect, onAddTarget }: PublishMenuProps) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -956,8 +963,6 @@ export function PublishMenu({ catalogNumber, targets, onSelect }: PublishMenuPro
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [open])
-
-  if (enabledTargets.length === 0) return null
 
   const groups = PUBLISH_PLATFORMS
     .map(platform => ({ platform, items: enabledTargets.filter(target => target.platform === platform) }))
@@ -998,6 +1003,21 @@ export function PublishMenu({ catalogNumber, targets, onSelect }: PublishMenuPro
               ))}
             </div>
           ))}
+          {/* Persistent entry: the only item while nothing is configured, and
+              a permanent shortcut to the panel once targets exist. */}
+          <div className="publish-menu-group publish-menu-add">
+            <button
+              type="button"
+              role="menuitem"
+              className="publish-menu-item publish-menu-item-add"
+              onClick={() => {
+                setOpen(false)
+                onAddTarget()
+              }}
+            >
+              + {t('publish.addTarget')}
+            </button>
+          </div>
         </div>
       )}
     </div>

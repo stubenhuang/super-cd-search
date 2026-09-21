@@ -11,14 +11,16 @@
  *   artifacts/ui/shot-2-shimo.png    desktop 石墨文档 placeholder tab
  *   artifacts/ui/shot-3-mobile.png   LAN phone search page (rendered in a
  *                                    throwaway hidden Electron window)
- *   artifacts/ui/shot-4-publish-settings.png  发布目标 settings section (open
- *                                              Discogs editor: token + guide)
- *   artifacts/ui/shot-4b-publish-token.png      Discogs target editor (required
- *                                              token + how-to guide)
- *   artifacts/ui/shot-4c-publish-login.png      闲鱼 target editor (own login)
+ *   artifacts/ui/shot-4-publish-settings.png  发布目标面板（头部按钮打开，
+ *                                              Discogs 编辑器：Token + 引导）
+ *   artifacts/ui/shot-4b-publish-token.png     Discogs 目标编辑器（必填
+ *                                              Token + 获取引导）
+ *   artifacts/ui/shot-4c-publish-login.png     闲鱼目标编辑器（独立登录）
  *   artifacts/ui/shot-5-result-card.png        result card with the publish menu
  *   artifacts/ui/shot-6-publish-menu.png       publish target dropdown
  *   artifacts/ui/shot-7-publish-dialog.png     prefilled publish preview dialog
+ *   artifacts/ui/shot-8-publish-add-entry.png  empty-state publish menu with the
+ *                                              persistent「+ 发布目标」entry
  *   artifacts/ui/console.log         main-process + renderer console output
  *
  * Everything runs against a throwaway profile inside `artifacts/`, so the
@@ -231,6 +233,32 @@ try {
   await window.screenshot({ path: join(ARTIFACTS, 'shot-1-search.png') })
   checkScreenshot('搜索页', join(ARTIFACTS, 'shot-1-search.png'))
 
+  // 3b. The header actions must stay one aligned row: WiFi, the 发布目标
+  //     button (moved out of the settings panel) and 设置 share the exact same
+  //     size and baseline, in that order.
+  const headerButtons = await window.locator('.app-header-actions button').evaluateAll(buttons =>
+    buttons.map(button => {
+      const box = button.getBoundingClientRect()
+      return {
+        cls: button.className,
+        top: Math.round(box.top),
+        height: Math.round(box.height),
+        width: Math.round(box.width)
+      }
+    })
+  )
+  check(
+    '头部三个按钮同一行、同尺寸（WiFi → 发布目标 → 设置）',
+    headerButtons.length === 3 &&
+      headerButtons[1].cls.includes('publish-targets-button') &&
+      headerButtons.every(item =>
+        item.top === headerButtons[0].top &&
+        item.height === headerButtons[0].height &&
+        item.width === headerButtons[0].width
+      ),
+    JSON.stringify(headerButtons)
+  )
+
   // 4. The 石墨文档 tab shows the placeholder and nothing else.
   await window.locator('.app-tabs button', { hasText: '石墨文档' }).click()
   await window.waitForSelector('.shimo-placeholder', { timeout: 10000 })
@@ -299,9 +327,9 @@ try {
   await window.waitForTimeout(200)
   check('切回搜索页仍可交互', await window.locator('.left-panel .catalog-input').isVisible())
 
-  // 7. Publish targets: the settings section must list every configured target,
-  //    including disabled ones (a disabled target that vanishes can never be
-  //    re-enabled), and the editor must open.
+  // 7. Publish targets: the panel (opened from the header button) must list
+  //    every configured target, including disabled ones (a disabled target that
+  //    vanishes can never be re-enabled), and the editor must open.
   await window.evaluate(async () => {
     await window.electronAPI.updateSettings({
       // Only Discogs is searched: its result comes from the seeded cache, so the
@@ -337,17 +365,17 @@ try {
     })
   })
 
-  await window.locator('.settings-button').click()
-  await window.locator('.settings-nav-item', { hasText: '发布目标' }).click()
+  await window.locator('.publish-targets-button').click()
+  await window.waitForSelector('.publish-settings-panel', { timeout: 5000 })
   await window.waitForSelector('.publish-target-row', { timeout: 10000 })
 
   const targetNames = await window.locator('.publish-target-name').allTextContents()
   check(
-    '设置·发布目标列出全部目标（含已停用）',
+    '发布目标面板列出全部目标（含已停用）',
     targetNames.includes('冒烟-闲鱼号') && targetNames.includes('冒烟-Discogs停用'),
     JSON.stringify(targetNames)
   )
-  check('设置·发布目标条目数为 2', targetNames.length === 2, String(targetNames.length))
+  check('发布目标面板条目数为 2', targetNames.length === 2, String(targetNames.length))
 
   // Every 闲鱼 target owns an independent login, and its row reports that with a
   // status badge — but the login controls now live in the editor, not the row.
@@ -525,12 +553,12 @@ try {
   check('新增发布目标编辑器可打开', await window.locator('.publish-editor').isVisible())
   await window.waitForTimeout(300)
   await window.screenshot({ path: join(ARTIFACTS, 'shot-4-publish-settings.png') })
-  checkScreenshot('发布目标设置页', join(ARTIFACTS, 'shot-4-publish-settings.png'))
+  checkScreenshot('发布目标面板（新增编辑器）', join(ARTIFACTS, 'shot-4-publish-settings.png'))
 
   // Closing the panel must leave the app usable again.
-  await window.locator('.st-close-button').click()
+  await window.locator('.publish-settings-panel .settings-footer button', { hasText: '关闭' }).click()
   await window.waitForTimeout(200)
-  check('关闭设置面板后回到搜索页', await window.locator('.left-panel .catalog-input').isVisible())
+  check('关闭发布目标面板后回到搜索页', await window.locator('.left-panel .catalog-input').isVisible())
 
   // 8. A real result card (from the seeded cache) must expose the publish menu,
   //    and picking a target must open the prefilled preview dialog.
@@ -585,7 +613,44 @@ try {
   await window.waitForTimeout(200)
   check('关闭发布弹层后回到搜索页', await window.locator('.left-panel .catalog-input').isVisible())
 
-  // 9. No renderer-side errors across every step above.
+  // 9. Discoverability: with NO publish target configured the result card must
+  //    still show 发布 ▾, and its dropdown must offer the persistent
+  //    「+ 发布目标」 entry, which opens the panel — that is how users learn
+  //    the feature exists. Closing the panel is also what refreshes the card
+  //    menus, so the empty state is reached through the real code path.
+  await window.evaluate(async () => {
+    await window.electronAPI.updateSettings({ publishTargets: [] })
+  })
+  await window.locator('.publish-targets-button').click()
+  await window.waitForSelector('.publish-settings-panel', { timeout: 5000 })
+  check('无目标时也能打开发布目标面板', await window.locator('.publish-settings-panel').isVisible())
+  await window.locator('.publish-settings-panel .settings-footer button', { hasText: '关闭' }).click()
+  await window.waitForTimeout(300)
+
+  await window.locator('.left-panel .catalog-input').fill(SEEDED_CATALOG)
+  await window.locator('.search-button').click()
+  await window.waitForSelector('.result-card', { timeout: 30000 })
+  await window.waitForTimeout(700)
+
+  check('未配置目标时卡片仍显示「发布 ▾」按钮', await window.locator('.publish-menu-button').first().isVisible())
+  await window.locator('.publish-menu-button').first().click()
+  await window.waitForSelector('.publish-menu-dropdown', { timeout: 5000 })
+  await window.waitForTimeout(250)
+  const addEntry = window.locator('.publish-menu-item-add').first()
+  const addEntryText = (await addEntry.innerText()).replace(/\s+/g, '')
+  check('空态下拉提供「+ 发布目标」入口', addEntryText === '+发布目标', addEntryText)
+  const emptyMenuTargets = await window.locator('.publish-menu-item:not(.publish-menu-item-add)').count()
+  check('空态下拉不列任何目标', emptyMenuTargets === 0, String(emptyMenuTargets))
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-8-publish-add-entry.png') })
+  checkScreenshot('空态发布下拉（+ 发布目标入口）', join(ARTIFACTS, 'shot-8-publish-add-entry.png'))
+
+  await addEntry.click()
+  await window.waitForSelector('.publish-settings-panel', { timeout: 5000 })
+  check('点击「+ 发布目标」打开发布目标面板', await window.locator('.publish-settings-panel').isVisible())
+  await window.locator('.publish-settings-panel .settings-footer button', { hasText: '关闭' }).click()
+  await window.waitForTimeout(200)
+
+  // 10. No renderer-side errors across every step above.
   check('渲染进程无 console.error', consoleErrors.length === 0, consoleErrors.join(' | '))
   check('渲染进程无未捕获异常', pageErrors.length === 0, pageErrors.join(' | '))
 } catch (error) {
