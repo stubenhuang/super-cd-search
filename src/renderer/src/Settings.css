@@ -290,35 +290,6 @@
   opacity: 1;
 }
 
-/* Sidebar footer */
-.settings-sidebar-footer {
-  padding: 10px;
-  border-top: 1px solid var(--st-border);
-}
-
-.st-close-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 8px;
-  background: var(--st-bg-card);
-  border: 1px solid var(--st-border);
-  border-radius: var(--st-radius-md);
-  color: var(--st-text-secondary);
-  font-family: var(--st-font-body);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all var(--st-transition);
-  gap: 5px;
-}
-
-.st-close-button:hover {
-  border-color: var(--st-error);
-  color: var(--st-error);
-  background: var(--st-danger-soft);
-}
-
 /* === Main Content Area === */
 .settings-main {
   flex: 1;
@@ -1183,10 +1154,6 @@
     padding: 6px;
     overflow-x: auto;
     gap: 2px;
-  }
-
-  .settings-sidebar-footer {
-    display: none;
   }
 
   .settings-nav-item {

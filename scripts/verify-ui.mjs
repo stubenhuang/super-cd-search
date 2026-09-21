@@ -13,6 +13,8 @@
  *                                    throwaway hidden Electron window)
  *   artifacts/ui/shot-3b-lan-panel.png  LAN panel (header button; must not
  *                                    move/grow after opening)
+ *   artifacts/ui/shot-6b-settings.png     settings panel (no bottom-left close
+ *                                        button, footer save reads 保存)
  *   artifacts/ui/shot-4-publish-settings.png  发布目标面板（头部按钮打开，
  *                                              Discogs 编辑器：Token + 引导）
  *   artifacts/ui/shot-4b-publish-token.png     Discogs 目标编辑器（必填
@@ -357,6 +359,22 @@ try {
   await window.locator('.app-tabs button', { hasText: '搜索' }).click()
   await window.waitForTimeout(200)
   check('切回搜索页仍可交互', await window.locator('.left-panel .catalog-input').isVisible())
+
+  // 6b. Settings panel: the redundant bottom-left 关闭 button is gone, the
+  //     footer save button reads 保存, and saving closes the panel.
+  await window.locator('.settings-button').click()
+  await window.waitForSelector('.settings-panel', { timeout: 5000 })
+  check('设置面板左下角没有「关闭」按钮', (await window.locator('.st-close-button').count()) === 0)
+  check('设置面板底部保留「取消」', (await window.locator('.settings-footer .st-btn-cancel', { hasText: '取消' }).count()) === 1)
+  const settingsSave = window.locator('.settings-footer .st-btn-save')
+  const settingsSaveText = (await settingsSave.innerText()).trim()
+  check('保存按钮文案为「保存」', settingsSaveText === '保存', settingsSaveText)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-settings.png') })
+  checkScreenshot('设置面板（无左下关闭按钮）', join(ARTIFACTS, 'shot-6b-settings.png'))
+  await settingsSave.click()
+  await window.waitForTimeout(400)
+  check('点击保存后设置弹窗自动关闭', (await window.locator('.settings-overlay').count()) === 0)
+  check('关闭设置后回到搜索页', await window.locator('.left-panel .catalog-input').isVisible())
 
   // 7. Publish targets: the panel (opened from the header button) must list
   //    every configured target, including disabled ones (a disabled target that

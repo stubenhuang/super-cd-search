@@ -213,8 +213,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         }
       })
       window.electronAPI.log('debug', 'settings', 'settings saved', { llmEnabled, llmModel, llmApiBaseUrl })
-      setToast({ kind: 'success', text: t('settings.saved') })
-      setTimeout(() => setToast(null), 3000)
+      // Saving is the commit action: close the panel right away (a success
+      // toast would vanish with it anyway). Failures keep the panel open with
+      // an error toast so the user can retry.
+      onClose()
     } catch {
       window.electronAPI.log('warn', 'settings', 'settings save failed')
       setToast({ kind: 'error', text: t('settings.saveFailed') })
@@ -974,11 +976,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </button>
             ))}
           </div>
-          <div className="settings-sidebar-footer">
-            <button className="st-close-button" onClick={handleCancel}>
-              <span>✕</span> {t('settings.close')}
-            </button>
-          </div>
+          {/* No bottom「关闭」button: the footer already offers 取消 (discard)
+              and 保存 (commit, which closes the panel), so a third way out was
+              redundant. */}
         </nav>
 
         {/* Main Content */}

@@ -83,7 +83,7 @@ const zh = {
   'settings.badge': '配置',
   'settings.footerHint': '更改将在下次搜索时生效',
   'settings.cancel': '取消',
-  'settings.save': '保存更改',
+  'settings.save': '保存',
   'settings.saving': '保存中...',
   'settings.saved': '设置已保存',
   'settings.saveFailed': '保存设置失败',
