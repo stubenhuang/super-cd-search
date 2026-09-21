@@ -11,6 +11,8 @@
  *   artifacts/ui/shot-2-shimo.png    desktop 石墨文档 placeholder tab
  *   artifacts/ui/shot-3-mobile.png   LAN phone search page (rendered in a
  *                                    throwaway hidden Electron window)
+ *   artifacts/ui/shot-3b-lan-panel.png  LAN panel (header button; must not
+ *                                    move/grow after opening)
  *   artifacts/ui/shot-4-publish-settings.png  发布目标面板（头部按钮打开，
  *                                              Discogs 编辑器：Token + 引导）
  *   artifacts/ui/shot-4b-publish-token.png     Discogs 目标编辑器（必填
@@ -322,6 +324,35 @@ try {
     await mobileWindow.close()
   }
 
+  // 5b. The LAN panel itself. It used to grow after opening (status/QR arrived
+  //     after the first paint and re-centred the flex-centred panel), so the
+  //     box must stay put once it appears, and the QR must already be there.
+  await window.locator('.lan-button').click()
+  await window.waitForSelector('.lan-settings-panel', { timeout: 10000 })
+  const lanEasing = await window.locator('.lan-settings-panel').evaluate(node => getComputedStyle(node).animationTimingFunction)
+  check('弹窗入场缓动无回弹（不再冲过终点）', lanEasing === 'cubic-bezier(0.22, 1, 0.36, 1)', lanEasing)
+  // boundingBox() includes the entrance transform, so measure only after the
+  // 0.35s animation has settled.
+  await window.waitForTimeout(500)
+  const lanBoxBefore = await window.locator('.lan-settings-panel').boundingBox()
+  await window.waitForTimeout(1200)
+  const lanBoxAfter = await window.locator('.lan-settings-panel').boundingBox()
+  check(
+    '局域网面板打开后不再位移/长高',
+    lanBoxBefore && lanBoxAfter &&
+      Math.abs(lanBoxAfter.y - lanBoxBefore.y) <= 1 &&
+      Math.abs(lanBoxAfter.height - lanBoxBefore.height) <= 1,
+    `before=${JSON.stringify(lanBoxBefore)} after=${JSON.stringify(lanBoxAfter)}`
+  )
+  check('局域网面板首帧即含二维码', (await window.locator('.st-qr-image').count()) === 1)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-3b-lan-panel.png') })
+  checkScreenshot('局域网连接面板', join(ARTIFACTS, 'shot-3b-lan-panel.png'))
+  await window.locator('.lan-settings-panel .settings-footer button', { hasText: '取消' }).click()
+  await window.waitForTimeout(200)
+  // Still on the 石墨文档 tab here (step 6 switches back below), so assert the
+  // overlay is gone rather than the search panel being visible.
+  check('关闭局域网面板后弹窗消失', (await window.locator('.lan-settings-panel').count()) === 0)
+
   // 6. Going back must still work (the app stays interactive after tab switches).
   await window.locator('.app-tabs button', { hasText: '搜索' }).click()
   await window.waitForTimeout(200)
@@ -368,6 +399,13 @@ try {
   await window.locator('.publish-targets-button').click()
   await window.waitForSelector('.publish-settings-panel', { timeout: 5000 })
   await window.waitForSelector('.publish-target-row', { timeout: 10000 })
+  // The panel is auto-height and flex-centred: with per-target badges seeded
+  // on the first paint, resolving probes must not move or grow it. Measured
+  // again right before the first editor opens (that growth is user-initiated
+  // and out of scope here). boundingBox() includes the entrance transform, so
+  // wait for the 0.35s animation to settle before the first measurement.
+  await window.waitForTimeout(500)
+  const publishBoxOpen = await window.locator('.publish-settings-panel').boundingBox()
 
   const targetNames = await window.locator('.publish-target-name').allTextContents()
   check(
@@ -494,6 +532,14 @@ try {
 
   // The login controls live in the editor now, which is also the only place
   // that manages the target's own session / credential.
+  const publishBoxSettled = await window.locator('.publish-settings-panel').boundingBox()
+  check(
+    '发布目标面板打开后不再位移/长高（探测落定后位置不变）',
+    publishBoxOpen && publishBoxSettled &&
+      Math.abs(publishBoxSettled.y - publishBoxOpen.y) <= 1 &&
+      Math.abs(publishBoxSettled.height - publishBoxOpen.height) <= 1,
+    `open=${JSON.stringify(publishBoxOpen)} settled=${JSON.stringify(publishBoxSettled)}`
+  )
   await xianyuRow.locator('button', { hasText: '编辑' }).first().click()
   await window.waitForSelector('.publish-editor', { timeout: 5000 })
   const editorLogin = window.locator('.publish-editor .publish-editor-login')

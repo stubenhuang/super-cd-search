@@ -71,6 +71,10 @@
   --transition-fast: 0.15s ease;
   --transition-base: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Modal/dialog entrance: decelerates into place without overshooting the
+     final position — the previous spring bezier (y=1.56) bounced past it and
+     every dialog visibly "jumped" on open. */
+  --transition-ease-out: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Theme-tintable overlays */
   --tooltip-bg: #2C2520;
@@ -1266,7 +1270,7 @@ html[data-platform='win32'] .app-header {
     0 24px 80px rgba(44, 37, 32, 0.25),
     0 8px 24px rgba(44, 37, 32, 0.15),
     inset 0 1px 0 var(--card-highlight);
-  animation: modal-slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: modal-slide-up var(--transition-ease-out);
 }
 
 @keyframes modal-slide-up {
@@ -1562,7 +1566,7 @@ html[data-platform='win32'] .app-header {
     0 24px 80px rgba(44, 37, 32, 0.25),
     0 8px 24px rgba(44, 37, 32, 0.15),
     inset 0 1px 0 var(--card-highlight);
-  animation: modal-slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: modal-slide-up var(--transition-ease-out);
 }
 
 .flow-modal-header {

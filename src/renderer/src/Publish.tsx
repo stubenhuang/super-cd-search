@@ -50,6 +50,8 @@ function PlatformBadge({ platform }: { platform: PublishPlatform }) {
    ============================================================ */
 
 interface PublishTargetsSectionProps {
+  /** 面板预加载好的列表；传入后 section 不再自己请求，也不会闪加载态。 */
+  initialTargets?: PublishTarget[]
   /** Reuse the settings panel toast so the styling stays identical. */
   onToast: (text: string, kind?: 'success' | 'error') => void
 }
@@ -158,10 +160,13 @@ function createTarget(platform: PublishPlatform): PublishTarget {
   }
 }
 
-export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
+export function PublishTargetsSection({ initialTargets, onToast }: PublishTargetsSectionProps) {
   const { t } = useI18n()
-  const [targets, setTargets] = useState<PublishTarget[]>([])
-  const [loading, setLoading] = useState(true)
+  // When the panel hands over a pre-loaded list the very first paint already
+  // shows the rows (with loading badges): a loading frame painted before the
+  // effect runs would resize the panel right after it opened.
+  const [targets, setTargets] = useState<PublishTarget[]>(initialTargets ?? [])
+  const [loading, setLoading] = useState(initialTargets === undefined)
   const [editing, setEditing] = useState<PublishTarget | null>(null)
   const [isNew, setIsNew] = useState(false)
   const [editorError, setEditorError] = useState<string | null>(null)
@@ -170,7 +175,9 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
   const [loginId, setLoginId] = useState<string | null>(null)
   /** Target whose own login data is currently being cleared. */
   const [logoutId, setLogoutId] = useState<string | null>(null)
-  const [statusViews, setStatusViews] = useState<Partial<Record<string, TargetStatusView>>>({})
+  const [statusViews, setStatusViews] = useState<Partial<Record<string, TargetStatusView>>>(
+    () => Object.fromEntries((initialTargets ?? []).map(target => [target.id, { loading: true }]))
+  )
   const [saving, setSaving] = useState(false)
   const mountedRef = useRef(true)
 
@@ -224,12 +231,18 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
         // The settings list must show every target, disabled ones included:
         // `listPublishTargets()` only returns the enabled subset (it feeds the
         // result-card dropdown), so using it here would make a disabled target
-        // disappear from the list and impossible to re-enable.
-        const settings = await window.electronAPI.getSettings()
-        const loaded = settings.publishTargets ?? []
+        // disappear from the list and impossible to re-enable. The panel hands
+        // over the list it already read, so the common path skips this request.
+        const loaded = initialTargets
+          ?? (await window.electronAPI.getSettings()).publishTargets
+          ?? []
         if (!mountedRef.current) return
         setTargets(loaded)
         setLoading(false)
+        // Seed every row with a loading badge up front: the badge line keeps
+        // its height while the per-target probes resolve, so no row grows
+        // after the panel has settled (that resize was the second jump).
+        setStatusViews(Object.fromEntries(loaded.map(target => [target.id, { loading: true }])))
         // Probe strictly one after another: a 闲鱼 probe touches that target's
         // own Chrome profile and a Discogs probe may call the API, so a
         // Promise.all would race them (and the shared rate limiter).
@@ -245,7 +258,7 @@ export function PublishTargetsSection({ onToast }: PublishTargetsSectionProps) {
         if (mountedRef.current) setLoading(false)
       }
     })()
-  }, [fetchStatus])
+  }, [fetchStatus, initialTargets])
 
   // Opening the editor refreshes that target's badge/switch state, so a token
   // typed in a previous session (or a login that expired meanwhile) is never

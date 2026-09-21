@@ -56,6 +56,10 @@
 
   /* Transitions */
   --st-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Modal/dialog entrance: decelerates into place WITHOUT overshooting the
+     final position (the old spring bezier y=1.56 bounced past it, which read
+     as a visible "jump" on every open). Kept for the toast only. */
+  --st-transition-ease-out: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   --st-transition-spring: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -137,7 +141,10 @@
   border: 1px solid var(--st-border);
   overflow: hidden;
   box-shadow: var(--st-shadow-lg), inset 0 1px 0 var(--st-card-highlight);
-  animation: st-panel-in 0.35s var(--st-transition-spring);
+  /* The variable already carries duration + easing: repeating the duration in
+     the shorthand would turn it into a delay (animation: <name> <duration>
+     <delay> <easing>). */
+  animation: st-panel-in var(--st-transition-ease-out);
 }
 
 @keyframes st-panel-in {
@@ -1119,7 +1126,9 @@
   font-size: 12px;
   font-weight: 500;
   box-shadow: var(--st-shadow-md);
-  animation: st-toast-in 0.3s var(--st-transition-spring);
+  /* Variable carries duration + easing (see .settings-panel): no extra time
+     value here, or it becomes a delay. */
+  animation: st-toast-in var(--st-transition-spring);
   z-index: 10;
 }
 

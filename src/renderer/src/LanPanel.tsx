@@ -69,9 +69,27 @@ export function LanPanel({ isOpen, onClose }: LanPanelProps) {
     }
   }, [refreshLanStatus])
 
+  // The panel is auto-height and flex-centred, so painting the empty state
+  // first and letting the status/QR arrive afterwards would GROW the panel and
+  // shift it on screen — a second "jump" right after the entrance animation.
+  // First paint therefore waits for the initial load to resolve.
+  const [ready, setReady] = useState(false)
   useEffect(() => {
-    if (isOpen) {
-      void loadLanSettings()
+    if (!isOpen) {
+      setReady(false)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        await loadLanSettings()
+      } catch {
+        // Still open the panel: the failure shows up in its own status line.
+      }
+      if (!cancelled) setReady(true)
+    })()
+    return () => {
+      cancelled = true
     }
   }, [isOpen, loadLanSettings])
 
@@ -130,7 +148,7 @@ export function LanPanel({ isOpen, onClose }: LanPanelProps) {
     setTimeout(() => setToast(null), 3000)
   }
 
-  if (!isOpen) return null
+  if (!isOpen || !ready) return null
 
   return (
     <div className="settings-overlay" onClick={onClose}>
