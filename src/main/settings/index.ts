@@ -28,6 +28,8 @@ const schema = {
   lanToken: { type: 'string' as const, default: '' },
   barcodeProviders: { type: 'array' as const, default: DEFAULT_BARCODE_PROVIDERS },
   lastExportDirectory: { type: 'string' as const, default: '' },
+  /** Spreadsheet URL preloaded into the embedded 石墨文档 web page. */
+  shimoSheetUrl: { type: 'string' as const, default: '' },
   autoUpdateEnabled: { type: 'boolean' as const, default: true },
   publishTargets: { type: 'array' as const, default: [] },
   llm: {
@@ -230,6 +232,7 @@ export function getSettings(): Settings {
     lanPort: store.get('lanPort') as number || undefined,
     barcodeProviders: store.get('barcodeProviders') as BarcodeProvider[] || DEFAULT_BARCODE_PROVIDERS,
     lastExportDirectory: store.get('lastExportDirectory') as string || undefined,
+    shimoSheetUrl: store.get('shimoSheetUrl') as string || undefined,
     autoUpdateEnabled: store.get('autoUpdateEnabled') !== false,
     publishTargets: (store.get('publishTargets') as PublishTarget[] | undefined) ?? []
   }
@@ -258,7 +261,8 @@ export const PUBLIC_SETTING_KEYS = new Set<keyof Settings>([
   'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
   'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
   'lanEnabled', 'lanHost', 'lanPort',
-  'barcodeProviders', 'lastExportDirectory', 'autoUpdateEnabled', 'publishTargets'
+  'barcodeProviders', 'lastExportDirectory', 'autoUpdateEnabled', 'publishTargets',
+  'shimoSheetUrl'
 ])
 
 export function deleteSetting<K extends keyof Settings>(key: K): void {

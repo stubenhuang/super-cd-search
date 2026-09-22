@@ -163,6 +163,11 @@ export interface IElectronAPI {
   runPublish: (request: PublishRunRequest) => Promise<PublishOutcome>
   /** Abort the running publish run (harmless when nothing is running). */
   cancelPublish: () => Promise<void>
+  /**
+   * Wipe the embedded 石墨文档 web page's login session (cookies/storage of
+   * the dedicated `persist:shimo` partition).
+   */
+  shimoClearSession: () => Promise<{ ok: boolean; message?: string }>
 }
 
 declare global {

@@ -285,26 +285,6 @@ html[data-platform='win32'] .app-header {
   overflow: hidden;
 }
 
-.shimo-main {
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-}
-
-.shimo-placeholder {
-  text-align: center;
-  user-select: none;
-}
-
-.shimo-line {
-  margin: 0;
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  line-height: 1.8;
-  color: var(--text-secondary);
-}
-
 /* === Left Panel (Input) === */
 .left-panel {
   flex: 0 0 32%;

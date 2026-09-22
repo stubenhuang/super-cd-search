@@ -8,7 +8,9 @@
  * look at:
  *
  *   artifacts/ui/shot-1-search.png   desktop search tab
- *   artifacts/ui/shot-2-shimo.png    desktop 石墨文档 placeholder tab
+ *   artifacts/ui/shot-2-shimo.png    desktop 石墨文档 tab (guide state when no
+ *                                    link is configured, otherwise the
+ *                                    embedded shimo.im webview)
  *   artifacts/ui/shot-3-mobile.png   LAN phone search page (rendered in a
  *                                    throwaway hidden Electron window)
  *   artifacts/ui/shot-3b-lan-panel.png  LAN panel (header button; must not
@@ -263,30 +265,106 @@ try {
     JSON.stringify(headerButtons)
   )
 
-  // 4. The 石墨文档 tab shows the placeholder and nothing else.
-  await window.locator('.app-tabs button', { hasText: '石墨文档' }).click()
-  await window.waitForSelector('.shimo-placeholder', { timeout: 10000 })
-  const lines = await window.locator('.shimo-line').allTextContents()
-  check('石墨文档占位文案为 [规划中, 敬请期待]', JSON.stringify(lines) === JSON.stringify(['规划中', '敬请期待']), JSON.stringify(lines))
+  // 4. The 石墨文档 tab. Without a configured link it shows the guide and
+  //    never creates a webview; with a link it embeds the shimo.im page in an
+  //    Electron <webview> (dedicated persistent partition, domain-locked).
+  const shimoTab = window.locator('.app-tabs button', { hasText: '石墨文档' })
+  await shimoTab.click()
+  await window.waitForSelector('.shimo-guide', { timeout: 10000 })
+  const guideTitle = await window.locator('.shimo-guide-title').innerText()
+  check('未配置石墨文档时显示引导（且不创建 webview）', guideTitle === '还没有配置石墨文档', guideTitle)
+  check('引导页无 webview', (await window.locator('webview').count()) === 0)
+  check('引导页提供「去设置」入口', (await window.locator('.shimo-guide-action').count()) === 1)
+  await window.locator('.shimo-guide-action').click()
+  check('点「去设置」打开设置面板', (await window.locator('.settings-overlay').count()) === 1)
+  const activeNavText = await window.locator('.settings-nav-item.active').innerText()
+  const shimoUrlInputCount = await window.locator('.st-section-content input[placeholder^="https://shimo.im/sheets/"]').count()
+  check('「去设置」直达石墨文档配置项（导航高亮 + 链接输入框）', activeNavText.includes('石墨文档') && shimoUrlInputCount === 1, `nav=${activeNavText} inputs=${shimoUrlInputCount}`)
+  await window.locator('.settings-footer .st-btn-cancel').click()
 
-  const geometry = await window.locator('.shimo-placeholder').evaluate(node => {
-    const box = node.getBoundingClientRect()
-    const main = node.parentElement.getBoundingClientRect()
-    const line = node.querySelector('.shimo-line')
-    return {
-      dx: Math.round(box.left + box.width / 2 - (main.left + main.width / 2)),
-      dy: Math.round(box.top + box.height / 2 - (main.top + main.height / 2)),
-      fontSize: line ? parseFloat(getComputedStyle(line).fontSize) : 0
-    }
+  // Configure a link the way the settings panel does, then revisit the tab
+  // (the panel remounts and re-reads the setting on tab switch).
+  await window.evaluate(async () => {
+    await window.electronAPI.setSetting('shimoSheetUrl', 'https://shimo.im/sheets/verifyui01/abcd/')
   })
+  await window.locator('.app-tabs button', { hasText: '搜索' }).click()
+  await shimoTab.click()
+  await window.waitForSelector('webview', { timeout: 10000 })
+  const webview = await window.locator('webview').evaluate(node => ({
+    src: node.getAttribute('src'),
+    partition: node.getAttribute('partition'),
+    cls: node.className
+  }))
   check(
-    '占位内容在内容区居中（±2px）',
-    Math.abs(geometry.dx) <= 2 && Math.abs(geometry.dy) <= 2,
-    `dx=${geometry.dx} dy=${geometry.dy}`
+    '内嵌网页加载设置里的表格链接，并使用持久化分区',
+    webview.src === 'https://shimo.im/sheets/verifyui01/abcd/' && webview.partition === 'persist:shimo',
+    JSON.stringify(webview)
   )
-  check('占位文案字号为大字（≥28px）', geometry.fontSize >= 28, `${geometry.fontSize}px`)
+  const toolbarButtons = await window.locator('.shimo-tool-btn').count()
+  check('工具条按钮齐全（后退/前进/刷新/工作台/外链/退出登录 = 6）', toolbarButtons === 6, String(toolbarButtons))
+  const addressValue = await window.locator('.shimo-address-input').inputValue()
+  check('地址栏显示当前链接', addressValue === 'https://shimo.im/sheets/verifyui01/abcd/', addressValue)
+
+  // The domain lock: shimo.im navigations proceed, anything else is handed to
+  // the system browser, non-navigable schemes are dropped. The renderer API
+  // object is read-only (contextBridge), so the system-browser hop is
+  // neutralized in the MAIN process instead: `shell.openExternal` is replaced
+  // by a recorder. The classification itself is covered by tests/shimo.test.ts.
+  const externalPatch = await app.evaluate(({ shell }) => {
+    const calls = []
+    const original = shell.openExternal
+    const stub = url => {
+      calls.push(url)
+      return Promise.resolve()
+    }
+    try {
+      shell.openExternal = stub
+    } catch {
+      return { patched: false }
+    }
+    if (shell.openExternal !== stub) return { patched: false }
+    globalThis.__verifyShimoExternalOpens = calls
+    globalThis.__verifyShimoOriginalOpenExternal = original
+    return { patched: true }
+  })
+  const lock = await window.evaluate(async canOpenExternal => {
+    const webview = document.querySelector('webview')
+    const dispatch = url => {
+      const event = new Event('will-navigate', { cancelable: true })
+      event.url = url
+      webview.dispatchEvent(event)
+      return { url, defaultPrevented: event.defaultPrevented }
+    }
+    // When the main-process patch did not take, the external-link case is not
+    // dispatched at all: the real handler would open a browser.
+    const results = [
+      dispatch('https://shimo.im/sheets/verifyui01/abcd/'),
+      canOpenExternal ? dispatch('https://www.discogs.com/release/1') : null,
+      dispatch('javascript:alert(1)')
+    ]
+    return { results, canOpenExternal }
+  }, externalPatch.patched)
+  const externalOpens = await app.evaluate(() => globalThis.__verifyShimoExternalOpens ?? [])
+  await app.evaluate(({ shell }) => {
+    const original = globalThis.__verifyShimoOriginalOpenExternal
+    if (original) shell.openExternal = original
+    delete globalThis.__verifyShimoExternalOpens
+    delete globalThis.__verifyShimoOriginalOpenExternal
+  })
+  const allowPassed = lock.results[0].defaultPrevented === false
+  const blockPassed = lock.results[2].defaultPrevented === true
+  const externalPassed = externalPatch.patched
+    ? lock.results[1].defaultPrevented === true &&
+      externalOpens.length === 1 &&
+      externalOpens[0] === 'https://www.discogs.com/release/1'
+    : lock.results[1] === null
+  check(
+    '域名锁定：石墨站内放行，站外转系统浏览器，非法协议拦截',
+    allowPassed && blockPassed && externalPassed,
+    JSON.stringify({ lock, externalOpens, patched: externalPatch.patched })
+  )
   await window.screenshot({ path: join(ARTIFACTS, 'shot-2-shimo.png') })
-  checkScreenshot('石墨文档占位页', join(ARTIFACTS, 'shot-2-shimo.png'))
+  checkScreenshot('石墨文档内嵌页', join(ARTIFACTS, 'shot-2-shimo.png'))
 
   // 5. The LAN phone page. Electron is itself a Chromium, so the page is
   //    rendered in a throwaway hidden window instead of requiring a separate

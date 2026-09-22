@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, LanSearchState, LanSearchPhase, LoginPlatform, DetailEnrichProgress } from './electron-api'
 import { SettingsPanel } from './Settings'
+import type { SectionKey } from './Settings'
 import { LanPanel } from './LanPanel'
+import { ShimoPanel } from './ShimoPanel'
 import { DetailModal } from './DetailModal'
 import { PublishDialog, PublishMenu, type PublishDialogRequest } from './Publish'
 import { PublishTargetsPanel } from './PublishTargetsPanel'
@@ -314,6 +316,8 @@ function App() {
   const [progressStatus, setProgressStatus] = useState<Map<string, string>>(new Map())
   const [completedCatalogs, setCompletedCatalogs] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
+  /** Section the settings panel jumps to when it opens (deep links). */
+  const [settingsSection, setSettingsSection] = useState<SectionKey>('api')
   const [showLanPanel, setShowLanPanel] = useState(false)
   const [showPublishTargets, setShowPublishTargets] = useState(false)
   const cancelledRef = useRef(false)
@@ -1019,7 +1023,10 @@ function App() {
           </button>
           <button
             className="settings-button"
-            onClick={() => setShowSettings(true)}
+            onClick={() => {
+              setSettingsSection('api')
+              setShowSettings(true)
+            }}
             title={t('settings.buttonTitle')}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1223,16 +1230,14 @@ function App() {
         </section>
       </main>
       ) : (
-        <main className="app-main shimo-main">
-          <div className="shimo-placeholder" role="status">
-            <p className="shimo-line">{t('shimo.planning')}</p>
-            <p className="shimo-line">{t('shimo.comingSoon')}</p>
-          </div>
-        </main>
+        <ShimoPanel onOpenSettings={() => {
+          setSettingsSection('shimo')
+          setShowSettings(true)
+        }} />
       )}
       <UpdateBanner state={updateState} onInstall={() => void installUpdate()} />
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
-      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} section={settingsSection} />
       <PublishTargetsPanel isOpen={showPublishTargets} onClose={handleClosePublishTargets} />
       <FlowDialog
         flow={autoFlow}

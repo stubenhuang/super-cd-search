@@ -112,6 +112,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('publish:run', request),
   cancelPublish: (): Promise<void> =>
     ipcRenderer.invoke('publish:cancel'),
+  /** Wipe the embedded 石墨文档 web page's login session (cookies/storage). */
+  shimoClearSession: (): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke('shimo:clear-session'),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),

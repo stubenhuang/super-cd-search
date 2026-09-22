@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Settings, Platform, LoginPlatform, LoginSessionStatus, BarcodeProvider, SettingsTransferResult } from './electron-api'
 import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
+import { normalizeShimoUrl } from '../../shared/shimo'
 import { useI18n } from './i18n'
 import { useUpdateState } from './hooks/useUpdateState'
 import { GITHUB_REPO_URL } from '../../shared/updater'
@@ -9,11 +10,17 @@ import './Settings.css'
 interface SettingsPanelProps {
   isOpen: boolean
   onClose: () => void
+  /**
+   * Section selected when the panel opens. Other entries (e.g. the 石墨文档
+   * guide's「去设置」) use it to deep-link straight to their own section;
+   * the header button leaves it undefined (API 令牌).
+   */
+  section?: SectionKey
 }
 
-type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'login' | 'backup' | 'about'
+export type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'login' | 'shimo' | 'backup' | 'about'
 
-export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) {
   const { t } = useI18n()
   const [activeSection, setActiveSection] = useState<SectionKey>('api')
   const [discogsToken, setDiscogsToken] = useState('')
@@ -49,14 +56,18 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [backupImportPassword, setBackupImportPassword] = useState('')
   const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null)
   const [backupImportError, setBackupImportError] = useState<string | null>(null)
+  const [shimoSheetUrl, setShimoSheetUrl] = useState('')
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true)
   const { state: updateState, check: checkForUpdates, download: downloadUpdate, install: installUpdate } = useUpdateState()
 
   useEffect(() => {
     if (isOpen) {
+      // Jump to the requested section (deep link from 石墨文档 etc.) every
+      // time the panel is opened; the in-panel nav keeps control afterwards.
+      if (section) setActiveSection(section)
       loadSettings()
     }
-  }, [isOpen])
+  }, [isOpen, section])
 
   const refreshLoginStatus = useCallback(async () => {
     const [xianyu, taobao] = await Promise.all([
@@ -127,6 +138,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
+    setShimoSheetUrl(settings.shimoSheetUrl || '')
     setAutoUpdateEnabled(settings.autoUpdateEnabled !== false)
   }, [refreshLoginStatus])
 
@@ -183,6 +195,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   }
 
   const handleSave = async () => {
+    // 石墨链接不是 shimo.im 的 https 地址时拒绝保存：一个坏地址会让
+    // 「石墨文档」标签页只显示错误态，不如在保存时就挡住。
+    const trimmedShimoUrl = shimoSheetUrl.trim()
+    if (trimmedShimoUrl.length > 0 && !normalizeShimoUrl(trimmedShimoUrl)) {
+      setToast({ kind: 'error', text: t('nav.shimoInvalidUrl') })
+      setTimeout(() => setToast(null), 4000)
+      return
+    }
     setSaving(true)
     try {
       await window.electronAPI.updateSettings({
@@ -196,6 +216,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         standardPlatforms,
         deepPlatforms,
         fastMode,
+        shimoSheetUrl: trimmedShimoUrl,
         llm: {
           enabled: llmEnabled,
           apiBaseUrl: llmApiBaseUrl,
@@ -304,6 +325,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     { key: 'sources', icon: '◎', label: t('nav.sources') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
     { key: 'login', icon: '◈', label: t('nav.login') },
+    { key: 'shimo', icon: '❖', label: t('nav.shimo') },
     { key: 'backup', icon: '⇅', label: t('nav.backup') },
     { key: 'about', icon: '⟳', label: t('nav.about') }
   ]
@@ -770,6 +792,39 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
               <div className="st-section-desc" style={{ marginTop: '12px' }}>
                 {t('login.hint')}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'shimo':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              {t('nav.shimoDesc')}
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">❖</span> {t('nav.shimo')}
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">❖</span> {t('nav.shimoUrl')}
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  value={shimoSheetUrl}
+                  onChange={e => setShimoSheetUrl(e.target.value)}
+                  placeholder="https://shimo.im/sheets/…"
+                  spellCheck={false}
+                />
+                <div className="st-section-desc" style={{ marginTop: '8px' }}>
+                  {t('nav.shimoUrlHint')}
+                </div>
+              </div>
+              <div className="st-section-desc" style={{ marginTop: '12px' }}>
+                {t('nav.shimoLoginHint')}
               </div>
             </div>
           </div>

@@ -8,6 +8,7 @@ import { registerLoginIpc } from './ipc/login'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
 import { registerPublishIpc } from './ipc/publish'
+import { registerShimoIpc } from './ipc/shimo'
 import { registerUpdaterIpc } from './ipc/updater'
 import { initUpdater, disposeUpdater } from './updater'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
@@ -41,7 +42,11 @@ function createWindow() {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true
+      sandbox: true,
+      // The 石墨文档 tab embeds the shimo.im web app in a <webview>; enabling
+      // the tag does not lift any sandbox/isolation settings for the renderer
+      // or the guest page itself.
+      webviewTag: true
     },
     // Frameless title bar styling per platform.
     // - macOS: hiddenInset keeps the native traffic lights.
@@ -107,6 +112,7 @@ app.whenReady().then(async () => {
   registerEnrichmentIpc()
   registerLoggingIpc()
   registerPublishIpc()
+  registerShimoIpc()
   registerImageIpc()
   registerThrottleIpc()
   registerLanIpc()

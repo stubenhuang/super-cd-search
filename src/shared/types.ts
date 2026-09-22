@@ -235,6 +235,12 @@ export interface Settings {
   /** Directory last used for Excel export; preselected next time. */
   lastExportDirectory?: string
   /**
+   * 石墨文档 spreadsheet URL loaded by the embedded web page when the
+   * 石墨文档 tab opens. Personal 石墨 accounts have no open API, so the
+   * app embeds the shimo.im web app itself (see src/renderer/ShimoPanel.tsx).
+   */
+  shimoSheetUrl?: string
+  /**
    * Check GitHub for a new version on startup and download it in the
    * background. Defaults to true when unset.
    */
