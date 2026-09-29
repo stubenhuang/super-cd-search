@@ -1,4 +1,6 @@
+import { errorMessage } from '../../shared/utils'
 import { randomBytes } from 'crypto'
+import { broadcastToWindows } from '../window-broadcast'
 import { BrowserWindow } from 'electron'
 import { getSetting, getLanToken, setLanToken } from '../settings'
 import { listLanCandidates, selectAutoLanAddress, isAllowedLanIPv4, normalizeLanPort } from './network'
@@ -94,11 +96,7 @@ function barcodeUnavailableMessage(): string {
 }
 
 function emitCatalogAdded(event: LanCatalogAddedEvent): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send('lan:catalog-added', event)
-    }
-  }
+  broadcastToWindows('lan:catalog-added', event)
 }
 
 interface PendingBarcodeCandidates {
@@ -260,11 +258,7 @@ export function handleLanSearchInput(text: string): LanSearchStatusResponse {
   if (!canAcceptLanSearchControl()) {
     return { status: 'unavailable', message: '桌面端正在搜索，请稍后再试' }
   }
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send('lan:input-changed', text)
-    }
-  }
+  broadcastToWindows('lan:input-changed', text)
   logger.debug('lan.search', 'search box text updated from phone', { length: text.length })
   return { status: 'ok' }
 }
@@ -282,11 +276,7 @@ export async function handleLanSearchRun(): Promise<LanSearchStatusResponse> {
       return { status: 'error', message: '搜索框为空，请先在搜索框输入目录号' }
     }
   }
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send('lan:search-requested')
-    }
-  }
+  broadcastToWindows('lan:search-requested')
   logger.info('lan.search', 'search triggered from phone')
   return { status: 'ok' }
 }
@@ -299,11 +289,7 @@ export function handleLanSearchMode(mode: string): LanSearchStatusResponse {
   if (!canAcceptLanSearchControl()) {
     return { status: 'unavailable', message: '桌面端正在搜索，请稍后再试' }
   }
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send('lan:mode-changed', mode)
-    }
-  }
+  broadcastToWindows('lan:mode-changed', mode)
   logger.debug('lan.search', 'search mode updated from phone', { mode })
   return { status: 'ok' }
 }
@@ -322,11 +308,7 @@ export function handleLanFlowAction(action: 'confirm' | 'skip' | 'close'): LanSe
     : action === 'skip'
       ? 'lan:flow-skip'
       : 'lan:flow-close'
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send(channel)
-    }
-  }
+  broadcastToWindows(channel)
   logger.info('lan.search', 'search flow action from phone', { action })
   return { status: 'ok' }
 }
@@ -446,7 +428,7 @@ export async function applyLanServer(): Promise<LanServerStatus> {
     logger.info('lan', 'LAN server started', { host, port })
   } catch (err) {
     lastStart = null
-    const message = err instanceof Error ? err.message : String(err)
+    const message = errorMessage(err)
     currentStatus = errorStatus(message, host)
     logger.warn('lan', 'LAN server failed to start', { host, port, error: message })
   }

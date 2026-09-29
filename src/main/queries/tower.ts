@@ -1,3 +1,7 @@
+import { JA_ACCEPT_LANGUAGE } from '../browser/headers'
+import { detailsOrUndefined } from '../../shared/details'
+import { normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
+import { errorMessage } from '../../shared/utils'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
@@ -16,9 +20,7 @@ async function queryTowerWeb(catalogNumber: string, signal?: AbortSignal): Promi
   const { browser, page } = await browserPool.acquire(signal)
 
   try {
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
-    })
+    await page.setExtraHTTPHeaders(JA_ACCEPT_LANGUAGE)
 
     const searchUrl = `${TOWER_WEB_URL}/search/item/${encodeURIComponent(catalogNumber)}`
     logger.debug('queries.tower', 'open search page', { catalogNumber, searchUrl })
@@ -95,15 +97,8 @@ async function queryTowerWeb(catalogNumber: string, signal?: AbortSignal): Promi
       }
     }
 
-    let coverUrl = extracted.cover
-    if (coverUrl?.startsWith('//')) {
-      coverUrl = `https:${coverUrl}`
-    }
-
-    let link = extracted.link
-    if (link && link.startsWith('/')) {
-      link = `${TOWER_WEB_URL}${link}`
-    }
+    const coverUrl = normalizeCoverUrl(TOWER_WEB_URL, extracted.cover)
+    const link = normalizeUrl(TOWER_WEB_URL, extracted.link) ?? null
 
     const details: CDDetails = {
       label: extracted.label,
@@ -112,8 +107,6 @@ async function queryTowerWeb(catalogNumber: string, signal?: AbortSignal): Promi
       released: extracted.released,
       genre: null
     }
-
-    const hasDetails = details.label || details.format || details.country || details.released
 
     return {
       platform: 'tower',
@@ -124,7 +117,7 @@ async function queryTowerWeb(catalogNumber: string, signal?: AbortSignal): Promi
       coverUrl,
       link,
       status: 'found',
-      details: hasDetails ? details : undefined
+      details: detailsOrUndefined(details)
     }
   } finally {
     await browserPool.release(browser, page)
@@ -143,7 +136,7 @@ export async function queryTower(catalogNumber: string, signal?: AbortSignal): P
     result = await queryTowerWeb(catalogNumber, signal)
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.tower', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.tower', 'query failed', { catalogNumber, error: errorMessage(err) })
     result = queryError('tower', err instanceof Error ? err.message : 'Unknown error')
   }
 

@@ -8,11 +8,11 @@ import { DetailModal } from './DetailModal'
 import { PublishDialog, PublishMenu, type PublishDialogRequest } from './Publish'
 import { PublishTargetsPanel } from './PublishTargetsPanel'
 import { FlowDialog, type AutoFlowState } from './FlowDialog'
-import { aggregateDetails, missingDetailKeys, buildDetailsText, DETAIL_KEYS, isValidDetailValue } from '../../shared/details'
+import { aggregateDetails, missingDetailKeys, buildDetailsText, fillMissingDetails } from '../../shared/details'
 import type { PublishTarget } from '../../shared/publish'
 import { isLlmConfigured } from '../../shared/llm'
-import { normalizeCatalogNumber } from '../../shared/utils'
-import { PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, CHANNEL_PLATFORMS, resolveDeepDigPlatforms } from '../../shared/platforms'
+import { errorMessage, normalizeCatalogNumber } from '../../shared/utils'
+import { platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, CHANNEL_PLATFORMS, resolveDeepDigPlatforms } from '../../shared/platforms'
 import { makeProgressKey, buildProgressByCatalog, clearProgressEntries, countCompletedCatalogs } from '../../shared/progress'
 import { QueryEvents } from '../../shared/events'
 import { useCoverImage } from './hooks/useCoverImage'
@@ -127,7 +127,7 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
     e.preventDefault()
     window.electronAPI.openExternal(url).catch(err => {
       window.electronAPI.log('warn', 'result.externalLink', 'failed to open external link', {
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
     })
   }
@@ -140,7 +140,7 @@ const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowe
       {isLowestPrice && <span className="price-badge lowest">{t('result.lowest')}</span>}
       {isHighestPrice && <span className="price-badge highest">{t('result.highest')}</span>}
       <div className="platform-card-content">
-        <div className="platform-card-name">{PLATFORM_LABELS[result.platform] || result.platform}</div>
+        <div className="platform-card-name">{platformLabel(result.platform)}</div>
         <div className="platform-card-body">
           <div className="platform-card-image" ref={imageContainerRef}>
             {result.coverUrl && !imageError ? (
@@ -463,7 +463,7 @@ function App() {
       }
     } catch (err) {
       if (!cancelledRef.current) {
-        window.electronAPI.log('warn', 'app.search', 'search failed', { error: err instanceof Error ? err.message : String(err) })
+        window.electronAPI.log('warn', 'app.search', 'search failed', { error: errorMessage(err) })
         setError(err instanceof Error ? err.message : t('error.queryFailed'))
       }
     } finally {
@@ -726,7 +726,7 @@ function App() {
       deepSearchSucceededRef.current = true
       return merged
     } catch (err) {
-      window.electronAPI.log('warn', 'app.deepSearch', 'deep search failed', { error: err instanceof Error ? err.message : String(err) })
+      window.electronAPI.log('warn', 'app.deepSearch', 'deep search failed', { error: errorMessage(err) })
       setError(err instanceof Error ? err.message : t('error.queryFailed'))
       return null
     } finally {
@@ -792,7 +792,7 @@ function App() {
         failed++
         window.electronAPI.log('warn', 'app.smartGenerate', 'auto smart generation failed', {
           catalogNumber,
-          error: err instanceof Error ? err.message : String(err)
+          error: errorMessage(err)
         })
       }
     }
@@ -878,7 +878,7 @@ function App() {
       setPublishTargets(targets)
     } catch (err) {
       window.electronAPI.log('warn', 'app.publish', 'failed to load publish targets', {
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
     }
   }, [])
@@ -902,15 +902,7 @@ function App() {
     // Same merge order as DetailModal: aggregated results first, then the
     // LLM-enriched details only for the fields still missing.
     const merged: CDDetails = { ...aggregateDetails(catalogResults).details }
-    const enriched = enrichedDetails.get(catalogNumber)
-    if (enriched) {
-      for (const key of DETAIL_KEYS) {
-        const value = enriched[key]
-        if (!isValidDetailValue(merged[key]) && isValidDetailValue(value)) {
-          merged[key] = value.trim()
-        }
-      }
-    }
+    fillMissingDetails(merged, enrichedDetails.get(catalogNumber))
     return buildDetailsText({
       catalogNumber,
       album: source?.name ?? null,
@@ -948,7 +940,7 @@ function App() {
           : prev
       ))
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = errorMessage(err)
       window.electronAPI.log('warn', 'app.publish', 'prepare publish failed', { catalogNumber, targetId, error: message })
       setPublishDialog(prev => (
         prev && prev.catalogNumber === catalogNumber && prev.targetId === targetId
@@ -1146,7 +1138,7 @@ function App() {
                                   {status === 'error' && '✗'}
                                   {!status && '○'}
                                 </span>
-                                <span className="platform-status-label">{PLATFORM_LABELS[p]}</span>
+                                <span className="platform-status-label">{platformLabel(p)}</span>
                               </span>
                             )
                           })}

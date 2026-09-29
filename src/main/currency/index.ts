@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import type { DisplayCurrency } from '../../shared/types'
 import { logger } from '../logger'
 
@@ -34,7 +35,7 @@ async function fetchExchangeRates(): Promise<ExchangeRates | null> {
       updatedAt: Date.now()
     }
   } catch (err) {
-    logger.warn('currency', 'failed to fetch exchange rates', { error: err instanceof Error ? err.message : String(err) })
+    logger.warn('currency', 'failed to fetch exchange rates', { error: errorMessage(err) })
     return null
   }
 }

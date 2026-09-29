@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { QueryResult, CDDetails } from './electron-api'
-import { PLATFORM_LABELS } from '../../shared/platforms'
-import { DETAIL_KEYS, aggregateDetails, missingDetailKeys, isValidDetailValue } from '../../shared/details'
+import { platformLabel } from '../../shared/platforms'
+import { DETAIL_KEYS, aggregateDetails, missingDetailKeys, fillMissingDetails } from '../../shared/details'
 import { useCoverImage } from './hooks/useCoverImage'
 import { useI18n } from './i18n'
 
@@ -76,13 +76,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
 
   const mergedDetails = useMemo(() => {
     const merged: CDDetails = { ...aggregation.details }
-    if (enrichedDetails) {
-      for (const key of DETAIL_KEYS) {
-        if (!isValidDetailValue(merged[key]) && isValidDetailValue(enrichedDetails[key])) {
-          merged[key] = enrichedDetails[key]!.trim()
-        }
-      }
-    }
+    fillMissingDetails(merged, enrichedDetails)
     return merged
   }, [aggregation.details, enrichedDetails])
 
@@ -158,7 +152,7 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
               {displayArtist && <p className="detail-modal-artist">{displayArtist}</p>}
               {primaryResult?.platform && (
                 <span className="detail-modal-source">
-                  {t('detail.source', { platform: PLATFORM_LABELS[primaryResult.platform] || primaryResult.platform })}
+                  {t('detail.source', { platform: platformLabel(primaryResult.platform) })}
                 </span>
               )}
             </div>

@@ -1,6 +1,7 @@
-import { BrowserWindow } from 'electron'
+import { errorMessage } from '../../shared/utils'
 import { isBatchQueryRunning } from '../orchestrator'
 import { logger } from '../logger'
+import { broadcastToWindows } from '../window-broadcast'
 import { createDiscogsListing } from './discogs'
 import { getPublishTarget, resolveDiscogsToken } from './targets'
 import { publishToXianyu } from './xianyu'
@@ -34,9 +35,7 @@ export function isPublishRunning(): boolean {
 }
 
 function emitProgress(progress: PublishProgress): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send('publish:progress', progress)
-  }
+  broadcastToWindows('publish:progress', progress)
 }
 
 function readField(fields: readonly PublishField[], key: string): PublishField | undefined {
@@ -205,7 +204,7 @@ export async function runPublish(request: PublishRunRequest): Promise<PublishOut
       artifacts: result.artifacts
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = errorMessage(err)
     const cancelled = controller.signal.aborted || /abort/i.test(message)
     if (cancelled) {
       progress('cancelled', 1, 1, '已取消发布')

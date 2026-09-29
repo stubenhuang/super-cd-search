@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { BrowserWindow, dialog } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
@@ -51,7 +52,7 @@ export async function exportSettingsBackup(password: string): Promise<SettingsTr
     })
     return { status: 'ok', filePath: save.filePath }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = errorMessage(err)
     logger.warn('settings.backup', 'export failed', { error: message })
     return { status: 'error', errorCode: 'io_error', message }
   }

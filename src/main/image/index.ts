@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { app, nativeImage } from 'electron'
 import { createHash } from 'crypto'
 import { mkdir, readFile, readdir, writeFile, stat, unlink } from 'fs/promises'
@@ -135,7 +136,7 @@ async function writeDiskCache(url: string, buffer: Buffer, mimeType: string): Pr
     diskWriteCount++
     if (diskWriteCount === 1 || diskWriteCount % 25 === 0) void pruneDiskCache(dir)
   } catch (err) {
-    logger.warn('image', 'failed to write image cache', { error: err instanceof Error ? err.message : String(err) })
+    logger.warn('image', 'failed to write image cache', { error: errorMessage(err) })
   }
 }
 
@@ -169,7 +170,7 @@ async function pruneDiskCache(dir: string): Promise<void> {
       }
     }
   } catch (err) {
-    logger.warn('image', 'failed to prune image cache', { error: err instanceof Error ? err.message : String(err) })
+    logger.warn('image', 'failed to prune image cache', { error: errorMessage(err) })
   } finally {
     diskPruneRunning = false
   }
@@ -190,7 +191,7 @@ function processImage(buffer: Buffer, mimeType: string, size: number): DownloadI
       }
     }
   } catch (err) {
-    logger.warn('image', 'failed to resize image, using raw buffer', { error: err instanceof Error ? err.message : String(err) })
+    logger.warn('image', 'failed to resize image, using raw buffer', { error: errorMessage(err) })
   }
 
   return { base64: buffer.toString('base64'), mimeType }
@@ -319,7 +320,7 @@ function fetchBuffer(url: string, redirectCount = 0, allowPrivateNetwork = true)
     }, TIMEOUT_MS)
 
     req.on('error', (err) => {
-      logger.warn('image', 'failed to download image', { url, error: err instanceof Error ? err.message : String(err) })
+      logger.warn('image', 'failed to download image', { url, error: errorMessage(err) })
       finish(null)
     })
 

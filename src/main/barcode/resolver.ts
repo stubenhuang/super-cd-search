@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { getSetting } from '../settings'
 import { BARCODE_PROVIDERS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import type { BarcodeCatalogCandidate, BarcodeProvider } from '../../shared/types'
@@ -102,7 +103,7 @@ export async function resolveBarcodeCatalog(
       logger.warn('barcode', 'provider resolver threw', {
         barcode,
         provider,
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
     }
   }

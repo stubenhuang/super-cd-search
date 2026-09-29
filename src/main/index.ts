@@ -22,6 +22,7 @@ import { initCachePersistence, flushCacheToDisk } from './queries/cache'
 import { prewarmExchangeRates } from './currency'
 import { isAllowedRendererNavigation, isSafeExternalUrl } from './security/urls'
 import { TITLE_BAR_OVERLAY_COLORS, TITLE_BAR_OVERLAY_HEIGHT } from '../shared/theme'
+import { errorMessage } from '../shared/utils'
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -149,7 +150,7 @@ app.whenReady().then(async () => {
     await applyLanServer()
   } catch (err) {
     logger.error('lan', 'failed to apply LAN server settings on startup', {
-      error: err instanceof Error ? err.message : String(err)
+      error: errorMessage(err)
     })
   }
 

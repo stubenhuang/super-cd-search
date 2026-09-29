@@ -1,3 +1,7 @@
+import { JA_ACCEPT_LANGUAGE } from '../browser/headers'
+import { errorMessage } from '../../shared/utils'
+import { detailsOrUndefined } from '../../shared/details'
+import { normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { throttledFetch } from '../throttle'
@@ -110,7 +114,7 @@ async function tryGetKojimaProductDataFromJson(link: string, signal?: AbortSigna
     return result
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.kojima', 'Shopify JSON lookup failed, falling back to rendering', { link, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.kojima', 'Shopify JSON lookup failed, falling back to rendering', { link, error: errorMessage(err) })
     return null
   }
 }
@@ -224,7 +228,7 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
     return result
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.kojima', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.kojima', 'failed to get details from product page', { link, error: errorMessage(err) })
     return { price: null, details }
   }
 }
@@ -233,9 +237,7 @@ async function queryKojimaWeb(catalogNumber: string, signal?: AbortSignal): Prom
   const { browser, page } = await browserPool.acquire(signal)
 
   try {
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
-    })
+    await page.setExtraHTTPHeaders(JA_ACCEPT_LANGUAGE)
 
     const searchUrl = `${KOJIMA_WEB_URL}/search/?q=${encodeURIComponent(catalogNumber)}`
     logger.debug('queries.kojima', 'open search page', { catalogNumber, searchUrl })
@@ -252,17 +254,15 @@ async function queryKojimaWeb(catalogNumber: string, signal?: AbortSignal): Prom
     // Extract name from card heading
     const name = await firstItem.$eval('.card__heading a', el => el.textContent?.trim() || null).catch(() => null)
 
-    // Extract cover image
-    let coverUrl = await firstItem.$eval('.card__media img', el => el.getAttribute('src')).catch(() => null)
-    if (coverUrl && coverUrl.startsWith('//')) {
-      coverUrl = `https:${coverUrl}`
-    }
-
-    // Extract link
-    let link = await firstItem.$eval('.card__heading a', el => el.getAttribute('href')).catch(() => null)
-    if (link && !link.startsWith('http')) {
-      link = `${KOJIMA_WEB_URL}${link}`
-    }
+    // Extract cover image and link (both need protocol/base resolution).
+    const coverUrl = normalizeCoverUrl(
+      KOJIMA_WEB_URL,
+      await firstItem.$eval('.card__media img', el => el.getAttribute('src')).catch(() => null)
+    )
+    const link = normalizeUrl(
+      KOJIMA_WEB_URL,
+      await firstItem.$eval('.card__heading a', el => el.getAttribute('href')).catch(() => null)
+    ) ?? null
 
     logger.debug('queries.kojima', 'search card extracted', { catalogNumber, hasName: !!name, link, coverUrl: !!coverUrl })
 
@@ -286,11 +286,7 @@ async function queryKojimaWeb(catalogNumber: string, signal?: AbortSignal): Prom
       } else {
         priceMin = productData.price
         priceMax = productData.price
-
-        if (productData.details.label || productData.details.format ||
-            productData.details.released || productData.details.genre) {
-          details = productData.details
-        }
+        details = detailsOrUndefined(productData.details)
       }
     }
 
@@ -323,7 +319,7 @@ export async function queryKojima(catalogNumber: string, signal?: AbortSignal): 
     result = await queryKojimaWeb(catalogNumber, signal)
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.kojima', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.kojima', 'query failed', { catalogNumber, error: errorMessage(err) })
     result = queryError('kojima', err instanceof Error ? err.message : 'Unknown error')
   }
 

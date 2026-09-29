@@ -1,11 +1,13 @@
+import { errorMessage } from '../../shared/utils'
 import { spawn, type ChildProcess } from 'child_process'
 import { mkdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import puppeteer from 'puppeteer-core'
 import type { Browser, Page } from 'puppeteer-core'
-import { restrictedHostChromeArgs, findChromeExecutable } from '../browser/chrome-path'
+import { CHROME_NOT_FOUND_MESSAGE, chromeLaunchArgs, findChromeExecutable } from '../browser/chrome-path'
 import { killChromeProcess } from '../browser/kill'
+import { createMutex, type Mutex } from '../browser/mutex'
 import {
   connectWithRetry,
   describeBrowserSessionFromUa,
@@ -35,7 +37,6 @@ interface ProfileSession {
   proc: ChildProcess | null
   browser: Browser
   page: Page
-  lock: Promise<void>
   mode: ChromeSessionMode
   /** Headless UA with "HeadlessChrome" masked; empty for headed sessions. */
   maskedUa: string
@@ -43,7 +44,18 @@ interface ProfileSession {
 
 const sessions = new Map<string, ProfileSession>()
 const launching = new Map<string, Promise<ProfileSession>>()
+/** One mutex per profile id: callers of the same profile are serialized. */
+const pageMutexes = new Map<string, Mutex>()
 let rootDir: string | null = null
+
+function pageMutexFor(profileId: string): Mutex {
+  let mutex = pageMutexes.get(profileId)
+  if (!mutex) {
+    mutex = createMutex()
+    pageMutexes.set(profileId, mutex)
+  }
+  return mutex
+}
 
 /** Must be called once at startup with the app's userData directory. */
 export function initPublishProfiles(userDataDir: string): void {
@@ -105,11 +117,11 @@ async function reattach(dir: string, profileId: string): Promise<ProfileSession 
     const { maskedUa, mode } = describeBrowserSessionFromUa(probeUa)
     rememberDisconnect(profileId, browser)
     logger.debug('publish.profiles', 'reattached to running chrome', { profileId, port, mode })
-    return { profileId, dir, proc: null, browser, page, lock: Promise.resolve(), mode, maskedUa }
+    return { profileId, dir, proc: null, browser, page, mode, maskedUa }
   } catch (err) {
     logger.debug('publish.profiles', 'reattach failed, launching fresh', {
       profileId,
-      error: err instanceof Error ? err.message : String(err)
+      error: errorMessage(err)
     })
     return null
   }
@@ -123,7 +135,7 @@ async function launchChrome(profileId: string, dir: string, mode: ChromeSessionM
 
   const chromePath = findChromeExecutable()
   if (!chromePath) {
-    throw new Error('未找到 Google Chrome，请先安装（或将 CHROME_PATH 指向 Chrome 可执行文件）')
+    throw new Error(CHROME_NOT_FOUND_MESSAGE)
   }
 
   // Drop the previous port file so waitForDevToolsPort can never resolve with a
@@ -131,22 +143,7 @@ async function launchChrome(profileId: string, dir: string, mode: ChromeSessionM
   rmSync(join(dir, 'DevToolsActivePort'), { force: true })
   logger.info('publish.profiles', 'launching chrome for publish target', { profileId, dir, mode })
 
-  const proc = spawn(
-    chromePath,
-    [
-      '--remote-debugging-port=0',
-      `--user-data-dir=${dir}`,
-      ...restrictedHostChromeArgs(),
-      '--no-first-run',
-      '--no-default-browser-check',
-      ...(mode === 'headless' ? ['--headless', '--window-size=1280,1000'] : ['--window-position=-32000,-32000']),
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-renderer-backgrounding',
-      'about:blank'
-    ],
-    { stdio: 'ignore' }
-  )
+  const proc = spawn(chromePath, chromeLaunchArgs(dir, mode), { stdio: 'ignore' })
 
   const port = await waitForDevToolsPort(dir)
   const browser = await connectWithRetry(port)
@@ -155,7 +152,7 @@ async function launchChrome(profileId: string, dir: string, mode: ChromeSessionM
   if (maskedUa) await page.setUserAgent(maskedUa)
   rememberDisconnect(profileId, browser)
 
-  return { profileId, dir, proc, browser, page, lock: Promise.resolve(), mode, maskedUa }
+  return { profileId, dir, proc, browser, page, mode, maskedUa }
 }
 
 async function ensureProfile(profileId: string, mode: ChromeSessionMode): Promise<ProfileSession> {
@@ -204,17 +201,12 @@ export async function acquirePublishPage(
   } catch (err) {
     logger.warn('publish.profiles', 'could not start chrome for profile', {
       profileId,
-      error: err instanceof Error ? err.message : String(err)
+      error: errorMessage(err)
     })
     return null
   }
 
-  let release!: () => void
-  const previous = session.lock
-  session.lock = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  await previous
+  const release = await pageMutexFor(profileId).acquire()
 
   // Headless sessions must present a normal Chrome UA (goofish otherwise serves
   // a bot-wall), exactly like the search channel does.
@@ -309,7 +301,7 @@ export async function peekPublishProfileLogin(profileId: string): Promise<Profil
   } catch (err) {
     logger.debug('publish.profiles', 'login peek failed', {
       profileId,
-      error: err instanceof Error ? err.message : String(err)
+      error: errorMessage(err)
     })
     return null
   }

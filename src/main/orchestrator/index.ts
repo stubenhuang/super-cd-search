@@ -1,4 +1,3 @@
-import { BrowserWindow } from 'electron'
 import { queryDiscogs } from '../queries/discogs'
 import { queryEbay } from '../queries/ebay'
 import { queryKojima } from '../queries/kojima'
@@ -15,6 +14,7 @@ import { normalizeCatalogNumber } from '../../shared/utils'
 import { SEARCH_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { logger } from '../logger'
+import { broadcastToWindows } from '../window-broadcast'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult, Platform } from '../../shared/types'
 
 const MAX_CONCURRENT_CATALOGS = 3
@@ -31,10 +31,7 @@ export function isBatchQueryRunning(): boolean {
 }
 
 function emitProgress(event: string, data: BatchQueryProgress): void {
-  const windows = BrowserWindow.getAllWindows()
-  for (const win of windows) {
-    win.webContents.send('query:progress', { event, ...data })
-  }
+  broadcastToWindows('query:progress', { event, ...data })
 }
 
 /**

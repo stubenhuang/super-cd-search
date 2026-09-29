@@ -297,7 +297,7 @@ describe('enrichDetails', () => {
   it('emits per-source progress to open renderer windows', async () => {
     const send = vi.fn()
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([
-      { webContents: { send } } as never
+      { isDestroyed: () => false, webContents: { send } } as never
     ])
 
     const discogs = foundResult('discogs', {

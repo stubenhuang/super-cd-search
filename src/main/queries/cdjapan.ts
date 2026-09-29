@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
@@ -5,6 +6,8 @@ import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { logger } from '../logger'
+import { detailsOrUndefined } from '../../shared/details'
+import { normalizeCoverUrl } from '../../shared/utils'
 
 const CDJAPAN_WEB_URL = 'https://www.cdjapan.co.jp'
 
@@ -79,10 +82,7 @@ async function queryCdjapanWeb(catalogNumber: string, signal?: AbortSignal): Pro
       }
     }
 
-    let coverUrl = extracted.cover
-    if (coverUrl?.startsWith('http://')) {
-      coverUrl = coverUrl.replace('http://', 'https://')
-    }
+    const coverUrl = normalizeCoverUrl(CDJAPAN_WEB_URL, extracted.cover)
 
     const details: CDDetails = {
       label: null,
@@ -91,7 +91,6 @@ async function queryCdjapanWeb(catalogNumber: string, signal?: AbortSignal): Pro
       released: extracted.released,
       genre: null
     }
-    const hasDetails = details.format || details.released
 
     return {
       platform: 'cdjapan',
@@ -102,7 +101,7 @@ async function queryCdjapanWeb(catalogNumber: string, signal?: AbortSignal): Pro
       coverUrl,
       link: productUrl,
       status: 'found',
-      details: hasDetails ? details : undefined
+      details: detailsOrUndefined(details)
     }
   } finally {
     await browserPool.release(browser, page)
@@ -121,7 +120,7 @@ export async function queryCdjapan(catalogNumber: string, signal?: AbortSignal):
     result = await queryCdjapanWeb(catalogNumber, signal)
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.cdjapan', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.cdjapan', 'query failed', { catalogNumber, error: errorMessage(err) })
     result = queryError('cdjapan', err instanceof Error ? err.message : 'Unknown error')
   }
 

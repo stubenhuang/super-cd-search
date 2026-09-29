@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { ipcMain } from 'electron'
 import {
   buildPublishDraft,
@@ -27,7 +28,7 @@ export function registerPublishIpc(): void {
     try {
       return await testTarget(targetId)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: errorMessage(err) }
     }
   })
 
@@ -35,7 +36,7 @@ export function registerPublishIpc(): void {
     try {
       return await getTargetStatus(targetId)
     } catch (err) {
-      return { state: 'logged_out', message: err instanceof Error ? err.message : String(err) }
+      return { state: 'logged_out', message: errorMessage(err) }
     }
   })
 
@@ -44,7 +45,7 @@ export function registerPublishIpc(): void {
     try {
       return await loginTarget(targetId)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: errorMessage(err) }
     }
   })
 
@@ -53,7 +54,7 @@ export function registerPublishIpc(): void {
     try {
       return await forgetTarget(targetId)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: errorMessage(err) }
     }
   })
 

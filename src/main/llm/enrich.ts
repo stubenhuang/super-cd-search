@@ -1,4 +1,3 @@
-import { BrowserWindow } from 'electron'
 import type {
   CDDetails,
   DetailEnrichProgress,
@@ -7,9 +6,11 @@ import type {
   Platform,
   QueryResult
 } from '../../shared/types'
-import { aggregateDetails, emptyCDDetails, hasAllDetailFields, isValidDetailValue, missingDetailKeys } from '../../shared/details'
+import { aggregateDetails, emptyCDDetails, fillMissingDetails, hasAllDetailFields, missingDetailKeys } from '../../shared/details'
 import { isLlmConfigured } from '../../shared/llm'
-import { normalizeCatalogNumber } from '../../shared/utils'
+import { errorMessage, normalizeCatalogNumber } from '../../shared/utils'
+import { JA_ACCEPT_LANGUAGE } from '../browser/headers'
+import { broadcastToWindows } from '../window-broadcast'
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { compressHtml } from '../parser/readability'
@@ -66,18 +67,17 @@ const QUERY_FUNCTIONS: Record<SmartFillPlatform, (catalogNumber: string, signal?
   yahoo: queryYahoo
 }
 
+/** Every LLM source is a Japanese retailer, so they all share one header set. */
 const PLATFORM_HEADERS: Partial<Record<Platform, Record<string, string>>> = {
-  hmv: { 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' },
-  yahoo: { 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' },
-  tower: { 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' },
-  kojima: { 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' },
-  cdjapan: { 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' }
+  hmv: JA_ACCEPT_LANGUAGE,
+  yahoo: JA_ACCEPT_LANGUAGE,
+  tower: JA_ACCEPT_LANGUAGE,
+  kojima: JA_ACCEPT_LANGUAGE,
+  cdjapan: JA_ACCEPT_LANGUAGE
 }
 
 function emitProgress(progress: DetailEnrichProgress): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send('detail:enrich-progress', progress)
-  }
+  broadcastToWindows('detail:enrich-progress', progress)
 }
 
 /**
@@ -131,20 +131,10 @@ async function fetchProductHtml(platform: SmartFillPlatform, url: string, signal
     return await page.content()
   } catch (err) {
     if (signal?.aborted) throw createAbortError()
-    logger.warn('llm.enrich', 'failed to fetch product page', { platform, url, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('llm.enrich', 'failed to fetch product page', { platform, url, error: errorMessage(err) })
     return null
   } finally {
     await browserPool.release(browser, page)
-  }
-}
-
-/** Merge parsed detail fields into `target`, filling only currently-missing keys. */
-function mergeMissingDetails(target: CDDetails, incoming: CDDetails | null | undefined): void {
-  if (!incoming) return
-  for (const key of Object.keys(target) as (keyof CDDetails)[]) {
-    if (!isValidDetailValue(target[key]) && isValidDetailValue(incoming[key])) {
-      target[key] = incoming[key].trim()
-    }
   }
 }
 
@@ -215,7 +205,7 @@ export async function enrichDetails(
   // existing scraper values — they only fill what is still missing.
   const cached = getCachedEnrichment(normalizedCatalog)
   if (cached) {
-    mergeMissingDetails(working, cached)
+    fillMissingDetails(working, cached)
     logger.debug('llm.enrich', 'cached enrichment merged', { catalogNumber: normalizedCatalog, missingFields: missingDetailKeys(working) })
   }
 
@@ -318,7 +308,7 @@ export async function enrichDetails(
           result = await QUERY_FUNCTIONS[platform](normalizedCatalog, runSignal)
         } catch (err) {
           throwIfAborted(runSignal)
-          logger.warn('llm.enrich', 'source search failed', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
+          logger.warn('llm.enrich', 'source search failed', { catalogNumber: normalizedCatalog, platform, error: errorMessage(err) })
           skip(platform, 'not_found')
           continue
         }
@@ -342,7 +332,7 @@ export async function enrichDetails(
       })
 
       // 2. Reuse whatever deterministic scraper fields this source already has.
-      mergeMissingDetails(working, result.details)
+      fillMissingDetails(working, result.details)
       logger.debug('llm.enrich', 'scraper fields merged', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
       if (hasAllDetailFields(working)) {
         logger.debug('llm.enrich', 'all fields complete from scraper data, stopping early', { catalogNumber: normalizedCatalog, platform })
@@ -357,7 +347,7 @@ export async function enrichDetails(
         html = await fetchProductHtml(platform, result.link, runSignal)
       } catch (err) {
         throwIfAborted(runSignal)
-        logger.warn('llm.enrich', 'page fetch threw', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
+        logger.warn('llm.enrich', 'page fetch threw', { catalogNumber: normalizedCatalog, platform, error: errorMessage(err) })
         html = null
       }
       if (!html) {
@@ -378,7 +368,7 @@ export async function enrichDetails(
           platform,
           parsedFieldCount: Object.values(parsed ?? {}).filter(Boolean).length
         })
-        mergeMissingDetails(working, parsed)
+        fillMissingDetails(working, parsed)
         analyzedPlatforms.push(platform)
         logger.debug('llm.enrich', 'LLM fields merged', { catalogNumber: normalizedCatalog, platform, missingFields: missingDetailKeys(working) })
 
@@ -389,7 +379,7 @@ export async function enrichDetails(
         }
       } catch (err) {
         throwIfAborted(runSignal)
-        logger.warn('llm.enrich', 'LLM analysis failed', { catalogNumber: normalizedCatalog, platform, error: err instanceof Error ? err.message : String(err) })
+        logger.warn('llm.enrich', 'LLM analysis failed', { catalogNumber: normalizedCatalog, platform, error: errorMessage(err) })
         skip(platform, 'llm_failed')
       }
     }

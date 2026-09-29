@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { ipcMain } from 'electron'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { getSetting } from '../settings'
@@ -204,7 +205,7 @@ export async function throttledFetch(
         externalSignal?.removeEventListener('abort', abortFromCaller)
         state.active = false
         state.lastRequestTime = Date.now()
-        logger.warn('throttle', 'request failed', { domain, url, error: err instanceof Error ? err.message : String(err) })
+        logger.warn('throttle', 'request failed', { domain, url, error: errorMessage(err) })
         reject(err)
         processQueue(domain)
       }

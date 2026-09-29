@@ -38,6 +38,33 @@ export function hasAllDetailFields(details?: CDDetails | null): boolean {
 }
 
 /**
+ * Return the details only when at least one field carries data, else undefined.
+ *
+ * The platform scrapers build a full `CDDetails` object and only want to attach
+ * it when it is not entirely empty (`CDDetails` has exactly the five
+ * `DETAIL_KEYS`), so this replaces the per-module "hasFormat || hasReleased ||
+ * …" predicates that each listed a slightly different subset of the fields.
+ */
+export function detailsOrUndefined(details: CDDetails): CDDetails | undefined {
+  return DETAIL_KEYS.some(key => isValidDetailValue(details[key])) ? details : undefined
+}
+
+/**
+ * Fill the fields `target` is still missing from `incoming`, trimming values.
+ *
+ * Shared by the LLM enrichment (main process) and the renderer's detail modal /
+ * publish description, which all used to carry their own copy of this loop.
+ */
+export function fillMissingDetails(target: CDDetails, incoming?: CDDetails | null): void {
+  if (!incoming) return
+  for (const key of DETAIL_KEYS) {
+    if (!isValidDetailValue(target[key]) && isValidDetailValue(incoming[key])) {
+      target[key] = incoming[key].trim()
+    }
+  }
+}
+
+/**
  * Aggregate detail fields from several sources.
  *
  * Sources are ordered by the number of valid fields they carry (descending);

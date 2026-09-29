@@ -137,7 +137,7 @@ describe('enrichDetails cancellation', () => {
   it('aborts a page fetch, returns cancelled, never caches, and broadcasts a cancelled progress event', async () => {
     const send = vi.fn()
     vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([
-      { webContents: { send } } as never
+      { isDestroyed: () => false, webContents: { send } } as never
     ])
 
     const controller = new AbortController()

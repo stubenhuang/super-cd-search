@@ -6,6 +6,7 @@ import type { ProgressInfo, UpdateInfo } from 'electron-updater'
 import { logger } from './logger'
 import { getSetting } from './settings'
 import { GITHUB_REPO_URL, isNewerVersion, normalizeVersion, type UpdateState } from '../shared/updater'
+import { errorMessage } from '../shared/utils'
 
 /** IPC channel used to push state changes to every renderer window. */
 export const UPDATE_STATE_CHANNEL = 'updater:state'
@@ -57,11 +58,6 @@ export function getUpdateState(): UpdateState {
  */
 function currentStatus(): UpdateState['status'] {
   return state.status
-}
-
-function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  return typeof err === 'string' ? err : 'unknown error'
 }
 
 function releaseUrlFor(version: string): string {
@@ -137,7 +133,7 @@ function registerUpdaterEvents(): void {
   autoUpdater.on('error', (err: Error) => {
     // "No published versions" / network hiccups are normal offline behaviour:
     // keep them out of the error log level to avoid noisy reports.
-    const message = errorMessage(err)
+    const message = errorMessage(err) || 'unknown error'
     logger.warn('updater', 'update check failed', { error: message })
     setState({ status: 'error', error: message })
   })
@@ -212,7 +208,7 @@ export async function checkForUpdates(manual = false): Promise<UpdateState> {
       }
     }
   } catch (err) {
-    setState({ status: 'error', error: errorMessage(err), manual })
+    setState({ status: 'error', error: errorMessage(err) || 'unknown error', manual })
   }
   return state
 }
@@ -231,7 +227,7 @@ export async function downloadUpdate(): Promise<UpdateState> {
   } catch (err) {
     // A manual retry after a failed check lands here when there is nothing to
     // download (e.g. check failed) — surface it instead of silently retrying.
-    setState({ status: 'error', error: errorMessage(err) })
+    setState({ status: 'error', error: errorMessage(err) || 'unknown error' })
   }
   return state
 }

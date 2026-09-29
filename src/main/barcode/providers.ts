@@ -1,3 +1,5 @@
+import { JA_ACCEPT_LANGUAGE } from '../browser/headers'
+import { errorMessage, normalizeUrl } from '../../shared/utils'
 import { browserPool } from '../browser'
 import { waitForResultOrNoResult } from '../queries/wait'
 import { queryDiscogsByBarcode } from '../queries/discogs'
@@ -10,13 +12,6 @@ const HMV_WEB_URL = 'https://www.hmv.co.jp'
 const YAHOO_SHOPPING_URL = 'https://shopping.yahoo.co.jp'
 
 const CATNO_LABEL_PATTERN = /(?:規格品番|品番|カタログ番号|型番|Catalog\s*(?:No\.?|Number)?)\s*[:：]?\s*/i
-
-function normalizeUrl(base: string, value: string | undefined | null): string | undefined {
-  if (!value) return undefined
-  if (value.startsWith('//')) return `https:${value}`
-  if (value.startsWith('/')) return `${base}${value}`
-  return value
-}
 
 function extractCatnoFromLabeledText(text: string): string | null {
   const match = text.match(CATNO_LABEL_PATTERN)
@@ -82,7 +77,7 @@ export async function resolveDiscogsBarcode(barcode: string): Promise<BarcodePro
 async function resolveTowerBarcode(barcode: string): Promise<BarcodeProviderOutcome> {
   const { browser, page } = await browserPool.acquire()
   try {
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' })
+    await page.setExtraHTTPHeaders(JA_ACCEPT_LANGUAGE)
 
     const searchUrl = `${TOWER_WEB_URL}/search/item/${encodeURIComponent(barcode)}`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
@@ -133,7 +128,7 @@ async function resolveTowerBarcode(barcode: string): Promise<BarcodeProviderOutc
           skuText = `${skuText}\n${detail.bodyText}`
         }
       } catch (err) {
-        logger.warn('barcode.tower', 'detail page failed, using search card only', { barcode, error: err instanceof Error ? err.message : String(err) })
+        logger.warn('barcode.tower', 'detail page failed, using search card only', { barcode, error: errorMessage(err) })
       }
     }
 
@@ -152,7 +147,7 @@ async function resolveTowerBarcode(barcode: string): Promise<BarcodeProviderOutc
 async function resolveHmvBarcode(barcode: string): Promise<BarcodeProviderOutcome> {
   const { browser, page } = await browserPool.acquire()
   try {
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' })
+    await page.setExtraHTTPHeaders(JA_ACCEPT_LANGUAGE)
 
     const searchUrl = `${HMV_WEB_URL}/en/search/keyword_${encodeURIComponent(barcode)}/target_ALL/type_sr/`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
@@ -184,7 +179,7 @@ async function resolveHmvBarcode(barcode: string): Promise<BarcodeProviderOutcom
         if (detailTitle) title = detailTitle
         catno = extractCatnoFromLabeledText(bodyText)
       } catch (err) {
-        logger.warn('barcode.hmv', 'detail page failed, using search card only', { barcode, error: err instanceof Error ? err.message : String(err) })
+        logger.warn('barcode.hmv', 'detail page failed, using search card only', { barcode, error: errorMessage(err) })
       }
     }
 
@@ -205,7 +200,7 @@ async function resolveHmvBarcode(barcode: string): Promise<BarcodeProviderOutcom
 async function resolveYahooBarcode(barcode: string): Promise<BarcodeProviderOutcome> {
   const { browser, page } = await browserPool.acquire()
   try {
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8' })
+    await page.setExtraHTTPHeaders(JA_ACCEPT_LANGUAGE)
 
     const searchUrl = `${YAHOO_SHOPPING_URL}/search/${encodeURIComponent(barcode)}/0/?first=1&tab_ex=commerce`
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })

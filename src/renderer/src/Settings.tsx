@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Settings, Platform, LoginPlatform, LoginSessionStatus, BarcodeProvider, SettingsTransferResult } from './electron-api'
-import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, PLATFORM_LABELS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
+import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { normalizeShimoUrl } from '../../shared/shimo'
 import { useI18n } from './i18n'
 import { useUpdateState } from './hooks/useUpdateState'
@@ -284,7 +284,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
       ? t('sources.channelXianyu')
       : p === 'taobao'
         ? t('sources.channelTaobao')
-        : PLATFORM_LABELS[p]
+        : platformLabel(p)
     const verified = isChannel && loginStatus[p as LoginPlatform]?.state === 'verified'
     return (
       <label key={p} className={`st-check-item ${checked ? 'checked' : ''}`}>

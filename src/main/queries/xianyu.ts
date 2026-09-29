@@ -1,3 +1,6 @@
+import { ZH_ACCEPT_LANGUAGE } from '../browser/headers'
+import { normalizeCoverUrl } from '../../shared/utils'
+import { errorMessage } from '../../shared/utils'
 import { acquireLoginPage } from '../login'
 import { LOGIN_DEFS, checkLoginState } from '../login/defs'
 import type { QueryResult } from './types'
@@ -153,7 +156,7 @@ async function queryXianyuWeb(catalogNumber: string, signal?: AbortSignal): Prom
       return loginRequired('xianyu')
     }
 
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-CN,zh;q=0.9' })
+    await page.setExtraHTTPHeaders(ZH_ACCEPT_LANGUAGE)
 
     const searchUrl = `${GOOFISH_WEB_URL}/search?q=${encodeURIComponent(catalogNumber)}`
     logger.debug('queries.xianyu', 'open search page', { catalogNumber, searchUrl })
@@ -182,9 +185,7 @@ async function queryXianyuWeb(catalogNumber: string, signal?: AbortSignal): Prom
     // single stable price instead of a min/max spread across the grid.
     const fixedPrice = first.priceText ? await parseCNYPrice(first.priceText) : null
 
-    let coverUrl = first.cover
-    if (coverUrl?.startsWith('//')) coverUrl = `https:${coverUrl}`
-    else if (coverUrl?.startsWith('/')) coverUrl = `${GOOFISH_WEB_URL}${coverUrl}`
+    const coverUrl = normalizeCoverUrl(GOOFISH_WEB_URL, first.cover)
 
     let link = first.link
     if (link && link.startsWith('/')) link = `${GOOFISH_WEB_URL}${link}`
@@ -227,7 +228,7 @@ export async function queryXianyu(catalogNumber: string, signal?: AbortSignal): 
       logger.warn('queries.xianyu', 'query timed out', { catalogNumber, timeoutMs: QUERY_TIMEOUT_MS })
       result = queryError('xianyu', TIMEOUT_MESSAGE)
     } else {
-      logger.warn('queries.xianyu', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+      logger.warn('queries.xianyu', 'query failed', { catalogNumber, error: errorMessage(err) })
       result = queryError('xianyu', err instanceof Error ? err.message : 'Unknown error')
     }
   }

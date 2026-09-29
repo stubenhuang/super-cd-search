@@ -62,3 +62,36 @@ export function restrictedHostChromeArgs(): string[] {
     ? ['--no-sandbox', '--use-mock-keychain']
     : []
 }
+
+/** Message shown when no usable Chrome is installed (CHROME_PATH also works). */
+export const CHROME_NOT_FOUND_MESSAGE = '未找到 Google Chrome，请先安装（或将 CHROME_PATH 指向 Chrome 可执行文件）'
+
+/**
+ * Chrome flags for a profile directory the app owns and connects to over CDP.
+ *
+ * Shared by the single-profile search session (login/session.ts) and the
+ * per-target publishing profiles (publish/profiles.ts) so both launch the same
+ * browser the same way:
+ *
+ *  - `--remote-debugging-port=0` picks a free port, written to
+ *    `DevToolsActivePort` inside `dir` (see waitForDevToolsPort).
+ *  - Headless sessions have no window at all; headed ones start parked
+ *    off-screen (macOS keeps a sliver visible — the best a headed window can do)
+ *    and are revealed only while a human is needed.
+ *  - The backgrounding flags keep a parked/occluded window's page fully active,
+ *    so a background scrape is never timer-throttled.
+ */
+export function chromeLaunchArgs(dir: string, mode: 'headed' | 'headless'): string[] {
+  return [
+    '--remote-debugging-port=0',
+    `--user-data-dir=${dir}`,
+    ...restrictedHostChromeArgs(),
+    '--no-first-run',
+    '--no-default-browser-check',
+    ...(mode === 'headless' ? ['--headless', '--window-size=1280,1000'] : ['--window-position=-32000,-32000']),
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    'about:blank'
+  ]
+}

@@ -52,7 +52,7 @@ let sendMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
   vi.clearAllMocks()
   sendMock = vi.fn()
-  vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([{ webContents: { send: sendMock } }] as never)
+  vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([{ isDestroyed: () => false, webContents: { send: sendMock } }] as never)
 
   mockQueryDiscogs.mockResolvedValue(found('discogs'))
   mockQueryEbay.mockResolvedValue(found('ebay'))

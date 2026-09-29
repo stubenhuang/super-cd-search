@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   PublishCurrency,
@@ -202,7 +203,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
     } catch (err) {
       window.electronAPI.log('warn', 'publish.targets', 'failed to read publish target status', {
         targetId,
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
       // Show the neutral「状态未知」badge instead of guessing a login state.
       if (mountedRef.current) setStatusViews(prev => ({ ...prev, [targetId]: { loading: false } }))
@@ -220,7 +221,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
       if (mountedRef.current) setTargets(settings.publishTargets ?? [])
     } catch (err) {
       window.electronAPI.log('warn', 'publish.targets', 'failed to reload publish targets', {
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
     }
   }, [])
@@ -252,7 +253,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
         }
       } catch (err) {
         window.electronAPI.log('warn', 'publish.targets', 'failed to load publish targets', {
-          error: err instanceof Error ? err.message : String(err)
+          error: errorMessage(err)
         })
       } finally {
         if (mountedRef.current) setLoading(false)
@@ -280,7 +281,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
       return true
     } catch (err) {
       window.electronAPI.log('warn', 'publish.targets', 'failed to save publish targets', {
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
       onToast(t('settings.publishSaveFailed'), 'error')
       return false
@@ -340,7 +341,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
       } catch (err) {
         window.electronAPI.log('warn', 'publish.targets', 'failed to forget publish target before delete', {
           targetId: target.id,
-          error: err instanceof Error ? err.message : String(err)
+          error: errorMessage(err)
         })
       }
     }
@@ -382,7 +383,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
     } catch (err) {
       window.electronAPI.log('warn', 'publish.targets', 'login publish target failed', {
         targetId: target.id,
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
       if (mountedRef.current) onToast(t('settings.publishLoginFailed'), 'error')
     } finally {
@@ -409,7 +410,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
     } catch (err) {
       window.electronAPI.log('warn', 'publish.targets', 'forget publish target failed', {
         targetId: target.id,
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
       if (mountedRef.current) onToast(t('settings.publishLogoutFailed'), 'error')
     } finally {
@@ -454,7 +455,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
       onToast(t('settings.publishSaveFailed'), 'error')
       window.electronAPI.log('warn', 'publish.targets', 'test publish target failed', {
         targetId: target.id,
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
     } finally {
       if (mountedRef.current) setBusyId(null)
@@ -478,7 +479,7 @@ export function PublishTargetsSection({ initialTargets, onToast }: PublishTarget
     const openTokenGuide = (url: string) => {
       void window.electronAPI.openExternal(url).catch(err => {
         window.electronAPI.log('warn', 'publish.targets', 'failed to open Discogs token guide', {
-          error: err instanceof Error ? err.message : String(err)
+          error: errorMessage(err)
         })
       })
     }
@@ -1194,7 +1195,7 @@ export function PublishDialog({
       window.electronAPI.log('warn', 'publish.run', 'publish run failed', {
         catalogNumber: request.catalogNumber,
         targetId: request.targetId,
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
       if (!mountedRef.current) return
       setOutcome({
@@ -1202,7 +1203,7 @@ export function PublishDialog({
         platform: request.draft.platform,
         targetName: request.draft.targetName,
         catalogNumber: request.catalogNumber,
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
       setView('result')
     } finally {
@@ -1219,7 +1220,7 @@ export function PublishDialog({
   const handleOpenListing = (url: string) => {
     void window.electronAPI.openExternal(url).catch(err => {
       window.electronAPI.log('warn', 'publish.run', 'failed to open listing url', {
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
     })
   }

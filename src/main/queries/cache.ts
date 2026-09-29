@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import type { QueryResult, Platform, CDDetails } from '../../shared/types'
@@ -316,6 +317,6 @@ function writeCacheToDisk(): void {
       durationMs: Date.now() - startedAt
     })
   } catch (err) {
-    logger.warn('cache', 'failed to persist search cache', { error: err instanceof Error ? err.message : String(err) })
+    logger.warn('cache', 'failed to persist search cache', { error: errorMessage(err) })
   }
 }

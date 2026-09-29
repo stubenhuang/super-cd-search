@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { spawn, type ChildProcess } from 'child_process'
 import { mkdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
@@ -5,8 +6,9 @@ import { tmpdir } from 'os'
 import puppeteer from 'puppeteer-core'
 import type { Browser, Page } from 'puppeteer-core'
 import { LOGIN_DEFS, checkLoginState } from './defs'
-import { restrictedHostChromeArgs, findChromeExecutable } from '../browser/chrome-path'
+import { CHROME_NOT_FOUND_MESSAGE, chromeLaunchArgs, findChromeExecutable } from '../browser/chrome-path'
 import { killChromeProcess } from '../browser/kill'
+import { createMutex } from '../browser/mutex'
 import { logger } from '../logger'
 import type { LoginPlatform, LoginResult, LoginSessionStatus } from '../../shared/types'
 
@@ -48,11 +50,13 @@ interface Session {
   proc: ChildProcess | null
   browser: Browser
   page: Page
-  lock: Promise<void>
   mode: ChromeSessionMode
   /** Headless UA with "HeadlessChrome" masked to a normal Chrome UA; empty for a headed browser. */
   maskedUa: string
 }
+
+/** Serializes every user of the single shared page (see withPage/acquireLoginPage). */
+const pageMutex = createMutex()
 
 let profileDir: string | null = null
 let session: Session | null = null
@@ -157,11 +161,11 @@ async function reattachToRunningChrome(dir: string): Promise<Session | null> {
     // marketplace page with the raw HeadlessChrome UA, which goofish blocks.
     const { maskedUa, mode } = describeBrowserSessionFromUa(probeUa)
     logger.debug('login.session', 'reattached to running real Chrome', { port, mode })
-    return { proc: null, browser, page, lock: Promise.resolve(), mode, maskedUa }
+    return { proc: null, browser, page, mode, maskedUa }
   } catch (err) {
     logger.debug('login.session', 'reattach connect failed, launching fresh', {
       port,
-      error: err instanceof Error ? err.message : String(err)
+      error: errorMessage(err)
     })
     return null
   }
@@ -180,7 +184,7 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
   const chromePath = findChromeExecutable()
   if (!chromePath) {
     logger.warn('login.session', 'Chrome executable not found')
-    throw new Error('未找到 Google Chrome，请先安装（或将 CHROME_PATH 指向 Chrome 可执行文件）')
+    throw new Error(CHROME_NOT_FOUND_MESSAGE)
   }
 
   // Remove the previous session's port file so waitForDevToolsPort never
@@ -188,26 +192,7 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
   rmSync(join(dir, 'DevToolsActivePort'), { force: true })
   logger.debug('login.session', 'launching real Chrome', { chromePath, profileDir: dir, mode })
 
-  const proc = spawn(
-    chromePath,
-    [
-      '--remote-debugging-port=0',
-      `--user-data-dir=${dir}`,
-      ...restrictedHostChromeArgs(),
-      '--no-first-run',
-      '--no-default-browser-check',
-      // Headless sessions have no window at all; headed ones get parked
-      // off-screen right after connect (macOS keeps a sliver visible — that is
-      // the best a headed window can do). The backgrounding flags keep a
-      // parked/occluded window's page fully active (no timer throttling).
-      ...(mode === 'headless' ? ['--headless', '--window-size=1280,1000'] : ['--window-position=-32000,-32000']),
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-renderer-backgrounding',
-      'about:blank'
-    ],
-    { stdio: 'ignore' }
-  )
+  const proc = spawn(chromePath, chromeLaunchArgs(dir, mode), { stdio: 'ignore' })
 
   const port = await waitForDevToolsPort(dir)
   logger.debug('login.session', 'connected to real Chrome over CDP', { port })
@@ -236,7 +221,7 @@ async function launchChrome(mode: ChromeSessionMode): Promise<Session> {
     }
   })
 
-  return { proc, browser, page, lock: Promise.resolve(), mode, maskedUa }
+  return { proc, browser, page, mode, maskedUa }
 }
 
 /**
@@ -275,12 +260,7 @@ async function ensureSession(mode: ChromeSessionMode = 'headed'): Promise<Sessio
 /** Serialize access to the single shared scrape page (interactive flows only). */
 async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   const s = await ensureSession('headed')
-  let release!: () => void
-  const previous = s.lock
-  s.lock = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  await previous
+  const release = await pageMutex.acquire()
   try {
     return await fn(s.page)
   } finally {
@@ -319,7 +299,7 @@ export async function setChromeWindowVisible(page: Page, visible: boolean): Prom
   } catch (err) {
     logger.debug('login.session', 'window visibility move failed', {
       visible,
-      error: err instanceof Error ? err.message : String(err)
+      error: errorMessage(err)
     })
   }
 }
@@ -363,7 +343,7 @@ export async function startLogin(platform: LoginPlatform): Promise<LoginResult> 
       return { status: 'error' as const, error: '登录超时：未检测到登录态' }
     })
   } catch (err) {
-    logger.warn('login.session', 'login flow failed', { platform, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('login.session', 'login flow failed', { platform, error: errorMessage(err) })
     return { status: 'error' as const, error: err instanceof Error ? err.message : 'Unknown error' }
   } finally {
     // Park the window off-screen again — scraping runs invisibly. Best-effort
@@ -388,7 +368,7 @@ export async function getLoginStatus(platform: LoginPlatform): Promise<LoginSess
     } catch (err) {
       logger.debug('login.session', 'status could not launch real Chrome', {
         platform,
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
       return { state: 'not_started' }
     }
@@ -430,19 +410,14 @@ export async function acquireLoginPage(mode: ChromeSessionMode = 'headed'): Prom
       await ensureSession(mode)
     } catch (err) {
       logger.debug('login.session', 'acquire could not launch real Chrome', {
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage(err)
       })
       return null
     }
   }
   if (!session) return null
 
-  let release!: () => void
-  const previous = session.lock
-  session.lock = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  await previous
+  const release = await pageMutex.acquire()
   logger.debug('login.session', 'real-Chrome page acquired', { mode: session.mode })
 
   // Clear per-request headers (e.g. Accept-Language) a previous scrape set on

@@ -1,3 +1,6 @@
+import { ZH_ACCEPT_LANGUAGE } from '../browser/headers'
+import { normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
+import { errorMessage } from '../../shared/utils'
 import { writeFile, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -61,6 +64,7 @@ const SEARCH_BUTTON_SELECTOR = '#image-search-upload-button'
  * The result tab's URL carries the uploaded-image key (or an imgsearch spm);
  * the homepage's preloaded search tab (q=…) must not match.
  */
+const TAOBAO_WEB_URL = 'https://www.taobao.com'
 const IMAGE_SEARCH_RESULT_URL = /s\.taobao\.com\/search.*(localImgKey=|imgsearch|image_search)/i
 
 /** How long to wait for the homepage React app to mount the upload input. */
@@ -268,7 +272,7 @@ export async function queryTaobaoImage(
       logger.warn('queries.taobao', 'query timed out', { catalogNumber, timeoutMs: QUERY_TIMEOUT_MS })
       result = queryError('taobao', TIMEOUT_MESSAGE)
     } else {
-      logger.warn('queries.taobao', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+      logger.warn('queries.taobao', 'query failed', { catalogNumber, error: errorMessage(err) })
       result = queryError('taobao', err instanceof Error ? err.message : 'Unknown error')
     }
   }
@@ -308,7 +312,7 @@ async function queryTaobaoImageWeb(
       return loginRequired('taobao')
     }
 
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-CN,zh;q=0.9' })
+    await page.setExtraHTTPHeaders(ZH_ACCEPT_LANGUAGE)
 
     logger.debug('queries.taobao', 'open taobao home', { catalogNumber })
     await gotoWithAbort(page, TAOBAO_HOME, { waitUntil: 'domcontentloaded', timeout: 30000 }, signal)
@@ -359,11 +363,8 @@ async function queryTaobaoImageWeb(
     // single stable price instead of a min/max spread across the grid.
     const fixedPrice = first.priceText ? await parseCNYPrice(first.priceText) : null
 
-    let link = first.link
-    if (link && link.startsWith('//')) link = `https:${link}`
-    if (!link) link = resultPage.url()
-    let coverUrl = first.cover
-    if (coverUrl?.startsWith('//')) coverUrl = `https:${coverUrl}`
+    const link = normalizeUrl(TAOBAO_WEB_URL, first.link) ?? resultPage.url()
+    const coverUrl = normalizeCoverUrl(TAOBAO_WEB_URL, first.cover)
 
     return {
       platform: 'taobao',
@@ -377,7 +378,7 @@ async function queryTaobaoImageWeb(
     }
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.taobao', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.taobao', 'query failed', { catalogNumber, error: errorMessage(err) })
     return queryError('taobao', err instanceof Error ? err.message : 'Unknown error')
   } finally {
     if (resultPage && resultPage !== page) {

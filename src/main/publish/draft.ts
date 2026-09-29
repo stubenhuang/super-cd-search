@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { convertFromUSD } from '../currency'
 import { withTimeout } from '../browser/abort'
 import type { CDDetails, QueryResult } from '../../shared/types'
@@ -266,7 +267,7 @@ export async function buildPublishDraft(request: PublishPrepareRequest): Promise
       candidates = search.candidates
       best = search.best
     } catch (err) {
-      warnings.push(`Discogs 搜索失败，请手动处理：${err instanceof Error ? err.message : String(err)}`)
+      warnings.push(`Discogs 搜索失败，请手动处理：${errorMessage(err)}`)
     }
     if (candidates.length === 0) {
       blockers.push('没有找到对应的 Discogs Release，无法发布（可先在 Discogs 上确认该版本已收录）')

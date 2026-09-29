@@ -1,3 +1,5 @@
+import { EN_ACCEPT_LANGUAGE } from '../browser/headers'
+import { errorMessage } from '../../shared/utils'
 import { getSetting } from '../settings'
 import { throttledFetch } from '../throttle'
 import { browserPool } from '../browser'
@@ -191,7 +193,7 @@ async function getEbayItemDetails(itemWebUrl: string, token: string, signal?: Ab
     }
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.ebay', 'failed to get item details', { itemWebUrl, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.ebay', 'failed to get item details', { itemWebUrl, error: errorMessage(err) })
   }
 
   return details
@@ -335,7 +337,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
     }
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.ebay', 'domain query error', { catalogNumber, domain, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.ebay', 'domain query error', { catalogNumber, domain, error: errorMessage(err) })
     return { success: false }
   }
 }
@@ -354,7 +356,7 @@ async function queryEbayWeb(catalogNumber: string, signal?: AbortSignal): Promis
 
     // Set realistic headers
     await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9',
+      ...EN_ACCEPT_LANGUAGE,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Encoding': 'gzip, deflate, br, zstd',
       'Cache-Control': 'max-age=0',
@@ -402,7 +404,7 @@ export async function queryEbay(catalogNumber: string, signal?: AbortSignal): Pr
     result = await queryEbayApi(catalogNumber, signal)
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.ebay', 'API failed, falling back to web scraping', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.ebay', 'API failed, falling back to web scraping', { catalogNumber, error: errorMessage(err) })
     try {
       result = await queryEbayWeb(catalogNumber, signal)
     } catch (webErr) {

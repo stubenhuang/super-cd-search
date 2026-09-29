@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import type { DetailEnrichProgressStatus, Platform } from './electron-api'
-import { PLATFORM_LABELS, summarizePlatformNames } from '../../shared/platforms'
+import { platformLabel, summarizePlatformNames } from '../../shared/platforms'
 import { useI18n } from './i18n'
 import type { TranslationKey } from './i18n'
 
@@ -41,9 +41,9 @@ function smartPhaseText(
   t: (key: TranslationKey, params?: Record<string, string | number>) => string
 ): string {
   if (!phase || !platform) return t('autoFlow.smartPhase.preparing')
-  if (phase === 'searching') return t('autoFlow.smartPhase.searching', { platform: PLATFORM_LABELS[platform] })
-  if (phase === 'fetching') return t('autoFlow.smartPhase.fetching', { platform: PLATFORM_LABELS[platform] })
-  if (phase === 'analyzing') return t('autoFlow.smartPhase.analyzing', { platform: PLATFORM_LABELS[platform] })
+  if (phase === 'searching') return t('autoFlow.smartPhase.searching', { platform: platformLabel(platform) })
+  if (phase === 'fetching') return t('autoFlow.smartPhase.fetching', { platform: platformLabel(platform) })
+  if (phase === 'analyzing') return t('autoFlow.smartPhase.analyzing', { platform: platformLabel(platform) })
   return t('autoFlow.smartPhase.preparing')
 }
 
@@ -85,7 +85,9 @@ export function FlowDialog({
   let actions: React.ReactNode = null
 
   if (flow.kind === 'deep-dig-prompt') {
-    const { shown, rest } = summarizePlatformNames(flow.platforms, PLATFORM_LABELS)
+    const labels: Partial<Record<Platform, string>> = {}
+    for (const platform of flow.platforms) labels[platform] = platformLabel(platform)
+    const { shown, rest } = summarizePlatformNames(flow.platforms, labels)
     const platformNames = rest > 0 ? `${shown} ${t('autoFlow.platformsMore', { count: rest })}` : shown
     title = t('autoFlow.deepDigTitle')
     body = (

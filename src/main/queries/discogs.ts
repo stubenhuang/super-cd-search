@@ -8,7 +8,7 @@ import type { CDDetails } from '../../shared/types'
 import { notFound, queryError } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
-import { normalizeCatalogNumber } from '../../shared/utils'
+import { errorMessage, normalizeCatalogNumber } from '../../shared/utils'
 import { logger } from '../logger'
 
 export const DISCOGS_API_URL = 'https://api.discogs.com'
@@ -153,7 +153,7 @@ async function getDiscogsLowestPrice(releaseId: number, token: string, signal?: 
     }
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.discogs', 'marketplace stats failed', { releaseId, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.discogs', 'marketplace stats failed', { releaseId, error: errorMessage(err) })
   }
 
   return { min: null, max: null }
@@ -219,7 +219,7 @@ async function getReleaseDetails(releaseId: number, token: string, signal?: Abor
     return details
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.discogs', 'release details failed', { releaseId, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.discogs', 'release details failed', { releaseId, error: errorMessage(err) })
     return { label: null, format: null, country: null, released: null, genre: null }
   }
 }
@@ -442,7 +442,7 @@ export async function queryDiscogs(catalogNumber: string, signal?: AbortSignal):
       result = await queryDiscogsApi(catalogNumber, token, signal)
     } catch (err) {
       throwIfAborted(signal)
-      logger.warn('queries.discogs', 'API failed, falling back to web scraping', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+      logger.warn('queries.discogs', 'API failed, falling back to web scraping', { catalogNumber, error: errorMessage(err) })
       try {
         result = await queryDiscogsWeb(catalogNumber, signal)
       } catch (webErr) {

@@ -1,3 +1,5 @@
+import { ZH_ACCEPT_LANGUAGE } from '../browser/headers'
+import { errorMessage } from '../../shared/utils'
 import { app } from 'electron'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -348,13 +350,13 @@ export async function publishToXianyu(input: XianyuPublishInput): Promise<Xianyu
       throw new Error('该发布目标尚未登录闲鱼：请到「设置 → 发布目标」里点它自己的「扫码登录」')
     }
 
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-CN,zh;q=0.9' })
+    await page.setExtraHTTPHeaders(ZH_ACCEPT_LANGUAGE)
 
     input.onProgress('正在打开发布页…')
     try {
       await gotoWithAbort(page, XIANYU_SELLER_URL, { waitUntil: 'domcontentloaded', timeout: 30000 }, input.signal)
     } catch (err) {
-      throw new Error(`打不开闲鱼卖家工作台：${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`打不开闲鱼卖家工作台：${errorMessage(err)}`)
     }
     await abortableDelay(1500, input.signal)
 

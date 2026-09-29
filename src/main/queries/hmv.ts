@@ -1,3 +1,7 @@
+import { EN_ACCEPT_LANGUAGE } from '../browser/headers'
+import { detailsOrUndefined } from '../../shared/details'
+import { normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
+import { errorMessage } from '../../shared/utils'
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
@@ -125,7 +129,7 @@ async function getHmvProductDetails(page: import('puppeteer').Page, link: string
     return result
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.hmv', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.hmv', 'failed to get details from product page', { link, error: errorMessage(err) })
     return { price: null, details }
   }
 }
@@ -134,9 +138,7 @@ async function queryHmvWeb(catalogNumber: string, signal?: AbortSignal): Promise
   const { browser, page } = await browserPool.acquire(signal)
 
   try {
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9'
-    })
+    await page.setExtraHTTPHeaders(EN_ACCEPT_LANGUAGE)
 
     const searchUrl = `${HMV_WEB_URL}/en/search/keyword_${encodeURIComponent(catalogNumber)}/target_ALL/type_sr/`
     logger.debug('queries.hmv', 'open search page', { catalogNumber, searchUrl })
@@ -182,22 +184,11 @@ async function queryHmvWeb(catalogNumber: string, signal?: AbortSignal): Promise
       }).catch(() => null)
     }
 
-    // Handle URL format
-    if (coverUrl) {
-      // Skip placeholder images
-      if (coverUrl.includes('blank.') || coverUrl.includes('spacer.') || coverUrl.includes('1x1') || coverUrl === 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7') {
-        coverUrl = null
-      } else if (coverUrl.startsWith('//')) {
-        coverUrl = `https:${coverUrl}`
-      } else if (!coverUrl.startsWith('http')) {
-        coverUrl = `${HMV_WEB_URL}${coverUrl}`
-      }
-    }
+    // Skip placeholders, upgrade http, and resolve protocol/root-relative URLs.
+    coverUrl = normalizeCoverUrl(HMV_WEB_URL, coverUrl)
 
     let link = await firstItem.$eval('.itemImg a, h3 a', el => el.getAttribute('href')).catch(() => null)
-    if (link && !link.startsWith('http')) {
-      link = `${HMV_WEB_URL}${link}`
-    }
+    link = normalizeUrl(HMV_WEB_URL, link) ?? null
     logger.debug('queries.hmv', 'search card extracted', { catalogNumber, hasName: !!name, artist, link, coverUrl: !!coverUrl })
 
     if (!name) {
@@ -226,10 +217,7 @@ async function queryHmvWeb(catalogNumber: string, signal?: AbortSignal): Promise
         priceMin = productData.price
         priceMax = productData.price
       }
-      if (productData.details.label || productData.details.format ||
-          productData.details.released || productData.details.genre) {
-        details = productData.details
-      }
+      details = detailsOrUndefined(productData.details)
     }
 
     return {
@@ -261,7 +249,7 @@ export async function queryHmv(catalogNumber: string, signal?: AbortSignal): Pro
     result = await queryHmvWeb(catalogNumber, signal)
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.hmv', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.hmv', 'query failed', { catalogNumber, error: errorMessage(err) })
     result = queryError('hmv', err instanceof Error ? err.message : 'Unknown error')
   }
 

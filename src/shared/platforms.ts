@@ -29,6 +29,16 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 }
 
 /**
+ * Human-readable label of one platform, falling back to its id.
+ *
+ * Replaces the `PLATFORM_LABELS[p] || p` idiom that was spelled out at every
+ * call site (result cards, detail modal, flow dialog phase text).
+ */
+export function platformLabel(platform: Platform): string {
+  return PLATFORM_LABELS[platform] ?? platform
+}
+
+/**
  * Text-search platforms. The marketplace channels (xianyu/taobao) are not part
  * of this list: they are special channels that need a QR-code login and only
  * run while they are both checked and verified (see SELECTABLE_PLATFORMS).

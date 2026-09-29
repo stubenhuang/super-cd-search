@@ -1,3 +1,4 @@
+import { errorMessage } from '../../shared/utils'
 import { useEffect, useState } from 'react'
 import type { PublishTarget } from '../../shared/publish'
 import { PublishTargetsSection } from './Publish'
@@ -41,7 +42,7 @@ export function PublishTargetsPanel({ isOpen, onClose }: PublishTargetsPanelProp
         loaded = settings.publishTargets ?? []
       } catch (err) {
         window.electronAPI.log('warn', 'publish.targets', 'failed to preload publish targets', {
-          error: err instanceof Error ? err.message : String(err)
+          error: errorMessage(err)
         })
       }
       if (cancelled) return

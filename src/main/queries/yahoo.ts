@@ -1,3 +1,6 @@
+import { JA_ACCEPT_LANGUAGE } from '../browser/headers'
+import { detailsOrUndefined } from '../../shared/details'
+import { errorMessage } from '../../shared/utils'
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
@@ -84,7 +87,7 @@ async function getYahooProductDetails(page: import('puppeteer').Page, link: stri
     return details
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.yahoo', 'failed to get details from product page', { link, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.yahoo', 'failed to get details from product page', { link, error: errorMessage(err) })
     return details
   }
 }
@@ -93,9 +96,7 @@ async function queryYahooWeb(catalogNumber: string, signal?: AbortSignal): Promi
   const { browser, page } = await browserPool.acquire(signal)
 
   try {
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
-    })
+    await page.setExtraHTTPHeaders(JA_ACCEPT_LANGUAGE)
 
     const searchUrl = `${YAHOO_SHOPPING_URL}/search/${encodeURIComponent(catalogNumber)}/0/?first=1&tab_ex=commerce`
     logger.debug('queries.yahoo', 'open search page', { catalogNumber, searchUrl })
@@ -150,9 +151,7 @@ async function queryYahooWeb(catalogNumber: string, signal?: AbortSignal): Promi
     let details: CDDetails | undefined
     if (link && !getSetting('fastMode')) {
       logger.debug('queries.yahoo', 'fetch product detail page', { catalogNumber, link })
-      details = await getYahooProductDetails(page, link, signal)
-      const hasDetails = details.label || details.format || details.released || details.genre
-      if (!hasDetails) details = undefined
+      details = detailsOrUndefined(await getYahooProductDetails(page, link, signal))
     }
 
     return {
@@ -184,7 +183,7 @@ export async function queryYahoo(catalogNumber: string, signal?: AbortSignal): P
     result = await queryYahooWeb(catalogNumber, signal)
   } catch (err) {
     throwIfAborted(signal)
-    logger.warn('queries.yahoo', 'query failed', { catalogNumber, error: err instanceof Error ? err.message : String(err) })
+    logger.warn('queries.yahoo', 'query failed', { catalogNumber, error: errorMessage(err) })
     result = queryError('yahoo', err instanceof Error ? err.message : 'Unknown error')
   }
 
