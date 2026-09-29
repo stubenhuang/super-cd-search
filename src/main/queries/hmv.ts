@@ -1,13 +1,13 @@
 import { EN_ACCEPT_LANGUAGE } from '../browser/headers'
 import { detailsOrUndefined } from '../../shared/details'
-import { normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
-import { errorMessage } from '../../shared/utils'
+import { errorMessage, normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
 import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, queryError, parseJPYPrice } from './types'
-import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
+import { notFound, parseJPYPrice } from './types'
+import { getCachedProductData, cacheProductData } from './cache'
+import { runPlatformQuery } from './runner'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
 
@@ -236,24 +236,11 @@ async function queryHmvWeb(catalogNumber: string, signal?: AbortSignal): Promise
   }
 }
 
-export async function queryHmv(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.hmv', 'query start', { catalogNumber })
-  const cacheContext = getSetting('fastMode') ? 'fast' : 'full'
-  const cached = getCachedQueryResult('hmv', catalogNumber, cacheContext)
-  if (cached) return cached
-
-  let result: QueryResult
-
-  try {
-    result = await queryHmvWeb(catalogNumber, signal)
-  } catch (err) {
-    throwIfAborted(signal)
-    logger.warn('queries.hmv', 'query failed', { catalogNumber, error: errorMessage(err) })
-    result = queryError('hmv', err instanceof Error ? err.message : 'Unknown error')
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result, cacheContext)
-  return result
+export function queryHmv(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'hmv',
+    tag: 'queries.hmv',
+    cacheContext: getSetting('fastMode') ? 'fast' : 'full',
+    run: (runSignal) => queryHmvWeb(catalogNumber, runSignal)
+  })
 }

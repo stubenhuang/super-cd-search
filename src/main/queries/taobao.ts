@@ -1,6 +1,5 @@
 import { ZH_ACCEPT_LANGUAGE } from '../browser/headers'
-import { normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
-import { errorMessage } from '../../shared/utils'
+import { errorMessage, normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
 import { writeFile, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -9,7 +8,7 @@ import { acquireLoginPage } from '../login'
 import { LOGIN_DEFS, checkLoginState } from '../login/defs'
 import type { QueryResult } from './types'
 import { notFound, queryError, loginRequired, parseCNYPrice } from './types'
-import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { runPlatformQuery } from './runner'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
 import { gotoWithAbort, throwIfAborted, abortableDelay, withTimeout, isTimeoutError } from '../browser/abort'
@@ -246,40 +245,32 @@ async function waitForResultPage(page: Page, signal?: AbortSignal): Promise<Page
   return Promise.race([popupPromise, sameTabPromise])
 }
 
-export async function queryTaobaoImage(
+export function queryTaobaoImage(
   catalogNumber: string,
   image: { buffer: Buffer; mimeType: string },
   signal?: AbortSignal
 ): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.taobao', 'query start', { catalogNumber, mimeType: image.mimeType, bytes: image.buffer.length })
-  const cached = getCachedQueryResult('taobao', catalogNumber)
-  if (cached) return cached
-
-  let result: QueryResult
-  try {
-    result = await withTimeout(
-      (timeoutSignal) => queryTaobaoImageWeb(catalogNumber, image, timeoutSignal),
-      QUERY_TIMEOUT_MS,
-      TIMEOUT_MESSAGE,
-      signal
-    )
-  } catch (err) {
-    // A batch cancellation must stay a cancellation; only our own deadline
-    // turns into a retryable error result (never cached).
-    throwIfAborted(signal)
-    if (isTimeoutError(err)) {
-      logger.warn('queries.taobao', 'query timed out', { catalogNumber, timeoutMs: QUERY_TIMEOUT_MS })
-      result = queryError('taobao', TIMEOUT_MESSAGE)
-    } else {
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'taobao',
+    tag: 'queries.taobao',
+    mapError: (err) => {
+      if (isTimeoutError(err)) {
+        logger.warn('queries.taobao', 'query timed out', { catalogNumber, timeoutMs: QUERY_TIMEOUT_MS })
+        return queryError('taobao', TIMEOUT_MESSAGE)
+      }
       logger.warn('queries.taobao', 'query failed', { catalogNumber, error: errorMessage(err) })
-      result = queryError('taobao', err instanceof Error ? err.message : 'Unknown error')
+      return queryError('taobao', err instanceof Error ? err.message : 'Unknown error')
+    },
+    run: (runSignal) => {
+      logger.debug('queries.taobao', 'query start', { catalogNumber, mimeType: image.mimeType, bytes: image.buffer.length })
+      return withTimeout(
+        (timeoutSignal) => queryTaobaoImageWeb(catalogNumber, image, timeoutSignal),
+        QUERY_TIMEOUT_MS,
+        TIMEOUT_MESSAGE,
+        runSignal
+      )
     }
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result)
-  return result
+  })
 }
 
 async function queryTaobaoImageWeb(

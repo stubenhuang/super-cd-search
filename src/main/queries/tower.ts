@@ -3,10 +3,10 @@ import { detailsOrUndefined } from '../../shared/details'
 import { normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
 import { errorMessage } from '../../shared/utils'
 import { browserPool } from '../browser'
-import { gotoWithAbort, throwIfAborted } from '../browser/abort'
+import { gotoWithAbort } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, queryError, parseJPYPrice } from './types'
-import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { notFound, parseJPYPrice } from './types'
+import { runPlatformQuery } from './runner'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
 
@@ -124,23 +124,10 @@ async function queryTowerWeb(catalogNumber: string, signal?: AbortSignal): Promi
   }
 }
 
-export async function queryTower(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.tower', 'query start', { catalogNumber })
-  const cached = getCachedQueryResult('tower', catalogNumber)
-  if (cached) return cached
-
-  let result: QueryResult
-
-  try {
-    result = await queryTowerWeb(catalogNumber, signal)
-  } catch (err) {
-    throwIfAborted(signal)
-    logger.warn('queries.tower', 'query failed', { catalogNumber, error: errorMessage(err) })
-    result = queryError('tower', err instanceof Error ? err.message : 'Unknown error')
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result)
-  return result
+export function queryTower(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'tower',
+    tag: 'queries.tower',
+    run: (runSignal) => queryTowerWeb(catalogNumber, runSignal)
+  })
 }

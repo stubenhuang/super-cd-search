@@ -1,14 +1,14 @@
 import { JA_ACCEPT_LANGUAGE } from '../browser/headers'
-import { errorMessage } from '../../shared/utils'
+import { errorMessage, normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
 import { detailsOrUndefined } from '../../shared/details'
-import { normalizeCoverUrl, normalizeUrl } from '../../shared/utils'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { throttledFetch } from '../throttle'
 import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, queryError, parseJPYPrice } from './types'
-import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
+import { notFound, parseJPYPrice } from './types'
+import { getCachedProductData, cacheProductData } from './cache'
+import { runPlatformQuery } from './runner'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
 import { getSetting } from '../settings'
@@ -306,24 +306,11 @@ async function queryKojimaWeb(catalogNumber: string, signal?: AbortSignal): Prom
   }
 }
 
-export async function queryKojima(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.kojima', 'query start', { catalogNumber })
-  const cacheContext = getSetting('fastMode') ? 'fast' : 'full'
-  const cached = getCachedQueryResult('kojima', catalogNumber, cacheContext)
-  if (cached) return cached
-
-  let result: QueryResult
-
-  try {
-    result = await queryKojimaWeb(catalogNumber, signal)
-  } catch (err) {
-    throwIfAborted(signal)
-    logger.warn('queries.kojima', 'query failed', { catalogNumber, error: errorMessage(err) })
-    result = queryError('kojima', err instanceof Error ? err.message : 'Unknown error')
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result, cacheContext)
-  return result
+export function queryKojima(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'kojima',
+    tag: 'queries.kojima',
+    cacheContext: getSetting('fastMode') ? 'fast' : 'full',
+    run: (runSignal) => queryKojimaWeb(catalogNumber, runSignal)
+  })
 }

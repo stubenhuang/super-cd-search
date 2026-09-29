@@ -1,10 +1,10 @@
 import { errorMessage } from '../../shared/utils'
 import { browserPool } from '../browser'
-import { gotoWithAbort, throwIfAborted } from '../browser/abort'
+import { gotoWithAbort } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, queryError } from './types'
-import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { notFound } from './types'
+import { runPlatformQuery } from './runner'
 import { logger } from '../logger'
 import { detailsOrUndefined } from '../../shared/details'
 import { normalizeCoverUrl } from '../../shared/utils'
@@ -108,23 +108,10 @@ async function queryCdjapanWeb(catalogNumber: string, signal?: AbortSignal): Pro
   }
 }
 
-export async function queryCdjapan(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.cdjapan', 'query start', { catalogNumber })
-  const cached = getCachedQueryResult('cdjapan', catalogNumber)
-  if (cached) return cached
-
-  let result: QueryResult
-
-  try {
-    result = await queryCdjapanWeb(catalogNumber, signal)
-  } catch (err) {
-    throwIfAborted(signal)
-    logger.warn('queries.cdjapan', 'query failed', { catalogNumber, error: errorMessage(err) })
-    result = queryError('cdjapan', err instanceof Error ? err.message : 'Unknown error')
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result)
-  return result
+export function queryCdjapan(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'cdjapan',
+    tag: 'queries.cdjapan',
+    run: (runSignal) => queryCdjapanWeb(catalogNumber, runSignal)
+  })
 }

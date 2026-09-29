@@ -5,8 +5,9 @@ import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult } from './types'
 import type { CDDetails } from '../../shared/types'
-import { notFound, queryError } from './types'
-import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { notFound } from './types'
+import { runPlatformQuery } from './runner'
+import { cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
 import { errorMessage, normalizeCatalogNumber } from '../../shared/utils'
 import { logger } from '../logger'
@@ -425,41 +426,28 @@ async function queryDiscogsWeb(catalogNumber: string, signal?: AbortSignal): Pro
   }
 }
 
-export async function queryDiscogs(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.discogs', 'query start', { catalogNumber })
+export function queryDiscogs(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
   const token = getSetting('discogsToken')
-  const cacheContext = token ? 'api' : 'web'
-  const cached = getCachedQueryResult('discogs', catalogNumber, cacheContext)
-  if (cached) return cached
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'discogs',
+    tag: 'queries.discogs',
+    cacheContext: token ? 'api' : 'web',
+    run: async (runSignal) => {
+      logger.debug('queries.discogs', 'query mode', { catalogNumber, hasApiToken: !!token })
+      if (!token) return queryDiscogsWeb(catalogNumber, runSignal)
 
-  logger.debug('queries.discogs', 'query mode', { catalogNumber, hasApiToken: !!token })
-
-  let result: QueryResult
-
-  if (token) {
-    try {
-      result = await queryDiscogsApi(catalogNumber, token, signal)
-    } catch (err) {
-      throwIfAborted(signal)
-      logger.warn('queries.discogs', 'API failed, falling back to web scraping', { catalogNumber, error: errorMessage(err) })
       try {
-        result = await queryDiscogsWeb(catalogNumber, signal)
-      } catch (webErr) {
-        throwIfAborted(signal)
-        result = queryError('discogs', webErr instanceof Error ? webErr.message : 'Unknown error')
+        return await queryDiscogsApi(catalogNumber, token, runSignal)
+      } catch (err) {
+        throwIfAborted(runSignal)
+        logger.warn('queries.discogs', 'API failed, falling back to web scraping', { catalogNumber, error: errorMessage(err) })
+        try {
+          return await queryDiscogsWeb(catalogNumber, runSignal)
+        } catch (webErr) {
+          throwIfAborted(runSignal)
+          throw webErr
+        }
       }
     }
-  } else {
-    try {
-      result = await queryDiscogsWeb(catalogNumber, signal)
-    } catch (err) {
-      throwIfAborted(signal)
-      result = queryError('discogs', err instanceof Error ? err.message : 'Unknown error')
-    }
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result, cacheContext)
-  return result
+  })
 }

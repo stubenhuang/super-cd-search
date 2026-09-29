@@ -1,11 +1,10 @@
 import { ZH_ACCEPT_LANGUAGE } from '../browser/headers'
-import { normalizeCoverUrl } from '../../shared/utils'
-import { errorMessage } from '../../shared/utils'
+import { errorMessage, normalizeCoverUrl } from '../../shared/utils'
 import { acquireLoginPage } from '../login'
 import { LOGIN_DEFS, checkLoginState } from '../login/defs'
 import type { QueryResult } from './types'
 import { notFound, queryError, loginRequired, parseCNYPrice } from './types'
-import { getCachedQueryResult, cacheQueryResult } from './cache'
+import { runPlatformQuery } from './runner'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
 import { gotoWithAbort, throwIfAborted, withTimeout, isTimeoutError } from '../browser/abort'
@@ -206,34 +205,24 @@ async function queryXianyuWeb(catalogNumber: string, signal?: AbortSignal): Prom
   }
 }
 
-export async function queryXianyu(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.xianyu', 'query start', { catalogNumber })
-  const cached = getCachedQueryResult('xianyu', catalogNumber)
-  if (cached) return cached
-
-  let result: QueryResult
-  try {
-    result = await withTimeout(
-      (timeoutSignal) => queryXianyuWeb(catalogNumber, timeoutSignal),
-      QUERY_TIMEOUT_MS,
-      TIMEOUT_MESSAGE,
-      signal
-    )
-  } catch (err) {
-    // A batch cancellation must stay a cancellation; only our own deadline
-    // turns into a retryable error result (never cached).
-    throwIfAborted(signal)
-    if (isTimeoutError(err)) {
-      logger.warn('queries.xianyu', 'query timed out', { catalogNumber, timeoutMs: QUERY_TIMEOUT_MS })
-      result = queryError('xianyu', TIMEOUT_MESSAGE)
-    } else {
+export function queryXianyu(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'xianyu',
+    tag: 'queries.xianyu',
+    mapError: (err) => {
+      if (isTimeoutError(err)) {
+        logger.warn('queries.xianyu', 'query timed out', { catalogNumber, timeoutMs: QUERY_TIMEOUT_MS })
+        return queryError('xianyu', TIMEOUT_MESSAGE)
+      }
       logger.warn('queries.xianyu', 'query failed', { catalogNumber, error: errorMessage(err) })
-      result = queryError('xianyu', err instanceof Error ? err.message : 'Unknown error')
-    }
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result)
-  return result
+      return queryError('xianyu', err instanceof Error ? err.message : 'Unknown error')
+    },
+    run: (runSignal) =>
+      withTimeout(
+        (timeoutSignal) => queryXianyuWeb(catalogNumber, timeoutSignal),
+        QUERY_TIMEOUT_MS,
+        TIMEOUT_MESSAGE,
+        runSignal
+      )
+  })
 }

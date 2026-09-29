@@ -5,8 +5,9 @@ import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, queryError, parseJPYPrice } from './types'
-import { getCachedQueryResult, cacheQueryResult, getCachedProductData, cacheProductData } from './cache'
+import { notFound, parseJPYPrice } from './types'
+import { runPlatformQuery } from './runner'
+import { getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
 
@@ -170,24 +171,11 @@ async function queryYahooWeb(catalogNumber: string, signal?: AbortSignal): Promi
   }
 }
 
-export async function queryYahoo(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.yahoo', 'query start', { catalogNumber })
-  const cacheContext = getSetting('fastMode') ? 'fast' : 'full'
-  const cached = getCachedQueryResult('yahoo', catalogNumber, cacheContext)
-  if (cached) return cached
-
-  let result: QueryResult
-
-  try {
-    result = await queryYahooWeb(catalogNumber, signal)
-  } catch (err) {
-    throwIfAborted(signal)
-    logger.warn('queries.yahoo', 'query failed', { catalogNumber, error: errorMessage(err) })
-    result = queryError('yahoo', err instanceof Error ? err.message : 'Unknown error')
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result, cacheContext)
-  return result
+export function queryYahoo(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'yahoo',
+    tag: 'queries.yahoo',
+    cacheContext: getSetting('fastMode') ? 'fast' : 'full',
+    run: (runSignal) => queryYahooWeb(catalogNumber, runSignal)
+  })
 }

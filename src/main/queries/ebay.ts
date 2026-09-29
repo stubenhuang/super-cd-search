@@ -7,8 +7,8 @@ import { abortableDelay, gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError } from './types'
+import { runPlatformQuery } from './runner'
 import { type Page, type ElementHandle } from 'puppeteer'
-import { getCachedQueryResult, cacheQueryResult } from './cache'
 import { logger } from '../logger'
 
 const EBAY_API_URL = 'https://api.ebay.com'
@@ -388,32 +388,21 @@ async function queryEbayWeb(catalogNumber: string, signal?: AbortSignal): Promis
   }
 }
 
-export async function queryEbay(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
-  throwIfAborted(signal)
-  logger.debug('queries.ebay', 'query start', { catalogNumber })
+export function queryEbay(catalogNumber: string, signal?: AbortSignal): Promise<QueryResult> {
   const hasApiCredentials = !!getSetting('ebayClientId') && !!getSetting('ebayClientSecret')
-  const cacheContext = hasApiCredentials ? 'api' : 'web'
-  const cached = getCachedQueryResult('ebay', catalogNumber, cacheContext)
-  if (cached) return cached
-
-  logger.debug('queries.ebay', 'query mode', { catalogNumber, hasApiToken: hasApiCredentials })
-
-  let result: QueryResult
-
-  try {
-    result = await queryEbayApi(catalogNumber, signal)
-  } catch (err) {
-    throwIfAborted(signal)
-    logger.warn('queries.ebay', 'API failed, falling back to web scraping', { catalogNumber, error: errorMessage(err) })
-    try {
-      result = await queryEbayWeb(catalogNumber, signal)
-    } catch (webErr) {
-      throwIfAborted(signal)
-      result = queryError('ebay', webErr instanceof Error ? webErr.message : 'Unknown error')
+  return runPlatformQuery(catalogNumber, signal, {
+    platform: 'ebay',
+    tag: 'queries.ebay',
+    cacheContext: hasApiCredentials ? 'api' : 'web',
+    run: async (runSignal) => {
+      logger.debug('queries.ebay', 'query mode', { catalogNumber, hasApiToken: hasApiCredentials })
+      try {
+        return await queryEbayApi(catalogNumber, runSignal)
+      } catch (err) {
+        throwIfAborted(runSignal)
+        logger.warn('queries.ebay', 'API failed, falling back to web scraping', { catalogNumber, error: errorMessage(err) })
+        return queryEbayWeb(catalogNumber, runSignal)
+      }
     }
-  }
-
-  throwIfAborted(signal)
-  cacheQueryResult(catalogNumber, result, cacheContext)
-  return result
+  })
 }
