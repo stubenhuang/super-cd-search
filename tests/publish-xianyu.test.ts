@@ -7,7 +7,6 @@ const {
   mockRevealPublishWindow,
   mockParkPublishWindow,
   mockIsPublishProfileRunning,
-  mockPeekPublishProfileLogin,
   mockClosePublishProfile,
   mockDownloadImage,
   mockAbortableDelay
@@ -16,7 +15,6 @@ const {
   mockRevealPublishWindow: vi.fn(),
   mockParkPublishWindow: vi.fn(),
   mockIsPublishProfileRunning: vi.fn(),
-  mockPeekPublishProfileLogin: vi.fn(),
   mockClosePublishProfile: vi.fn(),
   mockDownloadImage: vi.fn(),
   mockAbortableDelay: vi.fn(async () => undefined)
@@ -35,7 +33,6 @@ vi.mock('../src/main/publish/profiles', async () => {
     parkPublishWindow: mockParkPublishWindow,
     publishProfileId: (id: string) => `target-${id}`,
     isPublishProfileRunning: mockIsPublishProfileRunning,
-    peekPublishProfileLogin: mockPeekPublishProfileLogin,
     closePublishProfile: mockClosePublishProfile,
     readXianyuLogin: async (page: { cookies: (url: string) => Promise<unknown[]> }) => {
       const cookies = await page.cookies(LOGIN_DEFS.xianyu.cookieUrl).catch(() => []) as Array<{ name: string; value: string }>
@@ -68,7 +65,6 @@ import {
   selectCondition,
   uploadCoverImage,
   dumpPage,
-  peekTargetLogin,
   loginTargetProfile,
   publishToXianyu,
   type XianyuPublishInput
@@ -215,7 +211,6 @@ beforeEach(() => {
   mockRevealPublishWindow.mockResolvedValue(undefined)
   mockParkPublishWindow.mockResolvedValue(undefined)
   mockIsPublishProfileRunning.mockReturnValue(true)
-  mockPeekPublishProfileLogin.mockResolvedValue(null)
 })
 
 afterEach(() => {
@@ -453,19 +448,6 @@ describe('dumpPage', () => {
     const { page } = createFakePage({ screenshotError: new Error('no surface') })
     page.content.mockRejectedValue(new Error('target closed'))
     expect(await dumpPage(page as never, 'xianyu-X-1-gone')).toEqual([])
-  })
-})
-
-describe('peekTargetLogin', () => {
-  it('reports not_started without a running profile (never launches Chrome)', async () => {
-    mockPeekPublishProfileLogin.mockResolvedValue(null)
-    await expect(peekTargetLogin('t1')).resolves.toEqual({ running: false, state: 'not_started', account: '' })
-    expect(mockPeekPublishProfileLogin).toHaveBeenCalledWith('target-t1')
-  })
-
-  it('reports the running profile snapshot', async () => {
-    mockPeekPublishProfileLogin.mockResolvedValue({ state: 'logged_in', account: '闲鱼小铺' })
-    await expect(peekTargetLogin('t1')).resolves.toEqual({ running: true, state: 'logged_in', account: '闲鱼小铺' })
   })
 })
 

@@ -4,8 +4,5 @@ export {
   cancelLogin,
   getLoginStatus,
   acquireLoginPage,
-  isLoginSessionRunning,
-  closeLoginSession,
-  type AcquiredLoginPage,
-  type ChromeSessionMode
+  closeLoginSession
 } from './session'

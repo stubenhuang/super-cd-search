@@ -287,10 +287,6 @@ async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   }
 }
 
-export function isLoginSessionRunning(): boolean {
-  return session !== null
-}
-
 /** On-screen position used while an interactive flow needs a human. */
 const WINDOW_ON_SCREEN = { left: 80, top: 80 }
 /** Off-screen parking spot matching the --window-position launch flag. */

@@ -247,10 +247,6 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
     }
   }
 
-  const handleCancel = () => {
-    onClose()
-  }
-
   const toggleBarcodeProvider = (provider: BarcodeProvider) => {
     setBarcodeProviders(prev => {
       if (prev.includes(provider)) return prev.filter(p => p !== provider)
@@ -1007,7 +1003,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
   }
 
   return (
-    <div className="settings-overlay" onClick={handleCancel}>
+    <div className="settings-overlay" onClick={onClose}>
       <div className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" onClick={e => e.stopPropagation()}>
         {/* Sidebar */}
         <nav className="settings-sidebar">
@@ -1048,7 +1044,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
           <footer className="settings-footer">
             <span className="st-footer-hint">{t('settings.footerHint')}</span>
             <div className="st-footer-actions">
-              <button className="st-btn-cancel" onClick={handleCancel}>{t('settings.cancel')}</button>
+              <button className="st-btn-cancel" onClick={onClose}>{t('settings.cancel')}</button>
               <button className="st-btn-save" onClick={handleSave} disabled={saving}>
                 {saving ? t('settings.saving') : t('settings.save')}
               </button>

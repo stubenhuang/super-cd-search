@@ -1,6 +1,5 @@
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
-import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
 import { notFound, queryError, parseJPYPrice } from './types'
 import { getCachedQueryResult, cacheQueryResult } from './cache'

@@ -1,13 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   normalizePublishTarget,
-  listPublishTargets,
   listEnabledPublishTargets,
   getPublishTarget,
   patchPublishTarget,
   preparePublishTargets,
   resolveDiscogsToken,
-  isTargetCredentialReady,
   discogsTokenFingerprint
 } from '../src/main/publish/targets'
 import { setSetting, getSetting } from '../src/main/settings'
@@ -169,9 +167,8 @@ describe('normalizePublishTarget', () => {
   })
 })
 
-describe('listPublishTargets / listEnabledPublishTargets / getPublishTarget', () => {
+describe('listEnabledPublishTargets / getPublishTarget', () => {
   it('returns an empty list when nothing is configured', () => {
-    expect(listPublishTargets()).toEqual([])
     expect(listEnabledPublishTargets()).toEqual([])
     expect(getPublishTarget('missing')).toBeNull()
   })
@@ -193,18 +190,16 @@ describe('listPublishTargets / listEnabledPublishTargets / getPublishTarget', ()
       rawTarget({ id: 'xy-1', enabled: false })
     ] as never)
 
-    const list = listPublishTargets()
-    expect(list).toHaveLength(2)
-    expect(list.map(target => target.id)).toEqual(['valid-1', 'xy-1'])
-    expect(listEnabledPublishTargets().map(target => target.id)).toEqual(['valid-1'])
+    // Both entries survive normalization; only the enabled one is listed.
+    expect(getPublishTarget('valid-1')?.account).toBe('seller')
     expect(getPublishTarget('xy-1')?.name).toBe('闲鱼小店')
+    expect(listEnabledPublishTargets().map(target => target.id)).toEqual(['valid-1'])
     expect(getPublishTarget('nope')).toBeNull()
   })
 
   it('returns an empty array when the stored value is not an array', () => {
     setSetting('publishTargets', 'oops' as never)
     expect(getSetting('publishTargets')).toBe('oops')
-    expect(listPublishTargets()).toEqual([])
     expect(listEnabledPublishTargets()).toEqual([])
     expect(getPublishTarget('anything')).toBeNull()
   })
@@ -246,7 +241,7 @@ describe('patchPublishTarget', () => {
 
     expect(patchPublishTarget('missing', { account: 'x' })).toBeNull()
     expect(getPublishTarget('t-1')?.account).toBe('me')
-    expect(listPublishTargets()).toHaveLength(1)
+    expect(listEnabledPublishTargets()).toHaveLength(1)
   })
 
   it('normalizes an invalid patched value instead of storing it raw', () => {
@@ -332,34 +327,5 @@ describe('preparePublishTargets / global-token migration', () => {
     setSetting('discogsToken', 'global-token')
     const prepared = preparePublishTargets([rawTarget({ id: 'x-1' })])
     expect(prepared[0]?.token).toBeUndefined()
-  })
-})
-
-describe('isTargetCredentialReady', () => {
-  const base = { id: 't-1', name: 'target', account: '', enabled: true, createdAt: 1 } as const
-
-  it('requires a verified token for Discogs', () => {
-    const unverified = normalizePublishTarget({ ...base, platform: 'discogs', token: 'tok' })!
-    expect(isTargetCredentialReady(unverified)).toBe(false)
-
-    const verified = normalizePublishTarget({
-      ...base,
-      platform: 'discogs',
-      token: 'tok',
-      tokenFingerprint: discogsTokenFingerprint('tok')
-    })!
-    expect(isTargetCredentialReady(verified)).toBe(true)
-
-    // Editing the token invalidates the earlier verification by itself.
-    const changed = { ...verified, token: 'other' }
-    expect(isTargetCredentialReady(changed)).toBe(false)
-  })
-
-  it('requires a remembered login for 闲鱼', () => {
-    const neverLoggedIn = normalizePublishTarget({ ...base, platform: 'xianyu' })!
-    expect(isTargetCredentialReady(neverLoggedIn)).toBe(false)
-
-    const loggedInBefore = normalizePublishTarget({ ...base, platform: 'xianyu', xianyuLoginAt: 123 })!
-    expect(isTargetCredentialReady(loggedInBefore)).toBe(true)
   })
 })

@@ -74,18 +74,12 @@ describe('publishProfileDir', () => {
 })
 
 describe('session bookkeeping without launching Chrome', () => {
-  it('starts with no running profiles', async () => {
-    const { listRunningPublishProfiles } = await loadProfiles()
-    expect(listRunningPublishProfiles()).toEqual([])
-  })
-
   it('reports unknown profiles as not running and unpeekable', async () => {
     const profiles = await loadProfiles()
     expect(profiles.isPublishProfileRunning('nope')).toBe(false)
     await expect(profiles.peekPublishProfileLogin('nope')).resolves.toBeNull()
     // Nothing created the profile directory, i.e. no Chrome was launched.
     expect(existsSync(profiles.publishProfileDir('nope'))).toBe(false)
-    expect(profiles.listRunningPublishProfiles()).toEqual([])
   })
 
   it('closing an unknown profile (even with wipe) is a safe no-op', async () => {
@@ -93,7 +87,6 @@ describe('session bookkeeping without launching Chrome', () => {
     await expect(profiles.closePublishProfile('nope', { wipe: true })).resolves.toBeUndefined()
     await expect(profiles.closePublishProfile('nope')).resolves.toBeUndefined()
     await expect(profiles.closeAllPublishProfiles()).resolves.toBeUndefined()
-    expect(profiles.listRunningPublishProfiles()).toEqual([])
   })
 
   it('revealing/parking an unknown profile is a safe no-op', async () => {

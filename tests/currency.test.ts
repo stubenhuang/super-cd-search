@@ -50,13 +50,6 @@ describe('currency', () => {
     expect(await second.convertToUSD(100, 'JPY')).toBeNull()
   })
 
-  it('formatPriceUSD formats prices and dashes for null', async () => {
-    const { formatPriceUSD } = await loadCurrency()
-    expect(formatPriceUSD(null)).toBe('-')
-    expect(formatPriceUSD(12.345)).toBe('$12.35')
-    expect(formatPriceUSD(0)).toBe('$0.00')
-  })
-
   it('convertToUSDWithFallback uses API rates when available', async () => {
     mockRatesFetch()
     const { convertToUSDWithFallback } = await loadCurrency()

@@ -30,7 +30,7 @@ vi.mock('../src/main/settings', () => ({
   }
 }))
 
-import { forgetTarget, getTargetStatus, loginTarget, resetTargetStatusCache, testTarget } from '../src/main/publish/status'
+import { forgetTarget, getTargetStatus, loginTarget, testTarget } from '../src/main/publish/status'
 import { discogsTokenFingerprint, getPublishTarget } from '../src/main/publish/targets'
 
 const XIANYU_TARGET = {
@@ -58,7 +58,6 @@ function setTargets(targets: unknown[]): void {
 beforeEach(() => {
   vi.clearAllMocks()
   mockStore.data = {}
-  resetTargetStatusCache()
   mockPeekPublishProfileLogin.mockResolvedValue(null)
   mockClosePublishProfile.mockResolvedValue(undefined)
   mockLoginTargetProfile.mockResolvedValue({ ok: false, message: 'not configured' })
@@ -138,10 +137,11 @@ describe('getTargetStatus: discogs', () => {
 
   it('caches a failed probe briefly so the settings page cannot hammer the API', async () => {
     mockVerifyDiscogsCredentials.mockResolvedValue({ ok: false, message: '网络错误' })
-    setTargets([{ ...DISCOGS_TARGET, token: 'tok', account: '' }])
+    // A unique id keeps the probe cache of the earlier tests out of the way.
+    setTargets([{ ...DISCOGS_TARGET, id: 'd-probe', token: 'tok', account: '' }])
 
-    await getTargetStatus('d-1')
-    await getTargetStatus('d-1')
+    await getTargetStatus('d-probe')
+    await getTargetStatus('d-probe')
     expect(mockVerifyDiscogsCredentials).toHaveBeenCalledTimes(1)
   })
 })

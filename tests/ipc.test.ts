@@ -9,11 +9,11 @@ const { mockGetSettings, mockGetSetting, mockSetSetting, mockUpdateSettings, moc
   mockDeleteSetting: vi.fn()
 }))
 
-const { mockStartChallenge, mockCancelChallenge, mockGetStatus, mockCloseChrome } = vi.hoisted(() => ({
-  mockStartChallenge: vi.fn(),
-  mockCancelChallenge: vi.fn(),
-  mockGetStatus: vi.fn(),
-  mockCloseChrome: vi.fn()
+const { mockStartLogin, mockCancelLogin, mockGetLoginStatus, mockCloseLoginSession } = vi.hoisted(() => ({
+  mockStartLogin: vi.fn(),
+  mockCancelLogin: vi.fn(),
+  mockGetLoginStatus: vi.fn(),
+  mockCloseLoginSession: vi.fn()
 }))
 
 const { mockExecuteBatchQuery, mockCancelBatchQuery } = vi.hoisted(() => ({
@@ -54,20 +54,19 @@ const { mockGetLanStatus, mockGetLanCandidates, mockApplyLanServer, mockRegenera
   mockSetLanSearchState: vi.fn()
 }))
 
-vi.mock('../src/main/settings', () => ({
-  getSettings: mockGetSettings,
-  getSetting: mockGetSetting,
-  setSetting: mockSetSetting,
-  updateSettings: mockUpdateSettings,
-  deleteSetting: mockDeleteSetting,
-  PUBLIC_SETTING_KEYS: new Set([
-    'discogsToken', 'ebayClientId', 'ebayClientSecret',
-    'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
-    'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
-    'lanEnabled', 'lanHost', 'lanPort',
-    'barcodeProviders', 'lastExportDirectory', 'publishTargets'
-  ])
-}))
+vi.mock('../src/main/settings', async () => {
+  // The real key list is the single source of truth: a hard-coded copy here
+  // drifts silently whenever a setting is added (it already had, twice).
+  const actual = await vi.importActual<typeof import('../src/main/settings')>('../src/main/settings')
+  return {
+    ...actual,
+    getSettings: mockGetSettings,
+    getSetting: mockGetSetting,
+    setSetting: mockSetSetting,
+    updateSettings: mockUpdateSettings,
+    deleteSetting: mockDeleteSetting
+  }
+})
 
 vi.mock('../src/main/settings/backup', () => ({
   exportSettingsBackup: mockExportSettingsBackup,
@@ -75,10 +74,10 @@ vi.mock('../src/main/settings/backup', () => ({
 }))
 
 vi.mock('../src/main/login', () => ({
-  startLogin: mockStartChallenge,
-  cancelLogin: mockCancelChallenge,
-  getLoginStatus: mockGetStatus,
-  closeLoginSession: mockCloseChrome
+  startLogin: mockStartLogin,
+  cancelLogin: mockCancelLogin,
+  getLoginStatus: mockGetLoginStatus,
+  closeLoginSession: mockCloseLoginSession
 }))
 
 vi.mock('../src/main/orchestrator', () => ({
@@ -284,15 +283,15 @@ describe('registerCurrencyIpc', () => {
 
 describe('registerLoginIpc', () => {
   it('registers the login lifecycle handlers', async () => {
-    mockStartChallenge.mockResolvedValue({ status: 'done' })
-    mockGetStatus.mockResolvedValue({ state: 'verified', expiresAt: 123 })
-    mockCloseChrome.mockResolvedValue(undefined)
-    mockCancelChallenge.mockReturnValue(undefined)
+    mockStartLogin.mockResolvedValue({ status: 'done' })
+    mockGetLoginStatus.mockResolvedValue({ state: 'verified', expiresAt: 123 })
+    mockCloseLoginSession.mockResolvedValue(undefined)
+    mockCancelLogin.mockReturnValue(undefined)
 
     registerLoginIpc()
 
     expect(await handler('login:start')(null, 'xianyu')).toEqual({ status: 'done' })
-    expect(mockStartChallenge).toHaveBeenCalledWith('xianyu')
+    expect(mockStartLogin).toHaveBeenCalledWith('xianyu')
 
     expect(await handler('login:status')(null, 'xianyu')).toEqual({
       state: 'verified',
@@ -300,10 +299,10 @@ describe('registerLoginIpc', () => {
     })
 
     await handler('login:close')()
-    expect(mockCloseChrome).toHaveBeenCalled()
+    expect(mockCloseLoginSession).toHaveBeenCalled()
 
     await handler('login:cancel')()
-    expect(mockCancelChallenge).toHaveBeenCalled()
+    expect(mockCancelLogin).toHaveBeenCalled()
   })
 })
 

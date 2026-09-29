@@ -97,11 +97,6 @@ export async function convertFromUSD(amount: number, to: Currency): Promise<numb
   return Math.round((amount / rateToUsd) * 100) / 100
 }
 
-export function formatPriceUSD(price: number | null): string {
-  if (price === null) return '-'
-  return `$${price.toFixed(2)}`
-}
-
 // Fallback rates (approximate, used when API fails)
 const FALLBACK_RATES: ExchangeRates = {
   JPY: 0.0067,

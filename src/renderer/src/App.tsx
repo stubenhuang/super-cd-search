@@ -23,6 +23,9 @@ import './App.css'
 
 type SearchMode = 'standard' | 'deep'
 
+/** Renderer-side cap on how many catalog numbers one search accepts. */
+const MAX_SEARCH_INPUT_CATALOGS = 10
+
 function mergePlatformResults(existing: QueryResult[], incoming: QueryResult[]): QueryResult[] {
   const merged = [...existing]
   for (const newResult of incoming) {
@@ -356,8 +359,6 @@ function App() {
     return lines.map(normalizeCatalogNumber)
   }, [])
 
-  const MAX_SEARCH_INPUT_CATALOGS = 10
-
   // After the search pipeline settles, offer LLM smart generation for any
   // catalog whose detail fields are still incomplete. Stays silent when the
   // LLM is not configured — there is nothing to ask for in that case.
@@ -399,7 +400,7 @@ function App() {
       return
     }
 
-    if (catalogNumbers.length > 10) {
+    if (catalogNumbers.length > MAX_SEARCH_INPUT_CATALOGS) {
       setError(t('error.maxCatalog'))
       return
     }
@@ -700,8 +701,7 @@ function App() {
   const runDeepDig = useCallback(async (
     targets: string[],
     platforms: Platform[],
-    workingResults: Map<string, QueryResult[]>,
-    workingEnriched: Map<string, CDDetails>
+    workingResults: Map<string, QueryResult[]>
   ): Promise<Map<string, QueryResult[]> | null> => {
     if (targets.length === 0 || platforms.length === 0 || isDeepSearching) return null
 
@@ -740,7 +740,7 @@ function App() {
     if (autoFlow?.kind !== 'deep-dig-prompt') return
     const { catalogs, platforms } = autoFlow
     setAutoFlow(null)
-    const merged = await runDeepDig(catalogs, platforms, results, enrichedDetails)
+    const merged = await runDeepDig(catalogs, platforms, results)
     if (cancelledRef.current) return
     await maybePromptSmartGenerate(catalogOrder, merged ?? results, enrichedDetails)
   }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, runDeepDig])
@@ -785,7 +785,6 @@ function App() {
           cancelled = true
           break
         }
-        if (enrichment.status === 'error') failed++
         workingEnriched.set(catalogNumber, enrichment.details)
         setEnrichedDetails(new Map(workingEnriched))
         completedCatalogs.push(catalogNumber)

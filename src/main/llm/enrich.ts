@@ -258,7 +258,8 @@ export async function enrichDetails(
   }
   const runSignal = signal ?? abortController!.signal
 
-  const llmSettings = getSetting('llm')!
+  const llmSettings = getSetting('llm')
+  if (!llmSettings) return notConfiguredResult()
   logger.debug('llm.enrich', 'LLM configured', { catalogNumber: normalizedCatalog, model: llmSettings.model })
   const client = new LLMClient(llmSettings)
   const existingByPlatform = new Map(safeResults.map(result => [result.platform, result]))
@@ -299,12 +300,16 @@ export async function enrichDetails(
         continue
       }
 
-      // 1. Resolve the product URL. Existing not_found/challenge results are
-      //    trusted and skipped — sources that can't find the item never reach LLM.
+      // Resolve the product URL. Existing found results are reused as-is;
+      // not_found/challenge results are trusted and skipped — sources that
+      // can't find the item never reach the LLM.
       let result = existingByPlatform.get(platform)
-      if (result && result.status === 'found' && result.link) {
-        // Reuse the search result the renderer already has.
-      } else if (result && result.status !== 'found') {
+      if (result && result.status === 'found') {
+        if (!result.link) {
+          skip(platform, 'no_product_link')
+          continue
+        }
+      } else if (result) {
         skip(platform, 'not_found')
         continue
       } else {
@@ -317,6 +322,14 @@ export async function enrichDetails(
           skip(platform, 'not_found')
           continue
         }
+        if (!result || result.status !== 'found') {
+          skip(platform, 'not_found')
+          continue
+        }
+        if (!result.link) {
+          skip(platform, 'no_product_link')
+          continue
+        }
       }
 
       throwIfAborted(runSignal)
@@ -327,15 +340,6 @@ export async function enrichDetails(
         status: result?.status ?? 'missing',
         hasLink: !!result?.link
       })
-
-      if (!result || result.status !== 'found') {
-        skip(platform, 'not_found')
-        continue
-      }
-      if (!result.link) {
-        skip(platform, 'no_product_link')
-        continue
-      }
 
       // 2. Reuse whatever deterministic scraper fields this source already has.
       mergeMissingDetails(working, result.details)

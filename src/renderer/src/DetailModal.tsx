@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { QueryResult, CDDetails } from './electron-api'
 import { PLATFORM_LABELS } from '../../shared/platforms'
 import { DETAIL_KEYS, aggregateDetails, missingDetailKeys, isValidDetailValue } from '../../shared/details'

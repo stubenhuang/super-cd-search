@@ -6,12 +6,10 @@ import {
   acquirePublishPage,
   isPublishProfileRunning,
   parkPublishWindow,
-  peekPublishProfileLogin,
   publishProfileId,
   readXianyuLogin,
   revealPublishWindow
 } from './profiles'
-import type { LoginState } from '../login/defs'
 import { abortableDelay, gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { downloadImage } from '../image'
 import { logger } from '../logger'
@@ -38,7 +36,7 @@ const SUCCESS_TEXTS = ['发布成功', '已发布', '上架成功', '发布完�
  * Candidate selectors per field, tried in order. Extend these from the dumps
  * written to `<userData>/publish-artifacts/` when 闲鱼 changes its DOM.
  */
-const SELECTORS: Record<string, string[]> = {
+const SELECTORS = {
   title: [
     'input[placeholder*="标题"]',
     'input[placeholder*="宝贝名称"]',
@@ -67,10 +65,8 @@ const SELECTORS: Record<string, string[]> = {
     '[data-spm*="condition"]'
   ],
   imageInput: ['input[type="file"][accept*="image"]', 'input[type="file"]'],
-  imageUrlInput: ['input[placeholder*="图片链接"]', 'input[placeholder*="图片地址"]'],
-  /** Reserved for a future fully-automatic mode; the half-automatic flow never clicks it. */
-  submit: ['button[type="submit"]', '[class*="publish"] button', '[class*="发布"]']
-}
+  imageUrlInput: ['input[placeholder*="图片链接"]', 'input[placeholder*="图片地址"]']
+} as const satisfies Record<string, readonly string[]>
 
 const USER_SUBMIT_TIMEOUT_MS = 10 * 60 * 1000
 const POLL_INTERVAL_MS = 2000
@@ -103,13 +99,14 @@ export interface XianyuPublishResult {
 }
 
 function artifactDir(): string {
-  return join(app.getPath('userData'), 'publish-artifacts')
+  const dir = join(app.getPath('userData'), 'publish-artifacts')
+  mkdirSync(dir, { recursive: true })
+  return dir
 }
 
 /** Always capture the page: it is the only way to harden the selector maps. */
 export async function dumpPage(page: Page, label: string): Promise<string[]> {
   const dir = artifactDir()
-  mkdirSync(dir, { recursive: true })
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const base = join(dir, `${label}-${stamp}`)
   const paths: string[] = []
@@ -225,10 +222,8 @@ export async function uploadCoverImage(page: Page, selectors: readonly string[],
   const image = await downloadImage(imageUrl, 1000, true)
   if (!image) return false
 
-  const dir = artifactDir()
-  mkdirSync(dir, { recursive: true })
   const extension = image.mimeType === 'image/png' ? 'png' : 'jpg'
-  const file = join(dir, `cover-${Date.now()}.${extension}`)
+  const file = join(artifactDir(), `cover-${Date.now()}.${extension}`)
   writeFileSync(file, Buffer.from(image.base64, 'base64'))
 
   try {
@@ -281,18 +276,6 @@ async function detectPublished(page: Page): Promise<{ published: boolean; url?: 
   const marker = SUCCESS_TEXTS.find(item => text.includes(item))
   if (marker) return { published: true, url: page.url() }
   return { published: false }
-}
-
-/**
- * Login snapshot of one publishing target's OWN browser profile.
- *
- * Never launches Chrome: when the target's session is not running there is
- * nothing to inspect, and the caller reports「未启动」instead.
- */
-export async function peekTargetLogin(targetId: string): Promise<{ running: boolean; state: LoginState | 'not_started'; account: string }> {
-  const snapshot = await peekPublishProfileLogin(publishProfileId(targetId))
-  if (!snapshot) return { running: false, state: 'not_started', account: '' }
-  return { running: true, state: snapshot.state, account: snapshot.account }
 }
 
 /**
@@ -390,18 +373,18 @@ export async function publishToXianyu(input: XianyuPublishInput): Promise<Xianyu
     }
 
     input.onProgress('正在填写发布表单…')
-    if (await fillTextInput(page, SELECTORS.title!, input.title)) filled.push('title')
+    if (await fillTextInput(page, SELECTORS.title, input.title)) filled.push('title')
     else missed.push('title')
-    if (await fillTextInput(page, SELECTORS.description!, input.description)) filled.push('description')
+    if (await fillTextInput(page, SELECTORS.description, input.description)) filled.push('description')
     else missed.push('description')
-    if (await fillTextInput(page, SELECTORS.price!, input.price)) filled.push('price')
+    if (await fillTextInput(page, SELECTORS.price, input.price)) filled.push('price')
     else missed.push('price')
-    if (await selectCondition(page, SELECTORS.condition!, input.condition)) filled.push('condition')
+    if (await selectCondition(page, SELECTORS.condition, input.condition)) filled.push('condition')
     else missed.push('condition')
 
     if (input.uploadCover && input.imageUrl) {
-      if (await uploadCoverImage(page, SELECTORS.imageInput!, input.imageUrl)) filled.push('image')
-      else if (await fillTextInput(page, SELECTORS.imageUrlInput!, input.imageUrl)) filled.push('image')
+      if (await uploadCoverImage(page, SELECTORS.imageInput, input.imageUrl)) filled.push('image')
+      else if (await fillTextInput(page, SELECTORS.imageUrlInput, input.imageUrl)) filled.push('image')
       else missed.push('image')
     }
 

@@ -1,6 +1,5 @@
 import type {
   QueryResult,
-  QueryStatus,
   Platform,
   CDDetails,
   Settings,
@@ -17,12 +16,9 @@ import type {
   LanCandidate,
   LanServerStatus,
   LanCatalogAddedEvent,
-  LanSearchMode,
   LanSearchPhase,
   LanSearchState,
-  LanSearchStatusResponse,
   BarcodeProvider,
-  BarcodeCatalogCandidate,
   SettingsTransferResult
 } from '../../shared/types'
 import type {
@@ -48,7 +44,6 @@ export type {
   PublishTargetStatus,
   PublishTargetTestResult,
   QueryResult,
-  QueryStatus,
   Platform,
   CDDetails,
   Settings,
@@ -64,12 +59,9 @@ export type {
   LanCandidate,
   LanServerStatus,
   LanCatalogAddedEvent,
-  LanSearchMode,
   LanSearchPhase,
   LanSearchState,
-  LanSearchStatusResponse,
   BarcodeProvider,
-  BarcodeCatalogCandidate,
   SettingsTransferResult
 }
 
@@ -77,8 +69,6 @@ export type {
 export interface BatchQueryProgressEvent extends BatchQueryProgress {
   event: string
 }
-
-export type { BatchQueryProgress }
 
 export interface IElectronAPI {
   /** The host platform (e.g. 'darwin', 'win32', 'linux'). */

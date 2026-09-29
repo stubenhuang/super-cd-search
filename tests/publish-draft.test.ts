@@ -13,13 +13,12 @@ vi.mock('../src/main/currency', () => ({ convertFromUSD: mockConvertFromUSD }))
 import {
   lowestUsdPrice,
   pickPrimaryResult,
-  mergeDetails,
   buildTitle,
   buildDiscogsFields,
   buildXianyuFields,
   buildPublishDraft
 } from '../src/main/publish/draft'
-import type { CDDetails, QueryResult } from '../src/shared/types'
+import type { QueryResult } from '../src/shared/types'
 import type { PublishPrepareRequest, PublishReleaseCandidate, PublishTarget } from '../src/shared/publish'
 
 function result(overrides: Partial<QueryResult> = {}): QueryResult {
@@ -114,53 +113,6 @@ describe('pickPrimaryResult', () => {
     const first = result({ status: 'not_found', name: 'Only' })
     expect(pickPrimaryResult([first, result({ status: 'error' })])).toBe(first)
     expect(pickPrimaryResult([])).toBeUndefined()
-  })
-})
-
-describe('mergeDetails', () => {
-  it('uses aggregated details and fills gaps from the enriched details', () => {
-    const results = [
-      result({ details: { label: 'Label A', format: null, country: null, released: null, genre: null } })
-    ]
-    const enriched: CDDetails = {
-      label: 'Label B',
-      format: 'CD',
-      country: 'Japan',
-      released: null,
-      genre: 'Rock'
-    }
-    const merged = mergeDetails(results, enriched)
-    expect(merged).toEqual({
-      label: 'Label A',
-      format: 'CD',
-      country: 'Japan',
-      released: null,
-      genre: 'Rock'
-    })
-  })
-
-  it('trims enriched values and ignores blank ones', () => {
-    const merged = mergeDetails([], {
-      label: '  Label C  ',
-      format: '   ',
-      country: null,
-      released: undefined as unknown as string,
-      genre: '  Pop '
-    })
-    expect(merged.label).toBe('Label C')
-    expect(merged.format).toBeNull()
-    expect(merged.released).toBeNull()
-    expect(merged.genre).toBe('Pop')
-  })
-
-  it('returns everything empty when there is nothing to merge', () => {
-    expect(mergeDetails([], null)).toEqual({
-      label: null,
-      format: null,
-      country: null,
-      released: null,
-      genre: null
-    })
   })
 })
 

@@ -13,7 +13,6 @@ import {
   type PublishReleaseCandidate,
   type PublishTarget
 } from '../../shared/publish'
-import { aggregateDetails, isValidDetailValue, DETAIL_KEYS } from '../../shared/details'
 import { getPublishTarget, resolveDiscogsToken } from './targets'
 import { searchReleaseCandidates } from './discogs'
 import { logger } from '../logger'
@@ -53,19 +52,6 @@ export function pickPrimaryResult(results: readonly QueryResult[]): QueryResult 
   return results.find(result => result.status === 'found' && result.name) ||
     results.find(result => result.status === 'found') ||
     results[0]
-}
-
-/** Merge aggregated details with LLM-generated ones without overwriting. */
-export function mergeDetails(results: readonly QueryResult[], enriched?: CDDetails | null): CDDetails {
-  const merged = { ...aggregateDetails(results).details }
-  if (enriched) {
-    for (const key of DETAIL_KEYS) {
-      if (!isValidDetailValue(merged[key]) && isValidDetailValue(enriched[key])) {
-        merged[key] = enriched[key]!.trim()
-      }
-    }
-  }
-  return merged
 }
 
 /** `艺术家 — 专辑` (or whichever part exists), which is what both platforms expect. */

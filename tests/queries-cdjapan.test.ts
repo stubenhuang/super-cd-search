@@ -1,17 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createDomEvaluate } from './helpers/dom-evaluate'
 
-const { mockGetSetting, mockBrowserPool, mockConvert, mockTryLLMParse } = vi.hoisted(() => ({
+const { mockGetSetting, mockBrowserPool, mockConvert } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockBrowserPool: { acquire: vi.fn(), release: vi.fn() },
   mockConvert: vi.fn(async (amount: number) => amount),
-  mockTryLLMParse: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }))
-vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
 import { queryCdjapan } from '../src/main/queries/cdjapan'
 import { clearAllCaches } from '../src/main/queries/cache'
@@ -32,7 +30,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearAllCaches()
   mockGetSetting.mockReturnValue(undefined)
-  mockTryLLMParse.mockResolvedValue(null)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: {} })
   mockBrowserPool.release.mockResolvedValue(undefined)
 })
@@ -101,7 +98,6 @@ describe('queryCdjapan', () => {
 
     const result = await queryCdjapan('X-1')
     expect(result.status).toBe('not_found')
-    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('serves a repeated lookup from the query cache', async () => {

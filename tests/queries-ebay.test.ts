@@ -1,18 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockGetSetting, mockThrottledFetch, mockBrowserPool, mockConvert, mockTryLLMParse } = vi.hoisted(() => ({
+const { mockGetSetting, mockThrottledFetch, mockBrowserPool, mockConvert } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockThrottledFetch: vi.fn(),
   mockBrowserPool: { acquire: vi.fn(), release: vi.fn() },
   mockConvert: vi.fn(async (amount: number) => amount),
-  mockTryLLMParse: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/throttle', () => ({ throttledFetch: mockThrottledFetch }))
 vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }))
-vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
 type EbayModule = typeof import('../src/main/queries/ebay')
 
@@ -86,7 +84,6 @@ beforeEach(() => {
     if (key === 'ebayClientSecret') return 'client-secret'
     return undefined
   })
-  mockTryLLMParse.mockResolvedValue(null)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: {} })
   mockBrowserPool.release.mockResolvedValue(undefined)
 })
@@ -237,7 +234,6 @@ describe('queryEbay', () => {
       link: 'https://www.ebay.com/itm/777',
       status: 'found'
     })
-    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('parses non-USD prices from the web and converts currency', async () => {
@@ -284,7 +280,6 @@ describe('queryEbay', () => {
 
     const result = await runWithFakeTimers(() => queryEbay('ABC-123'))
     expect(result.status).toBe('not_found')
-    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('tries alternative domains when the main domain blocks', async () => {

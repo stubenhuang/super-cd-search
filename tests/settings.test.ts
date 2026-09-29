@@ -5,29 +5,15 @@ import {
   setSetting,
   deleteSetting,
   getLanToken,
-  setLanToken
+  setLanToken,
+  PUBLIC_SETTING_KEYS
 } from '../src/main/settings'
 import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../src/shared/platforms'
 
 beforeEach(() => {
-  deleteSetting('discogsToken')
-  deleteSetting('ebayClientId')
-  deleteSetting('ebayClientSecret')
-  deleteSetting('proxyEnabled')
-  deleteSetting('proxyHost')
-  deleteSetting('proxyPort')
-  deleteSetting('standardPlatforms')
-  deleteSetting('deepPlatforms')
-  deleteSetting('fastMode')
-  deleteSetting('displayCurrency')
-  deleteSetting('llm')
-  deleteSetting('lanEnabled')
-  deleteSetting('lanHost')
-  deleteSetting('lanPort')
-  deleteSetting('barcodeProviders')
-  deleteSetting('lastExportDirectory')
-  deleteSetting('shimoSheetUrl')
-  deleteSetting('autoUpdateEnabled')
+  // Derived from the real key list so a newly added setting cannot leak
+  // between tests (and so this file never needs touching again).
+  for (const key of PUBLIC_SETTING_KEYS) deleteSetting(key)
   setLanToken('')
 })
 

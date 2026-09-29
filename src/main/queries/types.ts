@@ -3,10 +3,6 @@ import { convertToUSDWithFallback } from '../currency'
 
 export type { QueryResult, QueryStatus, Platform, CDDetails }
 
-export interface PlatformQuery {
-  execute(catalogNumber: string): Promise<QueryResult>
-}
-
 export function notFound(platform: Platform): QueryResult {
   return {
     platform,

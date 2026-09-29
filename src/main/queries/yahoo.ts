@@ -42,7 +42,7 @@ async function getYahooProductDetails(page: import('puppeteer').Page, link: stri
             result.released = value
           } else if (key.includes('レーベル') || key.includes('Label') || key.includes('厂牌')) {
             result.label = value
-          } else if (key.includes('ジャンル') || key.includes('Genre') || key.includes('ジャンル')) {
+          } else if (key.includes('ジャンル') || key.includes('Genre')) {
             result.genre = value
           }
         }

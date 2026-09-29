@@ -101,8 +101,6 @@ export function LanPanel({ isOpen, onClose }: LanPanelProps) {
         return t('lan.stateError', { error: lanStatus.error || t('lan.unknownError') })
       case 'no_network':
         return lanStatus.error || t('lan.stateNoNetwork')
-      case 'stopped':
-        return t('lan.stateStopped')
       default:
         return t('lan.stateDisabled')
     }

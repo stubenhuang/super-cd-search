@@ -117,18 +117,12 @@ export function decryptSettings(envelope: SettingsBackupEnvelope, password: stri
     throw new SettingsBackupError('corrupt_file')
   }
 
-  let salt: Buffer
-  let iv: Buffer
-  let authTag: Buffer
-  let ciphertext: Buffer
-  try {
-    salt = Buffer.from(envelope.kdf.salt, 'base64')
-    iv = Buffer.from(envelope.cipher.iv, 'base64')
-    authTag = Buffer.from(envelope.cipher.authTag, 'base64')
-    ciphertext = Buffer.from(envelope.ciphertext, 'base64')
-  } catch {
-    throw new SettingsBackupError('corrupt_file')
-  }
+  // Base64 decoding never throws for a string input; malformed payloads are
+  // caught by the decipher below and reported as corrupt_file there.
+  const salt = Buffer.from(envelope.kdf.salt, 'base64')
+  const iv = Buffer.from(envelope.cipher.iv, 'base64')
+  const authTag = Buffer.from(envelope.cipher.authTag, 'base64')
+  const ciphertext = Buffer.from(envelope.ciphertext, 'base64')
 
   const key = deriveKey(password, salt)
   let plaintext: Buffer

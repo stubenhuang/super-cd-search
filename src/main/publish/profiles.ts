@@ -240,10 +240,6 @@ export function isPublishProfileRunning(profileId: string): boolean {
   return sessions.has(profileId)
 }
 
-export function listRunningPublishProfiles(): string[] {
-  return [...sessions.keys()]
-}
-
 /**
  * Close one profile's Chrome. `wipe` also deletes the profile directory, which
  * is what「退出登录」means: the target loses its stored login.

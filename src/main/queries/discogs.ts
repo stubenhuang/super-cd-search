@@ -234,7 +234,7 @@ export function compactCatalog(value: string): string {
  * marketplace price and release details concurrently, then cache the release
  * data in memory for other searches.
  */
-async function buildDiscogsResultFromHit(hit: DiscogsSearchHit, catalogNumber: string, token: string, signal?: AbortSignal): Promise<QueryResult> {
+async function buildDiscogsResultFromHit(hit: DiscogsSearchHit, token: string, signal?: AbortSignal): Promise<QueryResult> {
   const titleParts = hit.title.split(' - ')
   const artist = titleParts[0] || null
   const name = titleParts.slice(1).join(' - ') || hit.title
@@ -302,7 +302,7 @@ async function queryDiscogsApi(catalogNumber: string, token: string, signal?: Ab
     title: first.title,
     exactCatalogMatch: !!exactMatch
   })
-  return buildDiscogsResultFromHit(first, catalogNumber, token, signal)
+  return buildDiscogsResultFromHit(first, token, signal)
 }
 
 /**
@@ -365,7 +365,7 @@ export async function queryDiscogsByBarcode(barcode: string): Promise<DiscogsBar
       }
     }
 
-    const result = await buildDiscogsResultFromHit(hit, catalogNumber, token)
+    const result = await buildDiscogsResultFromHit(hit, token)
     cacheQueryResult(catalogNumber, result, 'api')
 
     const lookup: DiscogsBarcodeLookup = {

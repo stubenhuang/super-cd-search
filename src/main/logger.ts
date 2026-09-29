@@ -87,11 +87,14 @@ function redactString(value: string): string {
   return result
 }
 
+function truncate(value: string): string {
+  return value.length > MAX_VALUE_LENGTH ? `${value.slice(0, MAX_VALUE_LENGTH)}...[truncated]` : value
+}
+
 function redactValue(key: string, value: unknown): unknown {
   if (SECRET_KEY_PATTERN.test(key)) return '***'
   if (typeof value === 'string') {
-    const redacted = redactString(value)
-    return redacted.length > MAX_VALUE_LENGTH ? `${redacted.slice(0, MAX_VALUE_LENGTH)}...[truncated]` : redacted
+    return truncate(redactString(value))
   }
   if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value
   if (value instanceof Error) {
@@ -119,9 +122,7 @@ function serializeMeta(meta?: LoggerMeta): string {
     safe[key] = redactValue(key, value)
   }
   const serialized = serialize(safe)
-  return serialized.length > MAX_VALUE_LENGTH
-    ? `${serialized.slice(0, MAX_VALUE_LENGTH)}...[truncated]`
-    : serialized
+  return truncate(serialized)
 }
 
 function dateStamp(now = new Date()): string {
@@ -196,7 +197,7 @@ function ensureLogFile(date: string): void {
   }
 }
 
-function writeToFile(level: LogLevel, line: string): void {
+function writeToFile(line: string): void {
   if (!logDir) return
   const date = dateStamp()
   ensureLogFile(date)
@@ -212,8 +213,7 @@ function writeToFile(level: LogLevel, line: string): void {
 }
 
 function formatMessage(message: string): string {
-  const redacted = redactString(message)
-  return redacted.length > MAX_VALUE_LENGTH ? `${redacted.slice(0, MAX_VALUE_LENGTH)}...[truncated]` : redacted
+  return truncate(redactString(message))
 }
 
 function emit(level: LogLevel, tag: string, message: string, meta?: LoggerMeta): void {
@@ -223,7 +223,7 @@ function emit(level: LogLevel, tag: string, message: string, meta?: LoggerMeta):
   const line = `${timestamp()} [${LEVEL_LABELS[level]}] [${tag}] ${formatMessage(message)}${metaText ? ` ${metaText}` : ''}`
 
   if (initialized && logDir) {
-    writeToFile(level, line)
+    writeToFile(line)
   }
 
   const consoleFn = level === 'debug' ? console.debug : level === 'info' ? console.info : level === 'warn' ? console.warn : console.error
@@ -269,15 +269,11 @@ export function getCurrentLogFile(): string | null {
   return currentFile
 }
 
-function log(level: LogLevel, tag: string, message: string, meta?: LoggerMeta): void {
-  emit(level, tag, message, meta)
-}
-
 export const logger = {
-  debug: (tag: string, message: string, meta?: LoggerMeta): void => log('debug', tag, message, meta),
-  info: (tag: string, message: string, meta?: LoggerMeta): void => log('info', tag, message, meta),
-  warn: (tag: string, message: string, meta?: LoggerMeta): void => log('warn', tag, message, meta),
-  error: (tag: string, message: string, meta?: LoggerMeta): void => log('error', tag, message, meta)
+  debug: (tag: string, message: string, meta?: LoggerMeta): void => emit('debug', tag, message, meta),
+  info: (tag: string, message: string, meta?: LoggerMeta): void => emit('info', tag, message, meta),
+  warn: (tag: string, message: string, meta?: LoggerMeta): void => emit('warn', tag, message, meta),
+  error: (tag: string, message: string, meta?: LoggerMeta): void => emit('error', tag, message, meta)
 }
 
 export function logFromRenderer(level: string, tag: string, message: string, meta?: LoggerMeta): void {

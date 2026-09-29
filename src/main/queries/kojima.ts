@@ -155,7 +155,7 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
 
     // Extract product details from Shopify product page
     const productDetails = await page.evaluate(() => {
-      const result: { format?: string; released?: string; label?: string; genre?: string; artist?: string } = {}
+      const result: { format?: string; released?: string; label?: string; genre?: string } = {}
 
       // Look for product description/accordion content
       const descriptionEl = document.querySelector('.product__description, .rte, .product-description, [data-product-description]') as HTMLElement | null
@@ -177,8 +177,6 @@ async function getKojimaProductDetails(page: import('puppeteer').Page, link: str
               result.label = value
             } else if (keyLower.includes('genre') || keyLower.includes('ジャンル')) {
               result.genre = value
-            } else if (keyLower.includes('artist') || keyLower.includes('アーティスト')) {
-              result.artist = value
             }
           }
         }

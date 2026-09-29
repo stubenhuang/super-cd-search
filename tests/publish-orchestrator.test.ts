@@ -15,8 +15,7 @@ vi.mock('../src/main/publish/discogs', () => ({
 }))
 vi.mock('../src/main/publish/xianyu', () => ({
   publishToXianyu: mockPublishToXianyu,
-  loginTargetProfile: vi.fn(),
-  peekTargetLogin: vi.fn()
+  loginTargetProfile: vi.fn()
 }))
 vi.mock('../src/main/orchestrator', () => ({
   isBatchQueryRunning: mockIsBatchQueryRunning,

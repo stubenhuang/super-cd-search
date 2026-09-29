@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { BrowserWindow } from 'electron'
-import { createServer } from 'net'
-import type { AddressInfo } from 'net'
 
 const { mockResolveBarcodeCatalogCached, mockNormalizeBarcode, mockIsBatchQueryRunning } = vi.hoisted(() => ({
   mockResolveBarcodeCatalogCached: vi.fn(),
@@ -30,16 +28,6 @@ import {
   setLanSearchCatalogCount
 } from '../src/main/lan'
 import { deleteSetting, setLanToken, setSetting } from '../src/main/settings'
-
-async function getFreePort(): Promise<number> {
-  return new Promise(resolve => {
-    const probe = createServer()
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address() as AddressInfo
-      probe.close(() => resolve(address.port))
-    })
-  })
-}
 
 function mockDesktopWindow(send = vi.fn()) {
   return { isDestroyed: () => false, webContents: { send } }

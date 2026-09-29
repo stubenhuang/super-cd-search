@@ -136,7 +136,6 @@ const zh = {
   'about.unsupported': '当前版本不支持自动更新（开发版或便携版），请到 GitHub 下载安装包',
   'about.viewOnGithub': '在 GitHub 查看',
   'about.releaseNotes': '更新说明',
-  'update.banner.checking': '正在检查更新…',
   'update.banner.available': '发现新版本 {version}，正在后台下载…',
   'update.banner.downloading': '正在下载更新 {percent}%',
   'update.banner.downloaded': '新版本 {version} 已下载完成',
@@ -199,7 +198,6 @@ const zh = {
   'lan.port': '端口',
   'lan.stateRunning': '服务运行中：http://{host}:{port}/',
   'lan.stateDisabled': '服务未启用。保存并启用后才会显示二维码。',
-  'lan.stateStopped': '服务已停止',
   'lan.stateError': '服务启动失败：{error}',
   'lan.stateNoNetwork': '未检测到局域网 IPv4 地址，请手动选择或输入',
   'lan.unknownError': '未知错误',
@@ -336,7 +334,6 @@ const zh = {
   'settings.publishLogoutSuccess': '已退出该目标的闲鱼登录',
   'settings.publishLogoutFailed': '退出登录失败',
   'settings.publishXianyuLoginGuide': '点「编辑」，用该目标自己的闲鱼账号扫码登录（独立会话，与搜索源登录互不影响）。',
-  'settings.publishXianyuLoginReady': '该目标已用自己的闲鱼账号登录，可以自动填写卖家工作台。',
   'settings.publishXianyuIndependentNote': '每个闲鱼目标都是一个独立账号，需要各自「扫码登录」；该登录与「设置 → 登录」里搜索源的闲鱼登录互不影响，也不会共用 cookie。',
   'settings.publishDeleteConfirmXianyu': '确定删除发布目标「{name}」吗？同时会清除该目标自己的闲鱼登录数据。',
 
@@ -383,7 +380,6 @@ const zh = {
   'publish.shimoReminder': '请把这条发布记录更新到「石墨文档」。',
   'publish.shimoOpen': '去石墨文档',
   'publish.artifacts': '已保存以下排查文件（截图 / 页面 HTML），可用于定位失败原因：',
-  'publish.unknownError': '未知错误',
 
   // Publish preview fields (keys are emitted verbatim by the main process)
   'publish.field.catalogNumber': '目录号',

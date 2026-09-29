@@ -39,11 +39,6 @@ function invalidateProbe(targetId: string): void {
   probeCache.delete(targetId)
 }
 
-/** Test seam: a fresh process (or a new suite) must not inherit probe results. */
-export function resetTargetStatusCache(): void {
-  probeCache.clear()
-}
-
 /**
  * Whether the stored token has already been verified. A successful probe writes
  * the fingerprint, so this is a pure comparison: edit the token and it stops

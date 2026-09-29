@@ -15,9 +15,8 @@ import type {
   PublishStage
 } from '../../shared/publish'
 
-export { listEnabledPublishTargets, listPublishTargets, getPublishTarget, normalizePublishTarget, resolveDiscogsToken } from './targets'
+export { listEnabledPublishTargets } from './targets'
 export { buildPublishDraft } from './draft'
-export { verifyDiscogsCredentials } from './discogs'
 export { forgetTarget, getTargetStatus, loginTarget, testTarget } from './status'
 export { closeAllPublishProfiles, initPublishProfiles } from './profiles'
 
@@ -57,9 +56,9 @@ function readNumber(fields: readonly PublishField[], key: string): number | null
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function readBoolean(fields: readonly PublishField[], key: string, fallback = false): boolean {
+function readBoolean(fields: readonly PublishField[], key: string): boolean {
   const value = readField(fields, key)?.value
-  return typeof value === 'boolean' ? value : fallback
+  return typeof value === 'boolean' ? value : false
 }
 
 function failure(

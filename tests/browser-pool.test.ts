@@ -1,11 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { mockLaunch, mockStealthUse } = vi.hoisted(() => ({
+const { mockLaunch, mockStealthUse, mockGetSetting } = vi.hoisted(() => ({
   mockLaunch: vi.fn(),
-  mockStealthUse: vi.fn()
-}))
-
-const { mockGetSetting } = vi.hoisted(() => ({
+  mockStealthUse: vi.fn(),
   mockGetSetting: vi.fn()
 }))
 

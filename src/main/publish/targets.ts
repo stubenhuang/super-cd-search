@@ -154,17 +154,6 @@ function migrateDiscogsTokens(targets: PublishTarget[]): PublishTarget[] {
  * perfectly good target. Discogs has no session: its token must be present and
  * carry the fingerprint written after a successful `/oauth/identity` check.
  */
-export function isTargetCredentialReady(target: PublishTarget): boolean {
-  if (target.platform === 'xianyu') return Boolean(target.xianyuLoginAt)
-  const token = (target.token ?? '').trim()
-  if (!token) return false
-  return (target.tokenFingerprint ?? '') === discogsTokenFingerprint(token)
-}
-
-export function listPublishTargets(): PublishTarget[] {
-  return readTargets()
-}
-
 export function listEnabledPublishTargets(): PublishTarget[] {
   return readTargets().filter(target => target.enabled)
 }

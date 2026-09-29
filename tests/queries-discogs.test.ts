@@ -1,18 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockGetSetting, mockThrottledFetch, mockBrowserPool, mockConvert, mockTryLLMParse } = vi.hoisted(() => ({
+const { mockGetSetting, mockThrottledFetch, mockBrowserPool, mockConvert } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockThrottledFetch: vi.fn(),
   mockBrowserPool: { acquire: vi.fn(), release: vi.fn() },
   mockConvert: vi.fn(async (amount: number) => amount),
-  mockTryLLMParse: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/throttle', () => ({ throttledFetch: mockThrottledFetch }))
 vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }))
-vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
 import {
   queryDiscogs,
@@ -58,7 +56,6 @@ beforeEach(() => {
     if (key === 'discogsToken') return 'token-123'
     return undefined
   })
-  mockTryLLMParse.mockResolvedValue(null)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: {} })
   mockBrowserPool.release.mockResolvedValue(undefined)
 })
@@ -453,7 +450,6 @@ describe('queryDiscogs', () => {
 
       const result = await queryDiscogs('UCCG-90530')
       expect(result.name).toBe('Some Album')
-      expect(mockTryLLMParse).not.toHaveBeenCalled()
     })
 
     it('returns not_found when DOM extraction misses the name and never invokes LLM', async () => {
@@ -464,7 +460,6 @@ describe('queryDiscogs', () => {
 
       const result = await queryDiscogs('UCCG-90530')
       expect(result.status).toBe('not_found')
-      expect(mockTryLLMParse).not.toHaveBeenCalled()
     })
 
     it('returns a query error when both API and web fail', async () => {

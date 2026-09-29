@@ -1,18 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createDomEvaluate } from './helpers/dom-evaluate'
 
-const { mockGetSetting, mockBrowserPool, mockConvert, mockTryLLMParse, mockThrottledFetch } = vi.hoisted(() => ({
+const { mockGetSetting, mockBrowserPool, mockConvert, mockThrottledFetch } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockBrowserPool: { acquire: vi.fn(), release: vi.fn() },
   mockConvert: vi.fn(async (amount: number) => Math.round(amount * 0.0067 * 100) / 100),
-  mockTryLLMParse: vi.fn(),
   mockThrottledFetch: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }))
-vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 vi.mock('../src/main/throttle', () => ({ throttledFetch: mockThrottledFetch }))
 
 import { queryKojima } from '../src/main/queries/kojima'
@@ -64,7 +62,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearAllCaches()
   mockGetSetting.mockReturnValue(undefined)
-  mockTryLLMParse.mockResolvedValue(null)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: {} })
   mockBrowserPool.release.mockResolvedValue(undefined)
   mockThrottledFetch.mockResolvedValue(notOk())
@@ -157,21 +154,10 @@ describe('queryKojima', () => {
       '<div class="product__description"></div>'
     ])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-    mockTryLLMParse.mockResolvedValue({
-      platform: 'kojima',
-      name: 'LLM Album',
-      artist: null,
-      priceMin: null,
-      priceMax: null,
-      coverUrl: null,
-      link: null,
-      status: 'found'
-    })
 
     const result = await runWithFakeTimers(() => queryKojima('ABC-123'))
 
     expect(result.name).toBe('Kojima Album')
-    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('returns not_found when DOM extraction misses the name and never invokes LLM', async () => {
@@ -186,7 +172,6 @@ describe('queryKojima', () => {
     const result = await runWithFakeTimers(() => queryKojima('ABC-123'))
 
     expect(result.status).toBe('not_found')
-    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('returns a query error when the browser fails', async () => {

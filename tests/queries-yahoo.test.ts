@@ -1,17 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createDomEvaluate } from './helpers/dom-evaluate'
 
-const { mockGetSetting, mockBrowserPool, mockConvert, mockTryLLMParse } = vi.hoisted(() => ({
+const { mockGetSetting, mockBrowserPool, mockConvert } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
   mockBrowserPool: { acquire: vi.fn(), release: vi.fn() },
   mockConvert: vi.fn(async (amount: number) => Math.round(amount * 0.0067 * 100) / 100),
-  mockTryLLMParse: vi.fn()
 }))
 
 vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
 vi.mock('../src/main/browser', () => ({ browserPool: mockBrowserPool }))
 vi.mock('../src/main/currency', () => ({ convertToUSDWithFallback: mockConvert }))
-vi.mock('../src/main/llm/parser', () => ({ tryLLMParse: mockTryLLMParse }))
 
 import { queryYahoo } from '../src/main/queries/yahoo'
 import { clearAllCaches } from '../src/main/queries/cache'
@@ -52,7 +50,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearAllCaches()
   mockGetSetting.mockReturnValue(undefined)
-  mockTryLLMParse.mockResolvedValue(null)
   mockBrowserPool.acquire.mockResolvedValue({ browser: {}, page: {} })
   mockBrowserPool.release.mockResolvedValue(undefined)
 })
@@ -140,21 +137,10 @@ describe('queryYahoo', () => {
     const { page, browser } = createYahooPage()
     page.evaluate = createDomEvaluate(['<body>nothing here</body>'])
     mockBrowserPool.acquire.mockResolvedValue({ browser, page })
-    mockTryLLMParse.mockResolvedValue({
-      platform: 'yahoo',
-      name: 'LLM Album',
-      artist: null,
-      priceMin: null,
-      priceMax: null,
-      coverUrl: null,
-      link: null,
-      status: 'found'
-    })
 
     const result = await runWithFakeTimers(() => queryYahoo('ABC-123'))
 
     expect(result.name).toBe('Yahoo Album')
-    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('returns not_found when DOM extraction misses the name and never invokes LLM', async () => {
@@ -172,7 +158,6 @@ describe('queryYahoo', () => {
     const result = await runWithFakeTimers(() => queryYahoo('ABC-123'))
 
     expect(result.status).toBe('not_found')
-    expect(mockTryLLMParse).not.toHaveBeenCalled()
   })
 
   it('returns a query error when the browser fails', async () => {

@@ -18,27 +18,15 @@
   --text-muted: #7C6E5C;
 
   /* Accent - warm copper */
-  --accent-color: #B8860B;
   --accent-hover: #9A7209;
   --accent-light: #DAA520;
   --accent-bg: rgba(184, 134, 11, 0.1);
 
-  /* Status colors */
-  --success-color: #5D7A4A;
-  --error-color: #A63D40;
-  --error-hover: #8B3235;
-  --warning-color: #B8860B;
-
-  /* Status backgrounds */
+  /* Status backgrounds (error/success surfaces used by the Shimo panel) */
   --success-bg: rgba(93, 122, 74, 0.1);
-  --success-text: #3D5A2A;
   --error-bg: rgba(166, 61, 64, 0.1);
   --error-text: #7A2D2F;
   --error-border: rgba(166, 61, 64, 0.3);
-  --warning-bg: rgba(184, 134, 11, 0.1);
-  --warning-text: #7A5A08;
-  --info-bg: rgba(0, 102, 179, 0.1);
-  --info-text: #004A80;
 
   /* Border */
   --border-color: rgba(44, 37, 32, 0.15);

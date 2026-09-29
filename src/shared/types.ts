@@ -79,7 +79,7 @@ export interface LanCandidate {
   interfaceName: string
 }
 
-export type LanServerState = 'disabled' | 'stopped' | 'running' | 'error' | 'no_network'
+export type LanServerState = 'disabled' | 'running' | 'error' | 'no_network'
 
 /** Live status of the built-in LAN server (IPC-facing). */
 export interface LanServerStatus {

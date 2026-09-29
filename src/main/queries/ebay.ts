@@ -180,8 +180,6 @@ async function getEbayItemDetails(itemWebUrl: string, token: string, signal?: Ab
           details.genre = aspect.value
         } else if (nameLower.includes('country') || nameLower.includes('region')) {
           details.country = aspect.value
-        } else if (nameLower.includes('artist')) {
-          // Could extract artist from aspects but we already have it from title
         }
       }
     }
