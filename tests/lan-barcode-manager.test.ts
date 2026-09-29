@@ -21,36 +21,26 @@ vi.mock('../src/main/orchestrator', () => ({
 
 import {
   applyLanServer,
-  closeLanServer,
   handleLanBarcodeLookup,
   handleLanBarcodeSelection,
   setLanSearchAvailability,
   setLanSearchCatalogCount
 } from '../src/main/lan'
-import { deleteSetting, setLanToken, setSetting } from '../src/main/settings'
-
-function mockDesktopWindow(send = vi.fn()) {
-  return { isDestroyed: () => false, webContents: { send } }
-}
+import { setSetting } from '../src/main/settings'
+import { closeLanAfterTest, mockDesktopWindow, resetLanSettings } from './helpers/lan'
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockIsBatchQueryRunning.mockReturnValue(false)
   mockNormalizeBarcode.mockImplementation((barcode: string) => barcode)
-  setLanSearchAvailability(false)
-  setLanSearchCatalogCount(0)
+  resetLanSettings()
   setSetting('lanEnabled', true)
   setSetting('lanHost', '127.0.0.1')
-  deleteSetting('lanPort')
-  setLanToken('')
+  vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
 })
 
 afterEach(async () => {
-  setLanSearchAvailability(false)
-  setLanSearchCatalogCount(0)
-  setSetting('lanEnabled', false)
-  await closeLanServer()
-  vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
+  await closeLanAfterTest()
 })
 
 describe('handleLanBarcodeLookup', () => {

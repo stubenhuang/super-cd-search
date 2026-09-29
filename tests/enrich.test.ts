@@ -1,91 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { BrowserWindow } from 'electron'
-import type { QueryResult } from '../src/shared/types'
+import { applyEnrichDefaults, foundResult, fullLlmSettings, mocks, setupBrowserPage } from './helpers/enrich-harness'
+import { enrichDetails, SMART_FILL_PLATFORM_PRIORITY } from '../src/main/llm/enrich'
 
-const {
-  mockGetSetting,
-  mockAcquireBrowser,
-  mockReleaseBrowser,
-  mockCompressHtml,
-  mockChat,
-  mockQueryTower,
-  mockQueryHmv,
-  mockQueryCdjapan,
-  mockQueryKojima,
-  mockQueryYahoo,
-  mockGetCachedEnrichment,
-  mockCacheEnrichment
-} = vi.hoisted(() => ({
-  mockGetSetting: vi.fn(),
-  mockAcquireBrowser: vi.fn(),
-  mockReleaseBrowser: vi.fn(),
-  mockCompressHtml: vi.fn(),
-  mockChat: vi.fn(),
-  mockQueryTower: vi.fn(),
-  mockQueryHmv: vi.fn(),
-  mockQueryCdjapan: vi.fn(),
-  mockQueryKojima: vi.fn(),
-  mockQueryYahoo: vi.fn(),
-  mockGetCachedEnrichment: vi.fn(),
-  mockCacheEnrichment: vi.fn()
-}))
-
-vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
+vi.mock('../src/main/settings', () => ({ getSetting: mocks.mockGetSetting }))
 vi.mock('../src/main/browser', () => ({
-  browserPool: { acquire: mockAcquireBrowser, release: mockReleaseBrowser }
+  browserPool: { acquire: mocks.mockAcquireBrowser, release: mocks.mockReleaseBrowser }
 }))
-vi.mock('../src/main/parser/readability', () => ({ compressHtml: mockCompressHtml }))
+vi.mock('../src/main/parser/readability', () => ({ compressHtml: mocks.mockCompressHtml }))
 vi.mock('../src/main/llm/client', () => ({
   LLMClient: class {
     async chat(_messages: unknown, options: unknown) {
-      return mockChat(options)
+      return mocks.mockChat(options)
     }
   }
 }))
-vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
-vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
-vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
-vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mockQueryKojima }))
-vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
+vi.mock('../src/main/queries/tower', () => ({ queryTower: mocks.mockQueryTower }))
+vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mocks.mockQueryHmv }))
+vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mocks.mockQueryCdjapan }))
+vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mocks.mockQueryKojima }))
+vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mocks.mockQueryYahoo }))
 vi.mock('../src/main/queries/cache', () => ({
-  getCachedEnrichment: mockGetCachedEnrichment,
-  cacheEnrichment: mockCacheEnrichment
+  getCachedEnrichment: mocks.mockGetCachedEnrichment,
+  cacheEnrichment: mocks.mockCacheEnrichment
 }))
 
-import { enrichDetails, SMART_FILL_PLATFORM_PRIORITY } from '../src/main/llm/enrich'
-
-const fullLlmSettings = {
-  enabled: true,
-  apiBaseUrl: 'https://api.example.com/v1',
-  apiKey: 'key',
-  model: 'model',
-  platformEnabled: {
-    discogs: true,
-    ebay: true,
-    kojima: true,
-    hmv: true,
-    yahoo: true,
-    cdjapan: true,
-    tower: true
-  }
-}
-
-function foundResult(platform: QueryResult['platform'], details?: QueryResult['details']): QueryResult {
-  return {
-    platform,
-    name: `${platform} album`,
-    artist: null,
-    priceMin: null,
-    priceMax: null,
-    coverUrl: null,
-    link: `https://example.com/${platform}/item`,
-    status: 'found',
-    details
-  }
-}
-
 function setupLlm(llm: unknown): void {
-  mockGetSetting.mockImplementation((key: string) => {
+  mocks.mockGetSetting.mockImplementation((key: string) => {
     if (key === 'llm') return llm
     return undefined
   })
@@ -98,30 +39,13 @@ function setupBrowserPage(html = '<html><body>product</body></html>') {
     setExtraHTTPHeaders: vi.fn().mockResolvedValue(undefined),
     setCookie: vi.fn().mockResolvedValue(undefined)
   }
-  mockAcquireBrowser.mockResolvedValue({ browser: {}, page })
-  mockReleaseBrowser.mockResolvedValue(undefined)
+  mocks.mockAcquireBrowser.mockResolvedValue({ browser: {}, page })
+  mocks.mockReleaseBrowser.mockResolvedValue(undefined)
   return page
 }
 
 beforeEach(() => {
-  vi.clearAllMocks()
-  vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
-  setupLlm(fullLlmSettings)
-  setupBrowserPage()
-  mockCompressHtml.mockReturnValue({
-    text: 'compressed product page',
-    pageUrl: 'https://example.com/tower/item',
-    imageUrls: [],
-    linkUrls: []
-  })
-  mockChat.mockResolvedValue({ content: '{"details":{"genre":"Jazz"}}' })
-  mockQueryTower.mockResolvedValue(foundResult('tower'))
-  mockQueryHmv.mockResolvedValue(foundResult('hmv'))
-  mockQueryCdjapan.mockResolvedValue(foundResult('cdjapan'))
-  mockQueryKojima.mockResolvedValue(foundResult('kojima'))
-  mockQueryYahoo.mockResolvedValue(foundResult('yahoo'))
-  mockGetCachedEnrichment.mockReturnValue(null)
-  mockCacheEnrichment.mockReturnValue(undefined)
+  applyEnrichDefaults()
 })
 
 describe('enrichDetails', () => {
@@ -131,11 +55,11 @@ describe('enrichDetails', () => {
     const result = await enrichDetails('X-1', [])
     expect(result.llmConfigured).toBe(false)
     expect(result.status).toBe('not_configured')
-    expect(mockQueryTower).not.toHaveBeenCalled()
+    expect(mocks.mockQueryTower).not.toHaveBeenCalled()
   })
 
   it('serves a complete cached enrichment without invoking the LLM', async () => {
-    mockGetCachedEnrichment.mockReturnValue({
+    mocks.mockGetCachedEnrichment.mockReturnValue({
       label: 'Cached Label',
       format: 'CD',
       country: 'Japan',
@@ -147,13 +71,13 @@ describe('enrichDetails', () => {
     expect(result.status).toBe('complete')
     expect(result.usedCache).toBe(true)
     expect(result.details.label).toBe('Cached Label')
-    expect(mockQueryTower).not.toHaveBeenCalled()
-    expect(mockChat).not.toHaveBeenCalled()
-    expect(mockCacheEnrichment).not.toHaveBeenCalled()
+    expect(mocks.mockQueryTower).not.toHaveBeenCalled()
+    expect(mocks.mockChat).not.toHaveBeenCalled()
+    expect(mocks.mockCacheEnrichment).not.toHaveBeenCalled()
   })
 
   it('merges cached fields and still asks the LLM for the rest', async () => {
-    mockGetCachedEnrichment.mockReturnValue({
+    mocks.mockGetCachedEnrichment.mockReturnValue({
       label: 'Cached Label',
       format: 'CD',
       country: 'Japan',
@@ -166,13 +90,13 @@ describe('enrichDetails', () => {
     expect(result.usedCache).toBe(true)
     expect(result.details.label).toBe('Cached Label')
     expect(result.details.genre).toBe('Jazz')
-    expect(mockChat).toHaveBeenCalledTimes(1)
-    expect(mockCacheEnrichment).toHaveBeenCalledWith('X-1', expect.objectContaining({ genre: 'Jazz' }))
+    expect(mocks.mockChat).toHaveBeenCalledTimes(1)
+    expect(mocks.mockCacheEnrichment).toHaveBeenCalledWith('X-1', expect.objectContaining({ genre: 'Jazz' }))
   })
 
   it('returns cached details even when LLM is not configured', async () => {
     setupLlm(undefined)
-    mockGetCachedEnrichment.mockReturnValue({
+    mocks.mockGetCachedEnrichment.mockReturnValue({
       label: 'Cached Label',
       format: 'CD',
       country: 'Japan',
@@ -196,7 +120,7 @@ describe('enrichDetails', () => {
       genre: null
     })
     const ebay = foundResult('ebay')
-    mockQueryTower.mockResolvedValue(foundResult('tower', {
+    mocks.mockQueryTower.mockResolvedValue(foundResult('tower', {
       label: 'Tower Label',
       format: 'CD',
       country: 'Japan',
@@ -216,25 +140,25 @@ describe('enrichDetails', () => {
       released: '2024-01-01',
       genre: 'Jazz' // LLM fills only the missing field
     })
-    expect(mockQueryTower).toHaveBeenCalledWith('X-1', expect.any(AbortSignal))
-    expect(mockQueryHmv).not.toHaveBeenCalled()
-    expect(mockChat).toHaveBeenCalledTimes(1)
+    expect(mocks.mockQueryTower).toHaveBeenCalledWith('X-1', expect.any(AbortSignal))
+    expect(mocks.mockQueryHmv).not.toHaveBeenCalled()
+    expect(mocks.mockChat).toHaveBeenCalledTimes(1)
   })
 
   it('never queries or parses discogs and ebay, and skips sources without a product', async () => {
-    mockQueryTower.mockResolvedValue({ ...foundResult('tower'), status: 'not_found', link: null })
-    mockQueryHmv.mockResolvedValue({ ...foundResult('hmv'), status: 'not_found', link: null })
-    mockQueryCdjapan.mockResolvedValue({ ...foundResult('cdjapan'), status: 'not_found', link: null })
-    mockQueryKojima.mockResolvedValue({ ...foundResult('kojima'), status: 'not_found', link: null })
-    mockQueryYahoo.mockResolvedValue({ ...foundResult('yahoo'), status: 'not_found', link: null })
+    mocks.mockQueryTower.mockResolvedValue({ ...foundResult('tower'), status: 'not_found', link: null })
+    mocks.mockQueryHmv.mockResolvedValue({ ...foundResult('hmv'), status: 'not_found', link: null })
+    mocks.mockQueryCdjapan.mockResolvedValue({ ...foundResult('cdjapan'), status: 'not_found', link: null })
+    mocks.mockQueryKojima.mockResolvedValue({ ...foundResult('kojima'), status: 'not_found', link: null })
+    mocks.mockQueryYahoo.mockResolvedValue({ ...foundResult('yahoo'), status: 'not_found', link: null })
 
     const result = await enrichDetails('X-1', [])
 
     expect(result.status).toBe('partial')
     expect(result.analyzedPlatforms).toEqual([])
     expect(result.skippedPlatforms.map(s => s.platform)).toEqual(SMART_FILL_PLATFORM_PRIORITY)
-    expect(mockChat).not.toHaveBeenCalled()
-    expect(mockAcquireBrowser).not.toHaveBeenCalled()
+    expect(mocks.mockChat).not.toHaveBeenCalled()
+    expect(mocks.mockAcquireBrowser).not.toHaveBeenCalled()
   })
 
   it('honors the per-platform LLM enable toggle', async () => {
@@ -245,11 +169,11 @@ describe('enrichDetails', () => {
 
     const result = await enrichDetails('X-1', [])
     expect(result.skippedPlatforms[0]).toEqual({ platform: 'tower', reason: 'platform_disabled' })
-    expect(mockQueryTower).not.toHaveBeenCalled()
+    expect(mocks.mockQueryTower).not.toHaveBeenCalled()
   })
 
   it('continues to the next source when the first LLM analysis fails', async () => {
-    mockChat
+    mocks.mockChat
       .mockResolvedValueOnce({ content: 'not json' })
       .mockResolvedValueOnce({
         content: '{"details":{"label":"HMV Label","format":"CD","country":"Japan","released":"2024-03-01","genre":"Rock"}}'
@@ -264,7 +188,7 @@ describe('enrichDetails', () => {
   })
 
   it('merges deterministic scraper details before deciding whether LLM is needed', async () => {
-    mockQueryTower.mockResolvedValue(foundResult('tower', {
+    mocks.mockQueryTower.mockResolvedValue(foundResult('tower', {
       label: 'Tower Label',
       format: 'CD',
       country: 'Japan',
@@ -274,14 +198,14 @@ describe('enrichDetails', () => {
 
     const result = await enrichDetails('X-1', [])
     expect(result.status).toBe('complete')
-    expect(mockAcquireBrowser).not.toHaveBeenCalled()
-    expect(mockChat).not.toHaveBeenCalled()
+    expect(mocks.mockAcquireBrowser).not.toHaveBeenCalled()
+    expect(mocks.mockChat).not.toHaveBeenCalled()
   })
 
   it('keeps the fields already known from existing results even when LLM returns different values', async () => {
     const tower = foundResult('tower', { label: 'Tower Label', format: 'CD', genre: 'Jazz' })
-    mockQueryTower.mockResolvedValue(tower)
-    mockChat.mockResolvedValue({
+    mocks.mockQueryTower.mockResolvedValue(tower)
+    mocks.mockChat.mockResolvedValue({
       content: '{"details":{"label":"Overridden","format":"LP","genre":"Metal","country":"US","released":"2000"}}'
     })
 
@@ -334,7 +258,7 @@ describe('enrichDetails', () => {
 
     const result = await enrichDetails('X-1', [existing])
     expect(result.skippedPlatforms[0]).toEqual({ platform: 'tower', reason: 'not_found' })
-    expect(mockQueryTower).not.toHaveBeenCalled()
+    expect(mocks.mockQueryTower).not.toHaveBeenCalled()
   })
 
   it('trusts an existing challenge result and does not search that platform again', async () => {
@@ -342,18 +266,18 @@ describe('enrichDetails', () => {
 
     const result = await enrichDetails('X-1', [existing])
     expect(result.skippedPlatforms[0]).toEqual({ platform: 'tower', reason: 'not_found' })
-    expect(mockQueryTower).not.toHaveBeenCalled()
+    expect(mocks.mockQueryTower).not.toHaveBeenCalled()
   })
 
   it('reports no_product_link when a source finds a title without a product URL', async () => {
-    mockQueryTower.mockResolvedValue({ ...foundResult('tower'), link: null })
+    mocks.mockQueryTower.mockResolvedValue({ ...foundResult('tower'), link: null })
 
     const result = await enrichDetails('X-1', [])
     expect(result.skippedPlatforms[0]).toEqual({ platform: 'tower', reason: 'no_product_link' })
   })
 
   it('treats a throwing source search as not_found and continues', async () => {
-    mockQueryTower.mockRejectedValue(new Error('search down'))
+    mocks.mockQueryTower.mockRejectedValue(new Error('search down'))
 
     const result = await enrichDetails('X-1', [])
     expect(result.skippedPlatforms[0]).toEqual({ platform: 'tower', reason: 'not_found' })
@@ -361,7 +285,7 @@ describe('enrichDetails', () => {
   })
 
   it('records llm_failed and keeps going when the chat request throws', async () => {
-    mockChat.mockRejectedValue(new Error('api 500'))
+    mocks.mockChat.mockRejectedValue(new Error('api 500'))
 
     const result = await enrichDetails('X-1', [])
     expect(result.skippedPlatforms[0]).toEqual({ platform: 'tower', reason: 'llm_failed' })
@@ -380,6 +304,6 @@ describe('enrichDetails', () => {
 
     await enrichDetails('X-1', [], null, controller.signal)
 
-    expect(mockChat).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }))
+    expect(mocks.mockChat).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }))
   })
 })

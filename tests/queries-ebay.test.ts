@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { okJson, runWithFakeTimers } from './helpers/ipc'
 
 const { mockGetSetting, mockThrottledFetch, mockBrowserPool, mockConvert } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
@@ -19,17 +20,7 @@ async function loadEbay(): Promise<EbayModule> {
   return await import('../src/main/queries/ebay')
 }
 
-async function runWithFakeTimers<T>(fn: () => Promise<T>, totalMs = 60000): Promise<T> {
-  vi.useFakeTimers()
-  const promise = fn()
-  await vi.advanceTimersByTimeAsync(totalMs)
-  vi.useRealTimers()
-  return await promise
-}
 
-function okJson(data: unknown) {
-  return { ok: true, status: 200, json: async () => data }
-}
 
 interface EbayPageState {
   bodyByDomain: Record<string, { home?: string; search?: string }>

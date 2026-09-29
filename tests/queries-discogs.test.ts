@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { okJson, runWithFakeTimers } from './helpers/ipc'
 
 const { mockGetSetting, mockThrottledFetch, mockBrowserPool, mockConvert } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
@@ -21,9 +22,6 @@ import {
 } from '../src/main/queries/discogs'
 import { clearAllCaches } from '../src/main/queries/cache'
 
-function okJson(data: unknown) {
-  return { ok: true, status: 200, json: async () => data }
-}
 
 function createDiscogsPage() {
   const firstResult = {

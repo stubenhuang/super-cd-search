@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { registeredHandler } from './helpers/ipc'
 import { ipcMain } from 'electron'
 
 const { mockGetSettings, mockGetSetting, mockSetSetting, mockUpdateSettings, mockDeleteSetting } = vi.hoisted(() => ({
@@ -128,11 +129,7 @@ import { registerEnrichmentIpc } from '../src/main/ipc/enrich'
 import { registerLoggingIpc } from '../src/main/ipc/log'
 import { registerLanIpc } from '../src/main/ipc/lan'
 
-function handler(channel: string) {
-  const call = vi.mocked(ipcMain.handle).mock.calls.find(([ch]) => ch === channel)
-  if (!call) throw new Error(`No handler registered for ${channel}`)
-  return call[1]
-}
+const handler = (channel: string) => registeredHandler(ipcMain, channel)
 
 function onHandler(channel: string) {
   const call = vi.mocked(ipcMain.on).mock.calls.find(([ch]) => ch === channel)

@@ -1,124 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { BrowserWindow } from 'electron'
-import type { QueryResult } from '../src/shared/types'
+import { applyEnrichDefaults, foundResult, fullLlmSettings, mocks, setupBrowserPage } from './helpers/enrich-harness'
+import { enrichDetails } from '../src/main/llm/enrich'
 
-const {
-  mockGetSetting,
-  mockAcquireBrowser,
-  mockReleaseBrowser,
-  mockCompressHtml,
-  mockChat,
-  mockQueryTower,
-  mockQueryHmv,
-  mockQueryCdjapan,
-  mockQueryKojima,
-  mockQueryYahoo,
-  mockGetCachedEnrichment,
-  mockCacheEnrichment
-} = vi.hoisted(() => ({
-  mockGetSetting: vi.fn(),
-  mockAcquireBrowser: vi.fn(),
-  mockReleaseBrowser: vi.fn(),
-  mockCompressHtml: vi.fn(),
-  mockChat: vi.fn(),
-  mockQueryTower: vi.fn(),
-  mockQueryHmv: vi.fn(),
-  mockQueryCdjapan: vi.fn(),
-  mockQueryKojima: vi.fn(),
-  mockQueryYahoo: vi.fn(),
-  mockGetCachedEnrichment: vi.fn(),
-  mockCacheEnrichment: vi.fn()
-}))
-
-vi.mock('../src/main/settings', () => ({ getSetting: mockGetSetting }))
+vi.mock('../src/main/settings', () => ({ getSetting: mocks.mockGetSetting }))
 vi.mock('../src/main/browser', () => ({
-  browserPool: { acquire: mockAcquireBrowser, release: mockReleaseBrowser }
+  browserPool: { acquire: mocks.mockAcquireBrowser, release: mocks.mockReleaseBrowser }
 }))
-vi.mock('../src/main/parser/readability', () => ({ compressHtml: mockCompressHtml }))
+vi.mock('../src/main/parser/readability', () => ({ compressHtml: mocks.mockCompressHtml }))
 vi.mock('../src/main/llm/client', () => ({
   LLMClient: class {
-    async chat() {
-      return mockChat()
+    async chat(_messages: unknown, options: unknown) {
+      return mocks.mockChat(options)
     }
   }
 }))
-vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
-vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
-vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
-vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mockQueryKojima }))
-vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
+vi.mock('../src/main/queries/tower', () => ({ queryTower: mocks.mockQueryTower }))
+vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mocks.mockQueryHmv }))
+vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mocks.mockQueryCdjapan }))
+vi.mock('../src/main/queries/kojima', () => ({ queryKojima: mocks.mockQueryKojima }))
+vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mocks.mockQueryYahoo }))
 vi.mock('../src/main/queries/cache', () => ({
-  getCachedEnrichment: mockGetCachedEnrichment,
-  cacheEnrichment: mockCacheEnrichment
+  getCachedEnrichment: mocks.mockGetCachedEnrichment,
+  cacheEnrichment: mocks.mockCacheEnrichment
 }))
 
-import { enrichDetails } from '../src/main/llm/enrich'
-
-const fullLlmSettings = {
-  enabled: true,
-  apiBaseUrl: 'https://api.example.com/v1',
-  apiKey: 'key',
-  model: 'model',
-  platformEnabled: {
-    discogs: true,
-    ebay: true,
-    kojima: true,
-    hmv: true,
-    yahoo: true,
-    cdjapan: true,
-    tower: true
-  }
-}
-
-function foundResult(platform: QueryResult['platform']): QueryResult {
-  return {
-    platform,
-    name: `${platform} album`,
-    artist: null,
-    priceMin: null,
-    priceMax: null,
-    coverUrl: null,
-    link: `https://example.com/${platform}/item`,
-    status: 'found',
-    details: null
-  }
-}
-
-function setupBrowserPage() {
-  const page = {
-    goto: vi.fn().mockResolvedValue(undefined),
-    content: vi.fn().mockResolvedValue('<html><body>product</body></html>'),
-    setExtraHTTPHeaders: vi.fn().mockResolvedValue(undefined),
-    setCookie: vi.fn().mockResolvedValue(undefined),
-    evaluate: vi.fn().mockResolvedValue(undefined)
-  }
-  mockAcquireBrowser.mockResolvedValue({ browser: {}, page })
-  mockReleaseBrowser.mockResolvedValue(undefined)
-  return page
-}
-
 beforeEach(() => {
-  vi.clearAllMocks()
-  vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
-  mockGetSetting.mockImplementation((key: string) => {
-    if (key === 'llm') return fullLlmSettings
-    return undefined
-  })
-  setupBrowserPage()
-  mockCompressHtml.mockReturnValue({
-    text: 'compressed product page',
-    pageUrl: 'https://example.com/tower/item',
-    imageUrls: [],
-    linkUrls: []
-  })
-  mockChat.mockResolvedValue({ content: '{"details":{"genre":"Jazz"}}' })
-  mockQueryTower.mockResolvedValue(foundResult('tower'))
-  mockQueryHmv.mockResolvedValue(foundResult('hmv'))
-  mockQueryCdjapan.mockResolvedValue(foundResult('cdjapan'))
-  mockQueryKojima.mockResolvedValue(foundResult('kojima'))
-  mockQueryYahoo.mockResolvedValue(foundResult('yahoo'))
-  mockGetCachedEnrichment.mockReturnValue(null)
-  mockCacheEnrichment.mockReturnValue(undefined)
+  applyEnrichDefaults()
 })
 
 describe('enrichDetails cancellation', () => {
@@ -130,8 +38,8 @@ describe('enrichDetails cancellation', () => {
 
     expect(result.status).toBe('cancelled')
     expect(result.analyzedPlatforms).toEqual([])
-    expect(mockQueryTower).not.toHaveBeenCalled()
-    expect(mockCacheEnrichment).not.toHaveBeenCalled()
+    expect(mocks.mockQueryTower).not.toHaveBeenCalled()
+    expect(mocks.mockCacheEnrichment).not.toHaveBeenCalled()
   })
 
   it('aborts a page fetch, returns cancelled, never caches, and broadcasts a cancelled progress event', async () => {
@@ -154,7 +62,7 @@ describe('enrichDetails cancellation', () => {
     const result = await run
 
     expect(result.status).toBe('cancelled')
-    expect(mockCacheEnrichment).not.toHaveBeenCalled()
+    expect(mocks.mockCacheEnrichment).not.toHaveBeenCalled()
     expect(page.evaluate).toHaveBeenCalled()
     expect(send).toHaveBeenCalledWith(
       'detail:enrich-progress',

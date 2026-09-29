@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { okJson, runWithFakeTimers } from './helpers/ipc'
 import { createDomEvaluate } from './helpers/dom-evaluate'
 
 const { mockGetSetting, mockBrowserPool, mockConvert, mockThrottledFetch } = vi.hoisted(() => ({
@@ -16,9 +17,6 @@ vi.mock('../src/main/throttle', () => ({ throttledFetch: mockThrottledFetch }))
 import { queryKojima } from '../src/main/queries/kojima'
 import { clearAllCaches } from '../src/main/queries/cache'
 
-function okJson(data: unknown) {
-  return { ok: true, status: 200, json: async () => data }
-}
 
 function notOk() {
   return { ok: false, status: 404, json: async () => ({}) }
@@ -50,13 +48,6 @@ function createKojimaPage() {
   return { page, browser, firstItem }
 }
 
-async function runWithFakeTimers<T>(fn: () => Promise<T>, totalMs = 30000): Promise<T> {
-  vi.useFakeTimers()
-  const promise = fn()
-  await vi.advanceTimersByTimeAsync(totalMs)
-  vi.useRealTimers()
-  return await promise
-}
 
 beforeEach(() => {
   vi.clearAllMocks()

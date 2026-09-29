@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { okJson, runWithFakeTimers } from './helpers/ipc'
 import { createDomEvaluate } from './helpers/dom-evaluate'
 
 const { mockGetSetting, mockBrowserPool, mockConvert } = vi.hoisted(() => ({
@@ -39,13 +40,6 @@ function createHmvPage() {
   return { page, browser, firstItem }
 }
 
-async function runWithFakeTimers<T>(fn: () => Promise<T>, totalMs = 30000): Promise<T> {
-  vi.useFakeTimers()
-  const promise = fn()
-  await vi.advanceTimersByTimeAsync(totalMs)
-  vi.useRealTimers()
-  return await promise
-}
 
 beforeEach(() => {
   vi.clearAllMocks()

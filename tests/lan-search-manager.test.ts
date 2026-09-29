@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { BrowserWindow } from 'electron'
-import { createServer } from 'net'
-import type { AddressInfo } from 'net'
-import type { LanSearchState } from '../src/shared/types'
 
 const { mockIsBatchQueryRunning } = vi.hoisted(() => ({
   mockIsBatchQueryRunning: vi.fn(() => false)
@@ -24,57 +21,22 @@ import {
   setLanSearchCatalogCount,
   setLanSearchState
 } from '../src/main/lan'
-import { setLanToken, setSetting } from '../src/main/settings'
-
-async function getFreePort(): Promise<number> {
-  return new Promise(resolve => {
-    const probe = createServer()
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address() as AddressInfo
-      probe.close(() => resolve(address.port))
-    })
-  })
-}
-
-function mockDesktopWindow(send = vi.fn()) {
-  return { isDestroyed: () => false, webContents: { send } }
-}
-
-function mockSearchState(overrides: Partial<LanSearchState> = {}): LanSearchState {
-  return {
-    phase: 'idle',
-    input: '',
-    busy: false,
-    searchMode: 'standard',
-    catalogs: [],
-    platforms: [],
-    total: 0,
-    completed: 0,
-    percent: 0,
-    progress: [],
-    error: null,
-    ...overrides
-  }
-}
+import { closeLanAfterTest, getFreePort, mockDesktopWindow, mockSearchState, resetLanSettings } from './helpers/lan'
+import { setSetting } from '../src/main/settings'
 
 beforeEach(async () => {
   vi.clearAllMocks()
   mockIsBatchQueryRunning.mockReturnValue(false)
-  setLanSearchAvailability(false)
-  setLanSearchCatalogCount(0)
+  await resetLanSettings()
   setSetting('lanEnabled', true)
   setSetting('lanHost', '127.0.0.1')
   // A free port avoids EADDRINUSE races with other LAN test files that bind
   // the default port in parallel workers.
   setSetting('lanPort', await getFreePort())
-  setLanToken('')
 })
 
 afterEach(async () => {
-  setLanSearchAvailability(false)
-  setLanSearchCatalogCount(0)
-  setSetting('lanEnabled', false)
-  await closeLanServer()
+  await closeLanAfterTest()
   vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
 })
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { registeredHandler } from './helpers/ipc'
 import { ipcMain } from 'electron'
 
 const {
@@ -34,11 +35,7 @@ vi.mock('../src/main/publish', () => ({
 
 import { registerPublishIpc } from '../src/main/ipc/publish'
 
-function handler(channel: string) {
-  const call = vi.mocked(ipcMain.handle).mock.calls.find(([registered]) => registered === channel)
-  if (!call) throw new Error(`No handler registered for ${channel}`)
-  return call[1]
-}
+const handler = (channel: string) => registeredHandler(ipcMain, channel)
 
 const CHANNELS = [
   'publish:list-targets',

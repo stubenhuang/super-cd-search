@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { settingReaderWithTargets } from './helpers/publish'
 
 const { mockGetSetting, mockSearchReleaseCandidates, mockConvertFromUSD } = vi.hoisted(() => ({
   mockGetSetting: vi.fn(),
@@ -48,11 +49,7 @@ function target(overrides: Partial<PublishTarget> = {}): PublishTarget {
 }
 
 function setTargets(...targets: PublishTarget[]): void {
-  mockGetSetting.mockImplementation((key: string) => {
-    if (key === 'publishTargets') return targets
-    if (key === 'discogsToken') return ''
-    return undefined
-  })
+  mockGetSetting.mockImplementation(settingReaderWithTargets(targets, { discogsToken: '' }))
 }
 
 function request(overrides: Partial<PublishPrepareRequest> = {}): PublishPrepareRequest {

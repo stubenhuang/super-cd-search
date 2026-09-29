@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { settingReaderWithTargets } from './helpers/publish'
 import { BrowserWindow } from 'electron'
 
 const { mockCreateDiscogsListing, mockPublishToXianyu, mockIsBatchQueryRunning, mockGetSetting } = vi.hoisted(() => ({
@@ -53,10 +54,7 @@ const XIANYU_TARGET: PublishTarget = {
 }
 
 function setTargets(targets: PublishTarget[]): void {
-  mockGetSetting.mockImplementation((key: string) => {
-    if (key === 'publishTargets') return targets
-    return undefined
-  })
+  mockGetSetting.mockImplementation(settingReaderWithTargets(targets))
 }
 
 function field(key: string, value: string | number | boolean): PublishField {

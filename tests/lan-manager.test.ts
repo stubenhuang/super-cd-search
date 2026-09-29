@@ -1,34 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createServer } from 'net'
-import type { AddressInfo } from 'net'
 import {
   applyLanServer,
-  closeLanServer,
   getLanServerStatus,
   regenerateLanToken
 } from '../src/main/lan'
-import { deleteSetting, setSetting, setLanToken, getLanToken } from '../src/main/settings'
+import { getLanToken, setSetting } from '../src/main/settings'
+import { closeLanAfterTest, getFreePort, resetLanSettings } from './helpers/lan'
 
-async function getFreePort(): Promise<number> {
-  return new Promise(resolve => {
-    const probe = createServer()
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address() as AddressInfo
-      probe.close(() => resolve(address.port))
-    })
-  })
-}
-
-beforeEach(() => {
-  setSetting('lanEnabled', false)
-  setSetting('lanHost', '')
-  deleteSetting('lanPort')
-  setLanToken('')
+beforeEach(async () => {
+  await resetLanSettings()
 })
 
 afterEach(async () => {
-  setSetting('lanEnabled', false)
-  await closeLanServer()
+  await closeLanAfterTest()
 })
 
 describe('LAN server manager', () => {
