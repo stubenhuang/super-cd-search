@@ -472,7 +472,9 @@ export const MOBILE_APP_JS = `(function () {
   searchRun.addEventListener('click', triggerSearch);
 
   function pollSearchState() {
-    if (activeTab !== 'search' || document.hidden) return;
+    // The phone page is single-panel (only #panel-search exists), so there is
+    // no tab to check: polling only stops while the page is hidden.
+    if (document.hidden) return;
     fetch('/api/search/state', { credentials: 'same-origin' })
       .then(function (response) { return response.json(); })
       .then(function (data) {

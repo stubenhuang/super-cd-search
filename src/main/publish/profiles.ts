@@ -5,6 +5,7 @@ import { tmpdir } from 'os'
 import puppeteer from 'puppeteer-core'
 import type { Browser, Page } from 'puppeteer-core'
 import { restrictedHostChromeArgs, findChromeExecutable } from '../browser/chrome-path'
+import { killChromeProcess } from '../browser/kill'
 import {
   connectWithRetry,
   describeBrowserSessionFromUa,
@@ -254,7 +255,9 @@ export async function closePublishProfile(profileId: string, options: { wipe?: b
     } catch {
       // The browser may already be gone; the kill below is the real cleanup.
     }
-    if (session.proc && !session.proc.killed) session.proc.kill()
+    // Graceful close may leave the process tree behind on Windows, where a
+    // plain kill() only stops the browser process itself.
+    if (session.proc && !session.proc.killed) await killChromeProcess(session.proc)
   }
 
   if (options.wipe) {

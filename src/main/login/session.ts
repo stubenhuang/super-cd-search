@@ -6,6 +6,7 @@ import puppeteer from 'puppeteer-core'
 import type { Browser, Page } from 'puppeteer-core'
 import { LOGIN_DEFS, checkLoginState } from './defs'
 import { restrictedHostChromeArgs, findChromeExecutable } from '../browser/chrome-path'
+import { killChromeProcess } from '../browser/kill'
 import { logger } from '../logger'
 import type { LoginPlatform, LoginResult, LoginSessionStatus } from '../../shared/types'
 
@@ -459,32 +460,6 @@ export async function acquireLoginPage(mode: ChromeSessionMode = 'headed'): Prom
   return { page: session.page, release }
 }
 
-/** Terminate the Chrome process (and its child processes on Windows). */
-function killChrome(proc: ChildProcess): Promise<void> {
-  if (!proc.pid) return Promise.resolve()
-
-  if (process.platform === 'win32') {
-    // SIGKILL on Windows only kills the main process, leaving renderer/network
-    // child processes behind. taskkill /T /F kills the whole process tree.
-    return new Promise((resolve) => {
-      try {
-        const killer = spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
-        killer.once('exit', () => resolve())
-        killer.once('error', () => resolve())
-      } catch {
-        resolve()
-      }
-    })
-  }
-
-  try {
-    proc.kill('SIGKILL')
-  } catch {
-    // Already exited.
-  }
-  return Promise.resolve()
-}
-
 export async function closeLoginSession(): Promise<void> {
   const s = session
   if (s) {
@@ -495,7 +470,7 @@ export async function closeLoginSession(): Promise<void> {
     await s.browser.close().catch(() => {})
     if (s.proc) {
       // Graceful close may leave the process tree behind on Windows.
-      await killChrome(s.proc)
+      await killChromeProcess(s.proc)
     }
   }
 }
