@@ -10,6 +10,8 @@ export type Platform =
   | 'yahoo'
   | 'cdjapan'
   | 'tower'
+  | 'xianyu'
+  | 'taobao'
 
 export interface CDDetails {
   label: string | null
@@ -30,6 +32,22 @@ export interface QueryResult {
   status: QueryStatus
   error?: string
   details?: CDDetails
+}
+
+/** Settings for the Apify-powered reverse-image-search sources. */
+export interface ApifySettings {
+  /** Apify API token; sent as an Authorization: Bearer header, never logged. */
+  token: string
+  /** Actor id for Taobao image search, e.g. `dev00~taobao-reverse-image-search`. */
+  taobaoActor: string
+  /** Actor id for Xianyu image search, e.g. `zen-studio~goofish-xianyu-visual-search-scraper`. */
+  xianyuActor: string
+  /** Max Taobao results per run (1-50); also the number of listings used for min/max. */
+  num: number
+  /** Max Xianyu listings per run (1-1500). */
+  maxItems: number
+  /** Wall-clock ceiling for the whole async Xianyu run, in milliseconds. */
+  timeoutMs: number
 }
 
 export interface LLMSettings {
@@ -185,6 +203,8 @@ export interface Settings {
   proxyHost?: string
   proxyPort?: number
   llm?: LLMSettings
+  /** Apify token / actor configuration for the image-search sources. */
+  apify?: ApifySettings
   /** Platforms queried by the standard search mode. */
   standardPlatforms?: Platform[]
   /** Platforms queried by the deep search mode. */

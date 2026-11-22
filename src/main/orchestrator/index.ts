@@ -5,8 +5,11 @@ import { queryHmv } from '../queries/hmv'
 import { queryYahoo } from '../queries/yahoo'
 import { queryCdjapan } from '../queries/cdjapan'
 import { queryTower } from '../queries/tower'
+import { queryXianyu } from '../queries/xianyu'
+import { queryTaobao } from '../queries/taobao'
+import { notFound } from '../queries/types'
 import { normalizeCatalogNumber } from '../../shared/utils'
-import { PLATFORMS } from '../../shared/platforms'
+import { PLATFORMS, IMAGE_PLATFORMS, TEXT_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { logger } from '../logger'
 import { broadcastToWindows } from '../window-broadcast'
@@ -80,6 +83,28 @@ async function runPlatformQuery(
   }
 }
 
+/** First cover URL from the text platforms, used as the image-search input. */
+function resolveImageSearchCover(results: QueryResult[]): string | null {
+  for (const result of results) {
+    // Each source already produces an absolute URL via normalizeCoverUrl; this
+    // is a final guard so a relative/placeholder URL never reaches Apify.
+    if (result.coverUrl && /^https?:\/\//.test(result.coverUrl)) return result.coverUrl
+  }
+  return null
+}
+
+/** Dispatch an enabled image source to its Apify-backed query. */
+function imageQuery(name: Platform, catalogNumber: string, coverUrl: string, signal: AbortSignal): Promise<QueryResult> {
+  return name === 'taobao'
+    ? queryTaobao(catalogNumber, coverUrl, signal)
+    : queryXianyu(catalogNumber, coverUrl, signal)
+}
+
+/** Build the generic "unknown error" placeholder for one platform. */
+function errorResult(platform: Platform, message: string): QueryResult {
+  return { platform, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
+}
+
 async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, enabledPlatforms: Platform[]): Promise<QueryResult[]> {
   const catalogStartedAt = Date.now()
   if (signal.aborted) {
@@ -90,7 +115,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
   logger.debug('orchestrator', 'query all platforms start', { catalogNumber, platforms: enabledPlatforms })
   emitProgress(QueryEvents.START, { catalogNumber, platform: 'all', status: 'loading' })
 
-  // Full registry in canonical order; filter down to the user's selection.
+  // Full text registry in canonical order; filter down to the user's selection.
   const registry: Array<{ name: Platform; query: () => Promise<QueryResult> }> = [
     { name: 'discogs', query: () => queryDiscogs(catalogNumber, signal) },
     { name: 'ebay', query: () => queryEbay(catalogNumber, signal) },
@@ -101,12 +126,13 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     { name: 'tower', query: () => queryTower(catalogNumber, signal) }
   ]
 
-  const platforms = registry.filter(p => enabledPlatforms.includes(p.name))
+  const enabledText = registry.filter(p => enabledPlatforms.includes(p.name))
+  const enabledImages = IMAGE_PLATFORMS.filter(p => enabledPlatforms.includes(p))
 
-  // Run every platform concurrently; the browser pool and per-domain throttles
-  // act as natural concurrency limits.
+  // Phase one: run every text platform concurrently; the browser pool and
+  // per-domain throttles act as natural concurrency limits.
   const settled = await Promise.allSettled(
-    platforms.map(({ name, query }) => runPlatformQuery(catalogNumber, signal, name, query))
+    enabledText.map(({ name, query }) => runPlatformQuery(catalogNumber, signal, name, query))
   )
 
   if (signal.aborted) {
@@ -114,8 +140,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     throw new Error('Aborted')
   }
 
-  // Keep results in the canonical platform order regardless of completion order.
-  const results: QueryResult[] = platforms.map((platform, index) => {
+  const textResults: QueryResult[] = enabledText.map((platform, index) => {
     const outcome = settled[index]
     if (outcome && outcome.status === 'fulfilled') {
       return outcome.value
@@ -123,8 +148,47 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     const message = outcome && 'reason' in outcome
       ? (outcome.reason instanceof Error ? outcome.reason.message : 'Unknown error')
       : 'Unknown error'
-    return { platform: platform.name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
+    return errorResult(platform.name, message)
   })
+
+  // Phase two: the image sources need a cover image collected above, so they
+  // run afterwards (still concurrently with each other and abort-aware).
+  let imageResults: QueryResult[] = []
+  if (enabledImages.length > 0 && !signal.aborted) {
+    const coverUrl = resolveImageSearchCover(textResults)
+    const imageSettled = await Promise.allSettled(
+      enabledImages.map(name => runPlatformQuery(catalogNumber, signal, name, () => {
+        // Bypass the query runner so a transient "no cover" failure is never
+        // cached for the rest of the day.
+        if (!coverUrl) {
+          return Promise.resolve({ ...notFound(name), error: '无可用封面图，无法执行以图搜物' })
+        }
+        return imageQuery(name, catalogNumber, coverUrl, signal)
+      }))
+    )
+    imageResults = enabledImages.map((name, index) => {
+      const outcome = imageSettled[index]
+      if (outcome && outcome.status === 'fulfilled') {
+        return outcome.value
+      }
+      const message = outcome && 'reason' in outcome
+        ? (outcome.reason instanceof Error ? outcome.reason.message : 'Unknown error')
+        : 'Unknown error'
+      return errorResult(name, message)
+    })
+  }
+
+  if (signal.aborted) {
+    logger.debug('orchestrator', 'query all platforms aborted', { catalogNumber, durationMs: Date.now() - catalogStartedAt })
+    throw new Error('Aborted')
+  }
+
+  // Keep results in the canonical platform order regardless of completion order.
+  const byPlatform = new Map<Platform, QueryResult>()
+  for (const result of [...textResults, ...imageResults]) byPlatform.set(result.platform, result)
+  const results: QueryResult[] = PLATFORMS
+    .filter(p => enabledPlatforms.includes(p))
+    .map(p => byPlatform.get(p) ?? errorResult(p, 'Unknown error'))
 
   logger.debug('orchestrator', 'query all platforms complete', {
     catalogNumber,
@@ -144,7 +208,7 @@ export function cancelBatchQuery(): void {
   }
 }
 
-export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = PLATFORMS): Promise<BatchQueryResult[]> {
+export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = TEXT_PLATFORMS): Promise<BatchQueryResult[]> {
   const batchStartedAt = Date.now()
   logger.debug('orchestrator', 'execute batch query start', { requestedCatalogNumbers: catalogNumbers, platforms })
   if (abortController) {

@@ -3,7 +3,7 @@ import { BrowserWindow } from 'electron'
 
 const {
   mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQueryYahoo,
-  mockQueryCdjapan, mockQueryTower
+  mockQueryCdjapan, mockQueryTower, mockQueryXianyu, mockQueryTaobao
 } = vi.hoisted(() => ({
   mockQueryDiscogs: vi.fn(),
   mockQueryEbay: vi.fn(),
@@ -11,7 +11,9 @@ const {
   mockQueryHmv: vi.fn(),
   mockQueryYahoo: vi.fn(),
   mockQueryCdjapan: vi.fn(),
-  mockQueryTower: vi.fn()
+  mockQueryTower: vi.fn(),
+  mockQueryXianyu: vi.fn(),
+  mockQueryTaobao: vi.fn()
 }))
 
 vi.mock('../src/main/queries/discogs', () => ({ queryDiscogs: mockQueryDiscogs }))
@@ -21,6 +23,8 @@ vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
 vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
 vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
 vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
+vi.mock('../src/main/queries/xianyu', () => ({ queryXianyu: mockQueryXianyu }))
+vi.mock('../src/main/queries/taobao', () => ({ queryTaobao: mockQueryTaobao }))
 
 import {
   executeBatchQuery,
@@ -54,6 +58,8 @@ beforeEach(() => {
   mockQueryYahoo.mockResolvedValue(found('yahoo'))
   mockQueryCdjapan.mockResolvedValue(found('cdjapan'))
   mockQueryTower.mockResolvedValue(found('tower'))
+  mockQueryXianyu.mockResolvedValue(found('xianyu'))
+  mockQueryTaobao.mockResolvedValue(found('taobao'))
 })
 
 afterEach(() => {
@@ -156,6 +162,54 @@ describe('executeBatchQuery', () => {
     const results: BatchQueryResult[] = await promise
     expect(results).toEqual([])
     expect(sendMock.mock.calls.some(([, data]) => data.event === 'query:batch-cancelled')).toBe(true)
+  })
+
+  it('runs image sources as a second phase using the first text-result cover', async () => {
+    const coverUrl = 'https://cover.example/x.jpg'
+    const calls: string[] = []
+    mockQueryDiscogs.mockImplementation(async () => {
+      calls.push('discogs')
+      return { ...found('discogs'), coverUrl }
+    })
+    mockQueryXianyu.mockImplementation(async () => { calls.push('xianyu'); return found('xianyu') })
+    mockQueryTaobao.mockImplementation(async () => { calls.push('taobao'); return found('taobao') })
+
+    const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
+
+    expect(calls[0]).toBe('discogs')
+    expect(calls).toContain('xianyu')
+    expect(calls).toContain('taobao')
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', coverUrl, expect.anything())
+    expect(mockQueryXianyu).toHaveBeenCalledWith('X-1', coverUrl, expect.anything())
+    expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'xianyu', 'taobao'])
+    expect(sendMock.mock.calls.filter(([, data]) => data.event === 'query:complete')).toHaveLength(1)
+  })
+
+  it('skips image sources with a clear not_found when no cover is available', async () => {
+    const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
+
+    expect(mockQueryTaobao).not.toHaveBeenCalled()
+    expect(mockQueryXianyu).not.toHaveBeenCalled()
+    for (const platform of ['taobao', 'xianyu']) {
+      const result = results[0].results.find(r => r.platform === platform)
+      expect(result).toMatchObject({ status: 'not_found', error: '无可用封面图，无法执行以图搜物' })
+    }
+  })
+
+  it('keeps the default platform set free of paid image sources', async () => {
+    await executeBatchQuery(['X-1'])
+    expect(mockQueryTaobao).not.toHaveBeenCalled()
+    expect(mockQueryXianyu).not.toHaveBeenCalled()
+  })
+
+  it('contains an image-source failure without breaking the batch', async () => {
+    mockQueryDiscogs.mockResolvedValue({ ...found('discogs'), coverUrl: 'https://cover.example/x.jpg' })
+    mockQueryTaobao.mockRejectedValue(new Error('Apify down'))
+
+    const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
+
+    expect(results[0].results.find(r => r.platform === 'taobao')).toMatchObject({ status: 'error', error: 'Apify down' })
+    expect(results[0].results.find(r => r.platform === 'xianyu')?.status).toBe('found')
   })
 
   it('exposes whether a batch query is currently running', async () => {

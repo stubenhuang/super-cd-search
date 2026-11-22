@@ -4,9 +4,10 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { hostname, userInfo } from 'os'
 import electronStore from 'electron-store'
-import type { Settings, LLMSettings, Platform, DisplayCurrency, BarcodeProvider } from '../../shared/types'
+import type { Settings, LLMSettings, ApifySettings, Platform, DisplayCurrency, BarcodeProvider } from '../../shared/types'
 import type { PublishTarget } from '../../shared/publish'
 import { PLATFORMS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
+import { DEFAULT_APIFY_SETTINGS } from '../../shared/apify'
 
 export type { Settings, LLMSettings }
 
@@ -50,6 +51,18 @@ const schema = {
         },
         default: {}
       }
+    },
+    default: {}
+  },
+  apify: {
+    type: 'object' as const,
+    properties: {
+      token: { type: 'string' as const, default: '' },
+      taobaoActor: { type: 'string' as const, default: DEFAULT_APIFY_SETTINGS.taobaoActor },
+      xianyuActor: { type: 'string' as const, default: DEFAULT_APIFY_SETTINGS.xianyuActor },
+      num: { type: 'number' as const, default: DEFAULT_APIFY_SETTINGS.num },
+      maxItems: { type: 'number' as const, default: DEFAULT_APIFY_SETTINGS.maxItems },
+      timeoutMs: { type: 'number' as const, default: DEFAULT_APIFY_SETTINGS.timeoutMs }
     },
     default: {}
   }
@@ -221,6 +234,7 @@ export function getSettings(): Settings {
     proxyHost: store.get('proxyHost') as string || undefined,
     proxyPort: store.get('proxyPort') as number || undefined,
     llm: store.get('llm') as LLMSettings | undefined,
+    apify: { ...DEFAULT_APIFY_SETTINGS, ...(store.get('apify') as ApifySettings | undefined) },
     // Drop platform ids from older versions that no longer exist (e.g. the
     // removed marketplace channels) so a stale settings file never leaks an
     // unknown platform into a search run.
@@ -258,7 +272,7 @@ export function updateSettings(values: Partial<Settings>): void {
  */
 export const PUBLIC_SETTING_KEYS = new Set<keyof Settings>([
   'discogsToken', 'ebayClientId', 'ebayClientSecret',
-  'proxyEnabled', 'proxyHost', 'proxyPort', 'llm',
+  'proxyEnabled', 'proxyHost', 'proxyPort', 'llm', 'apify',
   'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
   'lanEnabled', 'lanHost', 'lanPort',
   'barcodeProviders', 'lastExportDirectory', 'autoUpdateEnabled', 'publishTargets'

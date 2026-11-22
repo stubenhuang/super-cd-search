@@ -11,8 +11,19 @@ export const PLATFORMS: Platform[] = [
   'hmv',
   'yahoo',
   'cdjapan',
-  'tower'
+  'tower',
+  'xianyu',
+  'taobao'
 ]
+
+/**
+ * Reverse-image-search sources. They need a cover image from the text sources,
+ * so the orchestrator runs them in a second phase after the text platforms.
+ */
+export const IMAGE_PLATFORMS: Platform[] = ['xianyu', 'taobao']
+
+/** Text/catalog-number platforms (everything except the image-search sources). */
+export const TEXT_PLATFORMS: Platform[] = PLATFORMS.filter(p => !IMAGE_PLATFORMS.includes(p))
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
   discogs: 'Discogs',
@@ -21,7 +32,9 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   hmv: 'HMV Japan',
   yahoo: 'Yahoo Shopping',
   cdjapan: 'CDJapan',
-  tower: 'Tower Records Japan'
+  tower: 'Tower Records Japan',
+  xianyu: '闲鱼',
+  taobao: '淘宝图搜'
 }
 
 /**

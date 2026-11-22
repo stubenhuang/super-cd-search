@@ -14,6 +14,8 @@
  *                                    move/grow after opening)
  *   artifacts/ui/shot-6b-settings.png     settings panel (no bottom-left close
  *                                        button, footer save reads 保存)
+ *   artifacts/ui/shot-6b-apify.png        Apify 以图搜物设置分区（Token /
+ *                                        Actor / 运行参数）
  *   artifacts/ui/shot-4-publish-settings.png  发布目标面板（头部按钮打开，
  *                                              Discogs 编辑器：Token + 引导）
  *   artifacts/ui/shot-4b-publish-token.png     Discogs 目标编辑器（必填
@@ -337,6 +339,26 @@ try {
   check('保存按钮文案为「保存」', settingsSaveText === '保存', settingsSaveText)
   await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-settings.png') })
   checkScreenshot('设置面板（无左下关闭按钮）', join(ARTIFACTS, 'shot-6b-settings.png'))
+
+  // 6b-2. The Apify image-search section and the two image platforms must be
+  //       reachable from the settings nav and the sources grid respectively.
+  const apifyNav = window.locator('.settings-nav-item', { hasText: '以图搜物 (Apify)' })
+  check('设置导航出现「以图搜物 (Apify)」分区', (await apifyNav.count()) === 1)
+  await apifyNav.click()
+  await window.waitForTimeout(200)
+  check('Apify 分区提供 Token 密码输入框', (await window.locator('.st-section-content input[type="password"]').count()) === 1)
+  check('Apify 分区提供两个 Actor ID 输入框', (await window.locator('.st-section-content input[type="text"]').count()) === 2)
+  check('Apify 分区提供三个运行参数数字输入框', (await window.locator('.st-section-content input[type="number"]').count()) === 3)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-apify.png') })
+  checkScreenshot('Apify 以图搜物设置分区', join(ARTIFACTS, 'shot-6b-apify.png'))
+
+  await window.locator('.settings-nav-item', { hasText: '搜索源' }).click()
+  await window.waitForTimeout(200)
+  const sourceLabels = await window.locator('.st-platform-grid .st-check-name').allInnerTexts()
+  check('搜索源勾选框包含闲鱼与淘宝图搜',
+    sourceLabels.includes('闲鱼') && sourceLabels.includes('淘宝图搜'),
+    JSON.stringify(sourceLabels))
+
   await settingsSave.click()
   await window.waitForTimeout(400)
   check('点击保存后设置弹窗自动关闭', (await window.locator('.settings-overlay').count()) === 0)

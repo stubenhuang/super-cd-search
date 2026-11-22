@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Settings, Platform, BarcodeProvider, SettingsTransferResult } from './electron-api'
+import type { ApifySettings } from '../../shared/types'
+import { DEFAULT_APIFY_SETTINGS } from '../../shared/apify'
 import { PLATFORMS, platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { useI18n } from './i18n'
 import { useUpdateState } from './hooks/useUpdateState'
@@ -13,7 +15,7 @@ interface SettingsPanelProps {
   section?: SectionKey
 }
 
-export type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'backup' | 'about'
+export type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'apify' | 'llm' | 'backup' | 'about'
 
 export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) {
   const { t } = useI18n()
@@ -39,6 +41,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
   const [standardPlatforms, setStandardPlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
   const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
   const [fastMode, setFastMode] = useState(false)
+  const [apify, setApify] = useState<ApifySettings>(DEFAULT_APIFY_SETTINGS)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [backupExportPassword, setBackupExportPassword] = useState('')
@@ -92,6 +95,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
+    setApify({ ...DEFAULT_APIFY_SETTINGS, ...settings.apify })
     setAutoUpdateEnabled(settings.autoUpdateEnabled !== false)
   }, [])
 
@@ -161,6 +165,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
         standardPlatforms,
         deepPlatforms,
         fastMode,
+        apify,
         llm: {
           enabled: llmEnabled,
           apiBaseUrl: llmApiBaseUrl,
@@ -241,6 +246,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
     { key: 'proxy', icon: '◉', label: t('nav.proxy') },
     { key: 'barcode', icon: '▣', label: t('nav.barcodeProviders') },
     { key: 'sources', icon: '◎', label: t('nav.sources') },
+    { key: 'apify', icon: '▧', label: t('nav.apify') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
     { key: 'backup', icon: '⇅', label: t('nav.backup') },
     { key: 'about', icon: '⟳', label: t('nav.about') }
@@ -522,6 +528,121 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
                 <button type="button" className="st-btn-cancel" onClick={() => void handleClearCache()}>
                   {t('cache.clear')}
                 </button>
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'apify':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              {t('apify.desc')}
+            </div>
+            <div className="st-field">
+              <label className="st-label">
+                <span className="st-label-icon">◆</span> {t('apify.token')}
+              </label>
+              <input
+                type="password"
+                className="st-input"
+                value={apify.token}
+                onChange={e => setApify(prev => ({ ...prev, token: e.target.value }))}
+                placeholder={t('apify.tokenPlaceholder')}
+              />
+              <div className="st-field-hint">{t('apify.tokenHint')}</div>
+            </div>
+
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◈</span> {t('apify.actors')}
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('apify.taobaoActor')}
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  value={apify.taobaoActor}
+                  onChange={e => setApify(prev => ({ ...prev, taobaoActor: e.target.value }))}
+                />
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('apify.xianyuActor')}
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  value={apify.xianyuActor}
+                  onChange={e => setApify(prev => ({ ...prev, xianyuActor: e.target.value }))}
+                />
+                <div className="st-field-hint">{t('apify.actorHint')}</div>
+              </div>
+            </div>
+
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◈</span> {t('apify.limits')}
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('apify.num')}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  className="st-input"
+                  value={apify.num}
+                  onChange={e => {
+                    const value = e.target.valueAsNumber
+                    if (!Number.isNaN(value)) {
+                      setApify(prev => ({ ...prev, num: Math.min(50, Math.max(1, Math.round(value))) }))
+                    }
+                  }}
+                />
+                <div className="st-field-hint">{t('apify.numHint')}</div>
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('apify.maxItems')}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={1500}
+                  className="st-input"
+                  value={apify.maxItems}
+                  onChange={e => {
+                    const value = e.target.valueAsNumber
+                    if (!Number.isNaN(value)) {
+                      setApify(prev => ({ ...prev, maxItems: Math.min(1500, Math.max(1, Math.round(value))) }))
+                    }
+                  }}
+                />
+                <div className="st-field-hint">{t('apify.maxItemsHint')}</div>
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('apify.timeoutMs')}
+                </label>
+                <input
+                  type="number"
+                  min={10000}
+                  max={600000}
+                  step={1000}
+                  className="st-input"
+                  value={apify.timeoutMs}
+                  onChange={e => {
+                    const value = e.target.valueAsNumber
+                    if (!Number.isNaN(value)) {
+                      setApify(prev => ({ ...prev, timeoutMs: Math.min(600000, Math.max(10000, Math.round(value))) }))
+                    }
+                  }}
+                />
+                <div className="st-field-hint">{t('apify.timeoutHint')}</div>
               </div>
             </div>
           </div>

@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-- **多平台搜索**：从 Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping、CDJapan、Tower Records 查询 CD 信息
+- **多平台搜索**：从 Discogs、eBay、Kojima Rokuon、HMV、Yahoo Shopping、CDJapan、Tower Records 查询 CD 信息；另可选开启淘宝 / 闲鱼「以图搜物」（Apify 云端 Actor）
 - **详情聚合**：详情页汇总所有来源，有效字段最多的来源优先，其余来源补缺，尽量拼出完整元数据
 - **智能生成**：详情字段缺失时，可按 Tower → HMV → CDJapan → Kojima → Yahoo 的可靠性顺序逐源抓取详情页并调用 LLM 补齐（固定排除 Discogs 与 eBay；搜索过程不会自动调用 LLM）
 - **批量处理**：同时搜索多个目录号
@@ -30,6 +30,8 @@
 | Yahoo Shopping | 网页抓取 | 日本电商平台 |
 | CDJapan | 网页抓取 | 日本 CD 直邮商店，按目录号直达商品页 |
 | Tower Records | 网页抓取 | 日本最大唱片连锁 |
+| 闲鱼 | 以图搜物（Apify） | 需配置 Apify Token 并在「搜索源」勾选；取文字搜索结果封面图反查二手商品，价格换算为 USD |
+| 淘宝 | 以图搜物（Apify） | 同上（拍立淘）；默认关闭，因按次计费 |
 
 ## 安装
 
@@ -101,6 +103,7 @@ npm run verify:ui
 - **Discogs API Token**：Discogs 个人访问令牌
 - **eBay Client ID**：eBay 开发者门户 OAuth 客户端 ID
 - **eBay Client Secret**：eBay 开发者门户 OAuth 客户端密钥
+- **以图搜物 (Apify)**：填写 Apify API Token（在 Apify Console → API & Integrations 获取），可调整两个 Actor ID 与返回条数 / 超时。淘宝、闲鱼图搜通过 Apify 云端 Actor 运行，按次计费，默认不启用；启用前需在「搜索源」勾选对应平台。**图片来源为同批次文字搜索结果的第一张封面图**，若某目录号没有可用封面则该源返回「无可用封面图」而不发起付费请求。令牌只通过 `Authorization` 请求头发送，不写入日志。
 
 凭证使用加密方式本地存储。
 

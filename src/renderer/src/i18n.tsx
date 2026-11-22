@@ -90,6 +90,7 @@ const zh = {
   'nav.lan': '局域网连接',
   'nav.barcodeProviders': '条码解析供应商',
   'nav.sources': '搜索源',
+  'nav.apify': '以图搜物 (Apify)',
   'nav.llm': 'LLM 配置',
   'nav.backup': '备份与恢复',
   'nav.about': '关于与更新',
@@ -208,6 +209,23 @@ const zh = {
   'llm.model': 'Model',
   'llm.platformSelection': '智能生成数据源',
   'llm.smartSourcesHint': '智能生成固定排除 Discogs 与 eBay；只会逐个分析能搜索到商品的来源。',
+
+  // Apify reverse-image search
+  'apify.desc': '淘宝与闲鱼「以图搜物」通过 Apify 云端 Actor 运行，按次计费。请先在「搜索源」勾选这两个平台，并填写 Apify API Token；运行中会自动取文字搜索结果的封面图作为搜索图片。',
+  'apify.token': 'Apify API Token',
+  'apify.tokenPlaceholder': '在 Apify Console → API & Integrations 获取',
+  'apify.tokenHint': '令牌仅保存在本机加密配置中，并通过 Authorization 请求头发送，不会写入日志。',
+  'apify.actors': 'Actor 配置',
+  'apify.limits': '运行参数',
+  'apify.taobaoActor': '淘宝 Actor ID',
+  'apify.xianyuActor': '闲鱼 Actor ID',
+  'apify.actorHint': '可填 用户名~名称 或 用户名/名称 形式。',
+  'apify.num': '淘宝结果数 / 比价条数',
+  'apify.numHint': '每次淘宝图搜返回的商品数（1-50），也是计算价格区间时取前 N 条。',
+  'apify.maxItems': '闲鱼最大条数',
+  'apify.maxItemsHint': '每次闲鱼图搜返回的商品上限（1-1500）。',
+  'apify.timeoutMs': '闲鱼超时（毫秒）',
+  'apify.timeoutHint': '闲鱼 Actor 运行较慢，整段运行的墙钟上限；取消批次会立即停止轮询。',
 
   // Detail modal
   'detail.catalogNumber': '目录号',
