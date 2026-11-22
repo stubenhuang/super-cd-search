@@ -3,7 +3,6 @@ import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayC
 import { SettingsPanel } from './Settings'
 import type { SectionKey } from './Settings'
 import { LanPanel } from './LanPanel'
-import { ShimoPanel } from './ShimoPanel'
 import { DetailModal } from './DetailModal'
 import { PublishDialog, PublishMenu, type PublishDialogRequest } from './Publish'
 import { PublishTargetsPanel } from './PublishTargetsPanel'
@@ -307,7 +306,6 @@ function playCompletionSound(): void {
 
 function App() {
   const { t } = useI18n()
-  const [activeTab, setActiveTab] = useState<'search' | 'shimo'>('search')
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [mobileNotice, setMobileNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
@@ -960,13 +958,6 @@ function App() {
     void runPublishPrepare(publishDialog.catalogNumber, publishDialog.targetId, publishDialog.targetName)
   }, [publishDialog, runPublishPrepare])
 
-  // 石墨文档 keeps the manual publish log; jumping there clears the dialog.
-  const handleOpenShimo = useCallback(() => {
-    setPublishDialog(null)
-    setIsPublishing(false)
-    setActiveTab('shimo')
-  }, [])
-
   const handlePublishDialogClose = useCallback(() => {
     setPublishDialog(null)
     setIsPublishing(false)
@@ -1027,11 +1018,6 @@ function App() {
           </button>
         </div>
       </header>
-      <nav className="app-tabs" aria-label="Main sections">
-        <button className={activeTab === 'search' ? 'active' : ''} onClick={() => setActiveTab('search')}>{t('tab.search')}</button>
-        <button className={activeTab === 'shimo' ? 'active' : ''} onClick={() => setActiveTab('shimo')}>{t('tab.shimo')}</button>
-      </nav>
-      {activeTab === 'search' ? (
       <main className="app-main">
         <aside className="left-panel">
           <div className="panel-header">
@@ -1220,12 +1206,6 @@ function App() {
           </div>
         </section>
       </main>
-      ) : (
-        <ShimoPanel onOpenSettings={() => {
-          setSettingsSection('shimo')
-          setShowSettings(true)
-        }} />
-      )}
       <UpdateBanner state={updateState} onInstall={() => void installUpdate()} />
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} section={settingsSection} />
@@ -1253,7 +1233,6 @@ function App() {
           request={publishDialog}
           onClose={handlePublishDialogClose}
           onRetryPrepare={handlePublishRetry}
-          onOpenShimo={handleOpenShimo}
           onPublishingChange={setIsPublishing}
         />
       )}

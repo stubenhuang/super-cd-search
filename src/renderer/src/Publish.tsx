@@ -1057,8 +1057,6 @@ interface PublishDialogProps {
   request: PublishDialogRequest
   onClose: () => void
   onRetryPrepare: () => void
-  /** Switch the app to the 石墨文档 tab after a successful publish. */
-  onOpenShimo: () => void
   /** Lets App disable the search controls while a run is in flight. */
   onPublishingChange: (publishing: boolean) => void
 }
@@ -1091,7 +1089,6 @@ export function PublishDialog({
   request,
   onClose,
   onRetryPrepare,
-  onOpenShimo,
   onPublishingChange
 }: PublishDialogProps) {
   const { t } = useI18n()
@@ -1446,14 +1443,6 @@ export function PublishDialog({
             </div>
           )}
 
-          {outcome.status === 'published' && (
-            <div className="publish-shimo">
-              <div className="publish-shimo-text">{t('publish.shimoReminder')}</div>
-              <button type="button" className="publish-btn publish-btn-primary" onClick={onOpenShimo}>
-                {t('publish.shimoOpen')}
-              </button>
-            </div>
-          )}
         </div>
       )
     }

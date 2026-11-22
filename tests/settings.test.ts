@@ -36,7 +36,6 @@ describe('settings', () => {
       lanPort: undefined,
       barcodeProviders: DEFAULT_BARCODE_PROVIDERS,
       lastExportDirectory: undefined,
-      shimoSheetUrl: undefined,
       autoUpdateEnabled: true,
       publishTargets: []
     })
@@ -84,15 +83,6 @@ describe('settings', () => {
     setSetting('lastExportDirectory', '/Users/me/Exports')
     expect(getSetting('lastExportDirectory')).toBe('/Users/me/Exports')
     expect(getSettings().lastExportDirectory).toBe('/Users/me/Exports')
-  })
-
-  it('round-trips the 石墨文档 spreadsheet URL', () => {
-    setSetting('shimoSheetUrl', 'https://shimo.im/sheets/AbCdEf/xy12/')
-    expect(getSetting('shimoSheetUrl')).toBe('https://shimo.im/sheets/AbCdEf/xy12/')
-    expect(getSettings().shimoSheetUrl).toBe('https://shimo.im/sheets/AbCdEf/xy12/')
-    // 空串即「未配置」，读出来按 undefined 处理
-    setSetting('shimoSheetUrl', '')
-    expect(getSettings().shimoSheetUrl).toBeUndefined()
   })
 
   it('round-trips the barcode provider order', () => {

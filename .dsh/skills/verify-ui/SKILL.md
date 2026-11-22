@@ -26,7 +26,7 @@ description: "Super CD Search 的 UI 冒烟测试(playwright-core + 真实 Elect
 
 ## 看产物(每跑必做)
 
-- **必须 `read_image` 看 `artifacts/ui/*.png`**:断言通过 ≠ 界面没问题,排版、遮挡、空白帧只有看图才知道。各截图覆盖范围见 `scripts/verify-ui.mjs` 头部注释(搜索页、石墨文档内嵌、手机端、局域网面板、设置面板、发布目标全流程、空态发布入口)。
+- **必须 `read_image` 看 `artifacts/ui/*.png`**:断言通过 ≠ 界面没问题,排版、遮挡、空白帧只有看图才知道。各截图覆盖范围见 `scripts/verify-ui.mjs` 头部注释(搜索页、手机端、局域网面板、设置面板、发布目标全流程、空态发布入口)。
 - 先读 `artifacts/ui/console.log`:含主进程 stdout/stderr、渲染进程 console 与未捕获异常,每条 FAIL 的上下文都在里面,失败先看它再决定重跑。
 - `artifacts/` 已 gitignore,产物不会误提交;失败时脚本非 0 退出且**保留全部产物**,别删,排查完再清。
 
@@ -38,7 +38,7 @@ description: "Super CD Search 的 UI 冒烟测试(playwright-core + 真实 Elect
 ## 扩展检查
 
 - 新增/改界面功能时,在 `scripts/verify-ui.mjs` 里补一条 `check(name, ok, detail)`;截图顺带用 `checkScreenshot` 校验非空白(≥ 5KB,小于基本是空帧)。
-- 断言要钉在具体结构上(选择器、文案、boundingBox、computedStyle),避免重构后变成空断言;警惕用文本匹配打到错误元素(如 `.search-button` 与「搜索」tab 按钮)。
+- 断言要钉在具体结构上(选择器、文案、boundingBox、computedStyle),避免重构后变成空断言;警惕用文本匹配打到错误元素(如 `.search-button` 与其它含「搜索」文案的控件)。
 
 ## 受限宿主注意事项
 

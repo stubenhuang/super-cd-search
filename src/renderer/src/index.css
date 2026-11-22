@@ -22,7 +22,7 @@
   --accent-light: #DAA520;
   --accent-bg: rgba(184, 134, 11, 0.1);
 
-  /* Status backgrounds (error/success surfaces used by the Shimo panel) */
+  /* Status backgrounds (error/success surfaces) */
   --success-bg: rgba(93, 122, 74, 0.1);
   --error-bg: rgba(166, 61, 64, 0.1);
   --error-text: #7A2D2F;

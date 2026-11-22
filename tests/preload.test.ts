@@ -139,11 +139,4 @@ describe('preload API', () => {
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('lan:setSearchState', state)
   })
 
-  it('forwards the 石墨 webview logout call to ipcRenderer.invoke', async () => {
-    api = await loadPreload()
-    vi.mocked(ipcRenderer.invoke).mockResolvedValue({ ok: true })
-
-    await api.shimoClearSession()
-    expect(ipcRenderer.invoke).toHaveBeenCalledWith('shimo:clear-session')
-  })
 })
