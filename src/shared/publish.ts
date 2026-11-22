@@ -108,7 +108,7 @@ export interface PublishTarget {
   /**
    * When the 闲鱼 login was last confirmed, for the settings row. Every 闲鱼
    * target owns a separate Chrome profile, so two targets really are two
-   * independent accounts — unrelated to the search channel's login.
+   * independent accounts.
    */
   xianyuLoginAt?: number
 }

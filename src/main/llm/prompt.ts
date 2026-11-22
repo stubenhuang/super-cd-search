@@ -9,9 +9,7 @@ const PLATFORM_NAMES: Record<Platform, string> = {
   hmv: 'HMV Japan',
   yahoo: 'Yahoo Shopping Japan',
   cdjapan: 'CDJapan',
-  tower: 'Tower Records Japan',
-  xianyu: 'Xianyu',
-  taobao: 'Taobao'
+  tower: 'Tower Records Japan'
 }
 
 const DETAIL_FIELD_NAMES: Record<keyof CDDetails, string> = {

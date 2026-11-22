@@ -21,8 +21,8 @@ import { logger } from '../logger'
  *   which is what `cache.ts` already defaults to);
  * - `run` holds the platform-specific scrape, including the API→web fallbacks
  *   of Discogs/eBay;
- * - `mapError` lets a channel turn its own deadline into a retryable result
- *   (xianyu/taobao) without re-implementing the wrapper.
+ * - `mapError` lets a platform turn its own deadline into a retryable result
+ *   without re-implementing the wrapper.
  */
 
 export interface PlatformQueryConfig {

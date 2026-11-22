@@ -7,9 +7,6 @@ import type {
   BatchQueryProgress,
   BatchQueryResult,
   DisplayCurrency,
-  LoginPlatform,
-  LoginResult,
-  LoginSessionStatus,
   DetailEnrichProgress,
   DetailEnrichProgressStatus,
   DetailEnrichmentResult,
@@ -50,9 +47,6 @@ export type {
   ThrottleStatus,
   BatchQueryResult,
   DisplayCurrency,
-  LoginPlatform,
-  LoginResult,
-  LoginSessionStatus,
   DetailEnrichProgress,
   DetailEnrichProgressStatus,
   DetailEnrichmentResult,
@@ -104,10 +98,6 @@ export interface IElectronAPI {
   cancelBatchQuery: () => Promise<void>
   openExternal: (url: string) => Promise<void>
   fetchImage: (url: string, size?: number) => Promise<{ base64: string; mimeType: string } | null>
-  startLogin: (platform: LoginPlatform) => Promise<LoginResult>
-  cancelLogin: () => Promise<void>
-  getLoginStatus: (platform: LoginPlatform) => Promise<LoginSessionStatus>
-  closeLoginSession: () => Promise<void>
   getLanStatus: () => Promise<LanServerStatus>
   getLanCandidates: () => Promise<LanCandidate[]>
   applyLanServer: () => Promise<LanServerStatus>

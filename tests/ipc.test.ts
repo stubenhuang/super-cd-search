@@ -10,13 +10,6 @@ const { mockGetSettings, mockGetSetting, mockSetSetting, mockUpdateSettings, moc
   mockDeleteSetting: vi.fn()
 }))
 
-const { mockStartLogin, mockCancelLogin, mockGetLoginStatus, mockCloseLoginSession } = vi.hoisted(() => ({
-  mockStartLogin: vi.fn(),
-  mockCancelLogin: vi.fn(),
-  mockGetLoginStatus: vi.fn(),
-  mockCloseLoginSession: vi.fn()
-}))
-
 const { mockExecuteBatchQuery, mockCancelBatchQuery } = vi.hoisted(() => ({
   mockExecuteBatchQuery: vi.fn(),
   mockCancelBatchQuery: vi.fn()
@@ -74,13 +67,6 @@ vi.mock('../src/main/settings/backup', () => ({
   importSettingsBackup: mockImportSettingsBackup
 }))
 
-vi.mock('../src/main/login', () => ({
-  startLogin: mockStartLogin,
-  cancelLogin: mockCancelLogin,
-  getLoginStatus: mockGetLoginStatus,
-  closeLoginSession: mockCloseLoginSession
-}))
-
 vi.mock('../src/main/orchestrator', () => ({
   executeBatchQuery: mockExecuteBatchQuery,
   cancelBatchQuery: mockCancelBatchQuery
@@ -124,7 +110,6 @@ import { registerSettingsIpc } from '../src/main/ipc/settings'
 import { registerOrchestratorIpc } from '../src/main/ipc/orchestrator'
 import { registerImageIpc } from '../src/main/ipc/image'
 import { registerCurrencyIpc } from '../src/main/ipc/currency'
-import { registerLoginIpc } from '../src/main/ipc/login'
 import { registerEnrichmentIpc } from '../src/main/ipc/enrich'
 import { registerLoggingIpc } from '../src/main/ipc/log'
 import { registerLanIpc } from '../src/main/ipc/lan'
@@ -275,31 +260,6 @@ describe('registerCurrencyIpc', () => {
 
     expect(await handler('getUsdToDisplayRate')(null, 'CNY')).toBe(7.2)
     expect(mockGetUsdToDisplayRate).toHaveBeenCalledWith('CNY')
-  })
-})
-
-describe('registerLoginIpc', () => {
-  it('registers the login lifecycle handlers', async () => {
-    mockStartLogin.mockResolvedValue({ status: 'done' })
-    mockGetLoginStatus.mockResolvedValue({ state: 'verified', expiresAt: 123 })
-    mockCloseLoginSession.mockResolvedValue(undefined)
-    mockCancelLogin.mockReturnValue(undefined)
-
-    registerLoginIpc()
-
-    expect(await handler('login:start')(null, 'xianyu')).toEqual({ status: 'done' })
-    expect(mockStartLogin).toHaveBeenCalledWith('xianyu')
-
-    expect(await handler('login:status')(null, 'xianyu')).toEqual({
-      state: 'verified',
-      expiresAt: 123
-    })
-
-    await handler('login:close')()
-    expect(mockCloseLoginSession).toHaveBeenCalled()
-
-    await handler('login:cancel')()
-    expect(mockCancelLogin).toHaveBeenCalled()
   })
 })
 

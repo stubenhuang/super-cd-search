@@ -83,10 +83,10 @@ describe('runPlatformQuery', () => {
   })
 
   it('uses the custom error mapper when one is given', async () => {
-    const custom = found('xianyu')
+    const custom = found('hmv')
     const result = await runPlatformQuery('X-1', undefined, {
-      platform: 'xianyu',
-      tag: 'queries.xianyu',
+      platform: 'hmv',
+      tag: 'queries.hmv',
       mapError: () => ({ ...custom, status: 'error', error: 'timeout message' }),
       run: async () => { throw new Error('deadline') }
     })

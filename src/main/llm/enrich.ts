@@ -26,9 +26,8 @@ import { queryTower } from '../queries/tower'
 import { getCachedEnrichment, cacheEnrichment } from '../queries/cache'
 
 /**
- * Explicit list rather than derived from Platform: the marketplace channels
- * (xianyu/taobao) are price-only sources with no structured release metadata,
- * so they never participate in smart fill even though they are Platforms.
+ * Explicit list rather than derived from Platform: Discogs/eBay are excluded
+ * from smart fill, so only the Japanese retailers participate.
  */
 export type SmartFillPlatform =
   | 'kojima'

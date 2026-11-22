@@ -3,9 +3,10 @@
  *
  * The Japanese retailers (Tower / HMV / Yahoo / Kojima / CDJapan) and the
  * barcode providers serve a localized page that is still parseable in English,
- * so they all use the same `ja,en` string; the Chinese channels the reverse.
- * Keeping one constant per language stops the literal drifting between the
- * query modules, the barcode providers and the LLM enrichment sources.
+ * so they all use the same `ja,en` string; the 闲鱼 seller workbench uses the
+ * Chinese-first one instead. Keeping one constant per language stops the
+ * literal drifting between the query modules, the barcode providers and the
+ * LLM enrichment sources.
  */
 
 /** Japanese-first, with an English fallback. */
@@ -14,5 +15,5 @@ export const JA_ACCEPT_LANGUAGE = { 'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
 /** English-only (CDJapan's English storefront). */
 export const EN_ACCEPT_LANGUAGE = { 'Accept-Language': 'en-US,en;q=0.9' } as const
 
-/** Chinese-first (goofish / taobao). */
+/** Chinese-first (goofish seller workbench). */
 export const ZH_ACCEPT_LANGUAGE = { 'Accept-Language': 'zh-CN,zh;q=0.9' } as const

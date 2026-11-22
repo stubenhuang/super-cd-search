@@ -87,7 +87,7 @@ export async function abortableDelay(ms: number, signal?: AbortSignal): Promise<
  * `work` receives a derived signal so hitting the deadline does not merely
  * abandon the promise — it stops what is still running: `gotoWithAbort` halts
  * the navigation and `abortableDelay` breaks out of its poll loops, which lets
- * the channel's `finally` release the shared Chrome page immediately instead of
+ * the caller's `finally` release the shared Chrome page immediately instead of
  * blocking the next catalog number on a scrape nobody is waiting for anymore.
  *
  * Resolution rules:

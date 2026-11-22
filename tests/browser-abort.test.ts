@@ -67,8 +67,8 @@ describe('browser abort helpers', () => {
 
 describe('timeout errors', () => {
   it('creates a named timeout error and recognises only those', () => {
-    const error = createTimeoutError('淘宝图搜超时')
-    expect(error).toMatchObject({ name: 'TimeoutError', message: '淘宝图搜超时' })
+    const error = createTimeoutError('查询超时')
+    expect(error).toMatchObject({ name: 'TimeoutError', message: '查询超时' })
     expect(isTimeoutError(error)).toBe(true)
     // A user cancellation is not a timeout; neither is a plain failure.
     expect(isTimeoutError(createAbortError())).toBe(false)
@@ -96,8 +96,8 @@ describe('withTimeout', () => {
   })
 
   it('rejects with a TimeoutError carrying the caller message once the deadline passes', async () => {
-    const pending = withTimeout(() => new Promise<string>(() => {}), 90_000, '淘宝图搜超时')
-    const assertion = expect(pending).rejects.toMatchObject({ name: 'TimeoutError', message: '淘宝图搜超时' })
+    const pending = withTimeout(() => new Promise<string>(() => {}), 90_000, '查询超时')
+    const assertion = expect(pending).rejects.toMatchObject({ name: 'TimeoutError', message: '查询超时' })
     await vi.advanceTimersByTimeAsync(90_000)
     await assertion
   })
@@ -111,7 +111,7 @@ describe('withTimeout', () => {
       // to the caller) without the timeout normalisation.
       await abortableDelay(120_000, signal)
       return 'never'
-    }, 90_000, '淘宝图搜超时')
+    }, 90_000, '查询超时')
 
     const assertion = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
     await vi.advanceTimersByTimeAsync(90_000)
@@ -126,7 +126,7 @@ describe('withTimeout', () => {
         signal.addEventListener('abort', () => reject(createAbortError()), { once: true })
       }),
       90_000,
-      '淘宝图搜超时',
+      '查询超时',
       parent.signal
     )
 
@@ -153,7 +153,7 @@ describe('withTimeout', () => {
           setTimeout(() => reject(new Error('late failure')), 120_000)
         }),
         90_000,
-        '淘宝图搜超时'
+        '查询超时'
       )
 
       const assertion = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })

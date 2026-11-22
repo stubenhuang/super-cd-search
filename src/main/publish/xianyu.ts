@@ -344,7 +344,7 @@ export async function publishToXianyu(input: XianyuPublishInput): Promise<Xianyu
   try {
     throwIfAborted(input.signal)
 
-    // Each target owns its own login; the search channel's session is unrelated.
+    // Each target owns its own login in its own Chrome profile.
     const snapshot = await readXianyuLogin(page)
     if (snapshot.state !== 'logged_in') {
       throw new Error('该发布目标尚未登录闲鱼：请到「设置 → 发布目标」里点它自己的「扫码登录」')
@@ -362,7 +362,7 @@ export async function publishToXianyu(input: XianyuPublishInput): Promise<Xianyu
 
     const landed = page.url()
     if (/login|passport/i.test(landed)) {
-      throw new Error('闲鱼登录已失效：请到「设置 → 登录」重新扫码登录闲鱼')
+      throw new Error('闲鱼登录已失效：请到「设置 → 发布目标」里点该目标自己的「扫码登录」')
     }
 
     // The workbench home usually needs one more click to reach the form; a miss

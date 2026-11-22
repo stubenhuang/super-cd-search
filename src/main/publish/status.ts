@@ -19,8 +19,8 @@ import { verifyDiscogsCredentials } from './discogs'
  * Per-target login/credential operations for the settings page.
  *
  * Each 闲鱼 target owns a separate Chrome profile, so its login is completely
- * independent of both the other targets and the search channel's session.
- * Discogs has no session at all: its credential is the target's own token, and
+ * independent of the other targets. Discogs has no session at all: its
+ * credential is the target's own token, and
  * 「已登录」 means that token was verified against `/oauth/identity`.
  */
 

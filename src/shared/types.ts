@@ -10,8 +10,6 @@ export type Platform =
   | 'yahoo'
   | 'cdjapan'
   | 'tower'
-  | 'xianyu'
-  | 'taobao'
 
 export interface CDDetails {
   label: string | null
@@ -32,29 +30,6 @@ export interface QueryResult {
   status: QueryStatus
   error?: string
   details?: CDDetails
-}
-
-/**
- * Marketplace channels that require a manual QR-code login in the shared
- * real-Chrome window before their queries can run.
- */
-export type LoginPlatform = 'xianyu' | 'taobao'
-
-/** Result of a manual login run (IPC-facing). */
-export interface LoginResult {
-  status: 'done' | 'error' | 'cancelled'
-  error?: string
-}
-
-/**
- * Live status of the real-Chrome login session for one platform. The cookies
- * live in the Chrome profile (not in app settings), so this is derived from the
- * running browser rather than persisted state.
- */
-export interface LoginSessionStatus {
-  state: 'not_started' | 'starting' | 'unverified' | 'verified' | 'expired'
-  /** Absolute ms timestamp when the current login expires (when verified). */
-  expiresAt?: number
 }
 
 export interface LLMSettings {

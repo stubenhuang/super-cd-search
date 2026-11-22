@@ -3,8 +3,7 @@ import { BrowserWindow } from 'electron'
 
 const {
   mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQueryYahoo,
-  mockQueryCdjapan, mockQueryTower,
-  mockQueryXianyu, mockQueryTaobaoImage, mockDownloadImage
+  mockQueryCdjapan, mockQueryTower
 } = vi.hoisted(() => ({
   mockQueryDiscogs: vi.fn(),
   mockQueryEbay: vi.fn(),
@@ -12,10 +11,7 @@ const {
   mockQueryHmv: vi.fn(),
   mockQueryYahoo: vi.fn(),
   mockQueryCdjapan: vi.fn(),
-  mockQueryTower: vi.fn(),
-  mockQueryXianyu: vi.fn(),
-  mockQueryTaobaoImage: vi.fn(),
-  mockDownloadImage: vi.fn()
+  mockQueryTower: vi.fn()
 }))
 
 vi.mock('../src/main/queries/discogs', () => ({ queryDiscogs: mockQueryDiscogs }))
@@ -25,9 +21,6 @@ vi.mock('../src/main/queries/hmv', () => ({ queryHmv: mockQueryHmv }))
 vi.mock('../src/main/queries/yahoo', () => ({ queryYahoo: mockQueryYahoo }))
 vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }))
 vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
-vi.mock('../src/main/queries/xianyu', () => ({ queryXianyu: mockQueryXianyu }))
-vi.mock('../src/main/queries/taobao', () => ({ queryTaobaoImage: mockQueryTaobaoImage }))
-vi.mock('../src/main/image', () => ({ downloadImage: mockDownloadImage }))
 
 import {
   executeBatchQuery,
@@ -61,9 +54,6 @@ beforeEach(() => {
   mockQueryYahoo.mockResolvedValue(found('yahoo'))
   mockQueryCdjapan.mockResolvedValue(found('cdjapan'))
   mockQueryTower.mockResolvedValue(found('tower'))
-  mockQueryXianyu.mockResolvedValue(found('xianyu'))
-  mockQueryTaobaoImage.mockResolvedValue(found('taobao'))
-  mockDownloadImage.mockResolvedValue({ base64: Buffer.from('downloaded').toString('base64'), mimeType: 'image/jpeg' })
 })
 
 afterEach(() => {
@@ -146,30 +136,6 @@ describe('executeBatchQuery', () => {
     const ebayResult = results[0].results.find(r => r.platform === 'ebay')
     expect(ebayResult).toMatchObject({ status: 'error', error: 'eBay is down' })
     expect(results[0].results).toHaveLength(7)
-  })
-
-  it('runs the taobao image search after the text platforms with the text-platform cover', async () => {
-    mockQueryDiscogs.mockResolvedValue({ ...found('discogs'), coverUrl: 'https://img.discogs.com/cover.jpg' })
-
-    const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao'])
-
-    expect(mockDownloadImage).toHaveBeenCalledWith('https://img.discogs.com/cover.jpg', 500, true)
-    expect(mockQueryTaobaoImage).toHaveBeenCalledWith(
-      'X-1',
-      { buffer: Buffer.from('downloaded'), mimeType: 'image/jpeg' },
-      expect.anything()
-    )
-    expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'taobao'])
-    expect(results[0].results[1]).toMatchObject({ platform: 'taobao', status: 'found' })
-  })
-
-  it('skips the taobao image search with a not-found result when no cover exists', async () => {
-    const results = await executeBatchQuery(['X-1'], ['taobao'])
-
-    expect(mockQueryTaobaoImage).not.toHaveBeenCalled()
-    const taobaoResult = results[0].results[0]
-    expect(taobaoResult).toMatchObject({ platform: 'taobao', status: 'not_found' })
-    expect(taobaoResult.error).toContain('无可用封面图')
   })
 
   it('aborts in-flight queries and emits a batch-cancelled event', async () => {

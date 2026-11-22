@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { app } from 'electron'
-import { LOGIN_DEFS } from '../src/main/login/defs'
+import { LOGIN_DEFS } from '../src/main/publish/xianyu-login'
 
 /**
  * Only the pure/deterministic behaviour of the multi-profile manager is tested

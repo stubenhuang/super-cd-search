@@ -26,7 +26,7 @@ const {
 // (dynamic import inside the factory is allowed) so the fixtures still decide
 // the login state.
 vi.mock('../src/main/publish/profiles', async () => {
-  const { checkLoginState, LOGIN_DEFS } = await import('../src/main/login/defs')
+  const { checkLoginState, LOGIN_DEFS } = await import('../src/main/publish/xianyu-login')
   return {
     acquirePublishPage: mockAcquirePublishPage,
     revealPublishWindow: mockRevealPublishWindow,

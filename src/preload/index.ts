@@ -5,9 +5,6 @@ import type {
   ThrottleStatus,
   Platform,
   DisplayCurrency,
-  LoginPlatform,
-  LoginResult,
-  LoginSessionStatus,
   DetailEnrichmentResult,
   QueryResult,
   CDDetails,
@@ -115,14 +112,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('openExternal', url),
   fetchImage: (url: string, size?: number): Promise<{ base64: string; mimeType: string } | null> =>
     ipcRenderer.invoke('fetchImage', url, size),
-  startLogin: (platform: LoginPlatform): Promise<LoginResult> =>
-    ipcRenderer.invoke('login:start', platform),
-  cancelLogin: (): Promise<void> =>
-    ipcRenderer.invoke('login:cancel'),
-  getLoginStatus: (platform: LoginPlatform): Promise<LoginSessionStatus> =>
-    ipcRenderer.invoke('login:status', platform),
-  closeLoginSession: (): Promise<void> =>
-    ipcRenderer.invoke('login:close'),
   getLanStatus: (): Promise<LanServerStatus> =>
     ipcRenderer.invoke('lan:getStatus'),
   getLanCandidates: (): Promise<LanCandidate[]> =>

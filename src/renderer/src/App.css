@@ -31,8 +31,6 @@
   --yahoo: #7B1FA2;
   --cdjapan: #00897B;
   --tower: #5C6BC0;
-  --xianyu: #E8B411;
-  --taobao: #FF5000;
 
   /* Status colors */
   --success: #5D7A4A;
@@ -105,8 +103,6 @@
   --yahoo: #C08AF0;
   --cdjapan: #4DB6AC;
   --tower: #9FA8DA;
-  --xianyu: #F5D327;
-  --taobao: #FF7A45;
 
   --success: #8FBF6B;
   --warning: #D4A72C;
@@ -1005,14 +1001,6 @@ html[data-platform='win32'] .app-header {
 
 .platform-card[data-platform="tower"] .brand-bar {
   background: var(--tower);
-}
-
-.platform-card[data-platform="xianyu"] .brand-bar {
-  background: var(--xianyu);
-}
-
-.platform-card[data-platform="taobao"] .brand-bar {
-  background: var(--taobao);
 }
 
 .platform-card.not_found .brand-bar,

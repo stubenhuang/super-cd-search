@@ -11,9 +11,7 @@ export const PLATFORMS: Platform[] = [
   'hmv',
   'yahoo',
   'cdjapan',
-  'tower',
-  'xianyu',
-  'taobao'
+  'tower'
 ]
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -23,9 +21,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   hmv: 'HMV Japan',
   yahoo: 'Yahoo Shopping',
   cdjapan: 'CDJapan',
-  tower: 'Tower Records Japan',
-  xianyu: 'Xianyu',
-  taobao: 'Taobao'
+  tower: 'Tower Records Japan'
 }
 
 /**
@@ -38,32 +34,10 @@ export function platformLabel(platform: Platform): string {
   return PLATFORM_LABELS[platform] ?? platform
 }
 
-/**
- * Text-search platforms. The marketplace channels (xianyu/taobao) are not part
- * of this list: they are special channels that need a QR-code login and only
- * run while they are both checked and verified (see SELECTABLE_PLATFORMS).
- */
-export const SEARCH_PLATFORMS: Platform[] = PLATFORMS.filter(p => p !== 'xianyu' && p !== 'taobao')
-
-/** Marketplace channels driven by the special-channel login flow. */
-export const CHANNEL_PLATFORMS: Platform[] = ['xianyu', 'taobao']
-
-/**
- * Everything the user can tick for the standard/deep search modes in the
- * settings panel: text platforms plus the marketplace channels. A checked
- * channel still only joins a search while its QR login is verified.
- */
-export const SELECTABLE_PLATFORMS: Platform[] = [...SEARCH_PLATFORMS, ...CHANNEL_PLATFORMS]
-
 /** Default platform set for the standard search mode. */
 export const DEFAULT_STANDARD_PLATFORMS: Platform[] = ['discogs', 'ebay']
 
-/**
- * Default platform set for the deep search mode. The marketplace channels are
- * intentionally excluded: they need a QR-code login first, so new users opt in
- * to them from the settings panel instead of having an unverified deep search
- * skip them by default.
- */
+/** Default platform set for the deep search mode (every text platform). */
 export const DEFAULT_DEEP_PLATFORMS: Platform[] = [
   'discogs',
   'ebay',

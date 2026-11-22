@@ -34,11 +34,9 @@ describe('resolveDeepDigPlatforms', () => {
     expect(resolveDeepDigPlatforms({ deepPlatforms: [] })).toEqual([])
   })
 
-  it('keeps channel platforms in canonical order too', () => {
-    const configured: Platform[] = ['taobao', 'xianyu', 'discogs']
-    const result = resolveDeepDigPlatforms({ deepPlatforms: configured })
-    expect(result).toEqual(['discogs', 'xianyu', 'taobao'])
-    expect(result.indexOf('xianyu')).toBeLessThan(result.indexOf('taobao'))
+  it('drops platform ids that are no longer in the canonical list', () => {
+    const configured = ['tower', 'discogs', 'retired'] as Platform[]
+    expect(resolveDeepDigPlatforms({ deepPlatforms: configured })).toEqual(['discogs', 'tower'])
   })
 })
 

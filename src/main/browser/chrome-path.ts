@@ -69,9 +69,8 @@ export const CHROME_NOT_FOUND_MESSAGE = '未找到 Google Chrome，请先安装�
 /**
  * Chrome flags for a profile directory the app owns and connects to over CDP.
  *
- * Shared by the single-profile search session (login/session.ts) and the
- * per-target publishing profiles (publish/profiles.ts) so both launch the same
- * browser the same way:
+ * Used by the per-target publishing profiles (publish/profiles.ts) to launch
+ * a real Chrome over CDP:
  *
  *  - `--remote-debugging-port=0` picks a free port, written to
  *    `DevToolsActivePort` inside `dir` (see waitForDevToolsPort).

@@ -132,7 +132,7 @@ describe('query result cache', () => {
 
   it('never caches challenge results', () => {
     const challengeResult: QueryResult = {
-      platform: 'xianyu',
+      platform: 'hmv',
       name: null,
       artist: null,
       priceMin: null,
@@ -140,10 +140,10 @@ describe('query result cache', () => {
       coverUrl: null,
       link: null,
       status: 'challenge',
-      error: '尚未扫码登录或登录已失效'
+      error: '需要验证'
     }
     cacheQueryResult('X-1', challengeResult)
-    expect(getCachedQueryResult('xianyu', 'X-1')).toBeNull()
+    expect(getCachedQueryResult('hmv', 'X-1')).toBeNull()
   })
 })
 

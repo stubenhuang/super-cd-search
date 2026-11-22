@@ -4,14 +4,12 @@ import { registerSettingsIpc } from './ipc/settings'
 import { registerOrchestratorIpc } from './ipc/orchestrator'
 import { registerImageIpc } from './ipc/image'
 import { registerCurrencyIpc } from './ipc/currency'
-import { registerLoginIpc } from './ipc/login'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
 import { registerPublishIpc } from './ipc/publish'
 import { registerUpdaterIpc } from './ipc/updater'
 import { initUpdater, disposeUpdater } from './updater'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
-import { initLoginSession, closeLoginSession } from './login'
 import { closeAllPublishProfiles, initPublishProfiles } from './publish'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
@@ -100,7 +98,6 @@ app.whenReady().then(async () => {
   logger.info('main', 'application ready', { logLevel: getLogLevel() })
 
   initCachePersistence(app.getPath('userData'))
-  initLoginSession(app.getPath('userData'))
   initPublishProfiles(app.getPath('userData'))
   prewarmExchangeRates()
   registerSettingsIpc()
@@ -112,7 +109,6 @@ app.whenReady().then(async () => {
   registerThrottleIpc()
   registerLanIpc()
   registerCurrencyIpc()
-  registerLoginIpc()
   registerUpdaterIpc()
 
   // Register shell.openExternal handler
@@ -163,7 +159,6 @@ app.on('window-all-closed', () => {
   logger.debug('main', 'all windows closed, tearing down browser/session resources')
   browserPool.closeAll()
   destroyProxyAgents()
-  void closeLoginSession()
   // Publish targets own resident Chrome processes; close them so no browser
   // outlives the app.
   void closeAllPublishProfiles()

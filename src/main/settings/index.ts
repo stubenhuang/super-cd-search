@@ -6,7 +6,7 @@ import { hostname, userInfo } from 'os'
 import electronStore from 'electron-store'
 import type { Settings, LLMSettings, Platform, DisplayCurrency, BarcodeProvider } from '../../shared/types'
 import type { PublishTarget } from '../../shared/publish'
-import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
+import { PLATFORMS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 
 export type { Settings, LLMSettings }
 
@@ -221,8 +221,11 @@ export function getSettings(): Settings {
     proxyHost: store.get('proxyHost') as string || undefined,
     proxyPort: store.get('proxyPort') as number || undefined,
     llm: store.get('llm') as LLMSettings | undefined,
-    standardPlatforms: store.get('standardPlatforms') as Platform[] || DEFAULT_STANDARD_PLATFORMS,
-    deepPlatforms: store.get('deepPlatforms') as Platform[] || DEFAULT_DEEP_PLATFORMS,
+    // Drop platform ids from older versions that no longer exist (e.g. the
+    // removed marketplace channels) so a stale settings file never leaks an
+    // unknown platform into a search run.
+    standardPlatforms: ((store.get('standardPlatforms') as Platform[]) || DEFAULT_STANDARD_PLATFORMS).filter(p => PLATFORMS.includes(p)),
+    deepPlatforms: ((store.get('deepPlatforms') as Platform[]) || DEFAULT_DEEP_PLATFORMS).filter(p => PLATFORMS.includes(p)),
     fastMode: store.get('fastMode') as boolean || undefined,
     displayCurrency: (store.get('displayCurrency') as DisplayCurrency) || 'USD',
     lanEnabled: store.get('lanEnabled') as boolean || undefined,

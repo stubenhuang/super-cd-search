@@ -5,13 +5,8 @@ import { queryHmv } from '../queries/hmv'
 import { queryYahoo } from '../queries/yahoo'
 import { queryCdjapan } from '../queries/cdjapan'
 import { queryTower } from '../queries/tower'
-import { queryXianyu } from '../queries/xianyu'
-import { queryTaobaoImage } from '../queries/taobao'
-import { notFound } from '../queries/types'
-import { downloadImage } from '../image'
-import { throwIfAborted } from '../browser/abort'
 import { normalizeCatalogNumber } from '../../shared/utils'
-import { SEARCH_PLATFORMS } from '../../shared/platforms'
+import { PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { logger } from '../logger'
 import { broadcastToWindows } from '../window-broadcast'
@@ -85,27 +80,6 @@ async function runPlatformQuery(
   }
 }
 
-/**
- * Cover art for the Taobao image-search channel: the first cover URL returned
- * by the text platforms (downloaded and resized through the image cache).
- */
-async function resolveTaobaoSearchImage(
-  catalogNumber: string,
-  textResults: QueryResult[],
-  signal: AbortSignal
-): Promise<{ buffer: Buffer; mimeType: string } | null> {
-  throwIfAborted(signal)
-  for (const result of textResults) {
-    if (!result.coverUrl) continue
-    const downloaded = await downloadImage(result.coverUrl, 500, true)
-    if (!downloaded) continue
-    logger.debug('orchestrator', 'taobao image source: search cover', { catalogNumber, platform: result.platform })
-    return { buffer: Buffer.from(downloaded.base64, 'base64'), mimeType: downloaded.mimeType }
-  }
-  logger.debug('orchestrator', 'taobao image source: none', { catalogNumber })
-  return null
-}
-
 async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, enabledPlatforms: Platform[]): Promise<QueryResult[]> {
   const catalogStartedAt = Date.now()
   if (signal.aborted) {
@@ -124,8 +98,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     { name: 'hmv', query: () => queryHmv(catalogNumber, signal) },
     { name: 'yahoo', query: () => queryYahoo(catalogNumber, signal) },
     { name: 'cdjapan', query: () => queryCdjapan(catalogNumber, signal) },
-    { name: 'tower', query: () => queryTower(catalogNumber, signal) },
-    { name: 'xianyu', query: () => queryXianyu(catalogNumber, signal) }
+    { name: 'tower', query: () => queryTower(catalogNumber, signal) }
   ]
 
   const platforms = registry.filter(p => enabledPlatforms.includes(p.name))
@@ -153,19 +126,6 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     return { platform: platform.name, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
   })
 
-  // Phase two: the Taobao image-search channel needs the cover art collected
-  // by the text platforms above, so it runs after them, still abort-aware.
-  if (enabledPlatforms.includes('taobao')) {
-    const taobaoResult = await runPlatformQuery(catalogNumber, signal, 'taobao', async () => {
-      const image = await resolveTaobaoSearchImage(catalogNumber, results, signal)
-      if (!image) {
-        return { ...notFound('taobao'), error: '无可用封面图，无法执行淘宝图搜' }
-      }
-      return queryTaobaoImage(catalogNumber, image, signal)
-    })
-    results.push(taobaoResult)
-  }
-
   logger.debug('orchestrator', 'query all platforms complete', {
     catalogNumber,
     durationMs: Date.now() - catalogStartedAt,
@@ -184,7 +144,7 @@ export function cancelBatchQuery(): void {
   }
 }
 
-export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = SEARCH_PLATFORMS): Promise<BatchQueryResult[]> {
+export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = PLATFORMS): Promise<BatchQueryResult[]> {
   const batchStartedAt = Date.now()
   logger.debug('orchestrator', 'execute batch query start', { requestedCatalogNumbers: catalogNumbers, platforms })
   if (abortController) {

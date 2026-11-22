@@ -264,8 +264,7 @@ export const MOBILE_APP_JS = `(function () {
 
   var QUERY_PLATFORM_LABELS = {
     discogs: 'Discogs', ebay: 'eBay', kojima: 'Kojima', hmv: 'HMV',
-    yahoo: 'Yahoo', cdjapan: 'CDJapan', tower: 'Tower',
-    xianyu: '闲鱼', taobao: '淘宝'
+    yahoo: 'Yahoo', cdjapan: 'CDJapan', tower: 'Tower'
   };
   var STATUS_ICONS = { loading: '⏳', complete: '✓', not_found: '−', challenge: '⚠', error: '✗', pending: '○' };
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Settings, Platform, LoginPlatform, LoginSessionStatus, BarcodeProvider, SettingsTransferResult } from './electron-api'
-import { SELECTABLE_PLATFORMS, CHANNEL_PLATFORMS, platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
+import type { Settings, Platform, BarcodeProvider, SettingsTransferResult } from './electron-api'
+import { PLATFORMS, platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { useI18n } from './i18n'
 import { useUpdateState } from './hooks/useUpdateState'
 import { GITHUB_REPO_URL } from '../../shared/updater'
@@ -13,7 +13,7 @@ interface SettingsPanelProps {
   section?: SectionKey
 }
 
-export type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'login' | 'backup' | 'about'
+export type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'llm' | 'backup' | 'about'
 
 export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) {
   const { t } = useI18n()
@@ -36,11 +36,6 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
   const [llmPlatformYahoo, setLlmPlatformYahoo] = useState(true)
   const [llmPlatformCdjapan, setLlmPlatformCdjapan] = useState(true)
   const [llmPlatformTower, setLlmPlatformTower] = useState(true)
-  const [loginStatus, setLoginStatus] = useState<Record<LoginPlatform, LoginSessionStatus>>({
-    xianyu: { state: 'not_started' },
-    taobao: { state: 'not_started' }
-  })
-  const [loginBusy, setLoginBusy] = useState<Partial<Record<LoginPlatform, boolean>>>({})
   const [standardPlatforms, setStandardPlatforms] = useState<Platform[]>(DEFAULT_STANDARD_PLATFORMS)
   const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
   const [fastMode, setFastMode] = useState(false)
@@ -62,40 +57,6 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
       loadSettings()
     }
   }, [isOpen, section])
-
-  const refreshLoginStatus = useCallback(async () => {
-    const [xianyu, taobao] = await Promise.all([
-      window.electronAPI.getLoginStatus('xianyu'),
-      window.electronAPI.getLoginStatus('taobao')
-    ])
-    setLoginStatus({ xianyu, taobao })
-  }, [])
-
-  const handleLogin = async (platform: LoginPlatform) => {
-    setLoginBusy(prev => ({ ...prev, [platform]: true }))
-    try {
-      const result = await window.electronAPI.startLogin(platform)
-      if (result.status === 'done') {
-        setToast({ kind: 'success', text: t('channels.toastSuccess') })
-      } else if (result.status === 'cancelled') {
-        setToast({ kind: 'success', text: t('channels.toastCancelled') })
-      } else {
-        setToast({ kind: 'error', text: t('channels.toastFailed', { error: result.error || t('login.unknownError') }) })
-      }
-      setTimeout(() => setToast(null), 4000)
-    } catch {
-      setToast({ kind: 'error', text: t('login.toastFailedUnknown') })
-      setTimeout(() => setToast(null), 4000)
-    } finally {
-      setLoginBusy(prev => ({ ...prev, [platform]: false }))
-      void refreshLoginStatus()
-    }
-  }
-
-  const handleCloseLogin = async () => {
-    await window.electronAPI.closeLoginSession()
-    void refreshLoginStatus()
-  }
 
   const handleClearCache = async () => {
     try {
@@ -128,12 +89,11 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
     setLlmPlatformYahoo(llm?.platformEnabled?.yahoo ?? true)
     setLlmPlatformCdjapan(llm?.platformEnabled?.cdjapan ?? true)
     setLlmPlatformTower(llm?.platformEnabled?.tower ?? true)
-    void refreshLoginStatus()
     setStandardPlatforms(settings.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
     setAutoUpdateEnabled(settings.autoUpdateEnabled !== false)
-  }, [refreshLoginStatus])
+  }, [])
 
   const backupErrorMessage = (result: SettingsTransferResult): string | null => {
     switch (result.errorCode) {
@@ -256,20 +216,11 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
       return list.filter(p => p !== platform)
     }
     // Keep the canonical platform order when adding a platform back.
-    return SELECTABLE_PLATFORMS.filter(p => list.includes(p) || p === platform)
+    return PLATFORMS.filter(p => list.includes(p) || p === platform)
   }
 
-  // One checkbox cell for the standard/deep platform grids. Marketplace
-  // channels additionally show their QR-login state; clicking the badge opens
-  // the login section instead of toggling the checkbox.
+  // One checkbox cell for the standard/deep platform grids.
   const platformCheckItem = (p: Platform, checked: boolean, onToggle: () => void) => {
-    const isChannel = CHANNEL_PLATFORMS.includes(p)
-    const label = p === 'xianyu'
-      ? t('sources.channelXianyu')
-      : p === 'taobao'
-        ? t('sources.channelTaobao')
-        : platformLabel(p)
-    const verified = isChannel && loginStatus[p as LoginPlatform]?.state === 'verified'
     return (
       <label key={p} className={`st-check-item ${checked ? 'checked' : ''}`}>
         <input
@@ -278,20 +229,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
           onChange={onToggle}
         />
         <span className="st-check-box"></span>
-        <span className="st-check-name">{label}</span>
-        {isChannel && (
-          <span
-            className={`st-check-badge ${verified ? 'st-check-badge-ok' : ''}`}
-            role="button"
-            title={verified ? t('sources.channelVerified') : t('sources.channelNotVerified')}
-            onClick={e => {
-              e.preventDefault()
-              setActiveSection('login')
-            }}
-          >
-            {verified ? t('sources.channelVerified') : t('sources.channelNotVerified')}
-          </span>
-        )}
+        <span className="st-check-name">{platformLabel(p)}</span>
       </label>
     )
   }
@@ -304,7 +242,6 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
     { key: 'barcode', icon: '▣', label: t('nav.barcodeProviders') },
     { key: 'sources', icon: '◎', label: t('nav.sources') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
-    { key: 'login', icon: '◈', label: t('nav.login') },
     { key: 'backup', icon: '⇅', label: t('nav.backup') },
     { key: 'about', icon: '⟳', label: t('nav.about') }
   ]
@@ -557,7 +494,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
                 <span className="st-icon">◆</span> {t('sources.standard')}
               </div>
               <div className="st-platform-grid">
-                {SELECTABLE_PLATFORMS.map(p => platformCheckItem(
+                {PLATFORMS.map(p => platformCheckItem(
                   p,
                   standardPlatforms.includes(p),
                   () => setStandardPlatforms(togglePlatform(standardPlatforms, p))
@@ -569,7 +506,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
                 <span className="st-icon">◆</span> {t('sources.deep')}
               </div>
               <div className="st-platform-grid">
-                {SELECTABLE_PLATFORMS.map(p => platformCheckItem(
+                {PLATFORMS.map(p => platformCheckItem(
                   p,
                   deepPlatforms.includes(p),
                   () => setDeepPlatforms(togglePlatform(deepPlatforms, p))
@@ -713,64 +650,6 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
                   <span className="st-check-box"></span>
                   <span className="st-check-name">Tower</span>
                 </label>
-              </div>
-            </div>
-          </div>
-        )
-
-      case 'login':
-        return (
-          <div className="st-section-content">
-            <div className="st-section-desc">
-              {t('login.desc')}
-            </div>
-            <div className="st-field-group">
-              <div className="st-field-group-title">
-                <span className="st-icon">◈</span> {t('login.status')}
-              </div>
-              {([
-                { platform: 'xianyu' as const, label: t('channels.xianyu') },
-                { platform: 'taobao' as const, label: t('channels.taobao') }
-              ] as const).map(row => {
-                const busy = !!loginBusy[row.platform]
-                const status = loginStatus[row.platform]
-                const statusText = busy
-                  ? t('channels.loggingIn')
-                  : status.state === 'verified'
-                    ? (status.expiresAt ? t('login.stateVerified', { expires: new Date(status.expiresAt).toLocaleString() }) : t('login.stateVerifiedShort'))
-                    : status.state === 'expired'
-                      ? t('login.stateExpired')
-                      : status.state === 'unverified'
-                        ? t('login.stateUnverified')
-                        : status.state === 'starting'
-                          ? t('login.stateStarting')
-                          : t('login.stateNotStarted')
-                return (
-                  <div key={row.platform} className="st-field">
-                    <label className="st-label">
-                      <span className="st-label-icon">◈</span> {row.label}
-                    </label>
-                    <div className="st-cf-status">{statusText}</div>
-                    <div className="st-cf-actions">
-                      <button
-                        type="button"
-                        className="st-btn-save"
-                        onClick={() => void handleLogin(row.platform)}
-                        disabled={busy}
-                      >
-                        {busy ? t('channels.loggingIn') : t('channels.login')}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-              <div className="st-cf-actions" style={{ marginTop: '14px' }}>
-                <button type="button" className="st-btn-cancel" onClick={() => void handleCloseLogin()}>
-                  {t('login.closeSession')}
-                </button>
-              </div>
-              <div className="st-section-desc" style={{ marginTop: '12px' }}>
-                {t('login.hint')}
               </div>
             </div>
           </div>

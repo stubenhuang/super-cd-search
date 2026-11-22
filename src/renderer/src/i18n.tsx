@@ -68,8 +68,8 @@ const zh = {
   'result.priceRange': '价格范围',
   'result.titleClick': '点击查看详细信息',
   'result.statusChallenge': '待验证',
-  'result.statusChallengeHint': '请在设置中完成扫码登录',
-  'result.statusChallengeTitle': '渠道登录未完成',
+  'result.statusChallengeHint': '请稍后重试',
+  'result.statusChallengeTitle': '需要验证',
   'result.statusError': '请求错误',
   'result.statusErrorDefault': 'Error',
   'result.statusNotFound': '未找到',
@@ -91,7 +91,6 @@ const zh = {
   'nav.barcodeProviders': '条码解析供应商',
   'nav.sources': '搜索源',
   'nav.llm': 'LLM 配置',
-  'nav.login': '特殊渠道（扫码登录）',
   'nav.backup': '备份与恢复',
   'nav.about': '关于与更新',
 
@@ -186,15 +185,11 @@ const zh = {
   'lan.tokenRegenerateFailed': '更换访问令牌失败',
 
   // Search sources
-  'sources.desc': '选择每种搜索模式查询的平台。标准模式默认 Discogs + eBay；深度模式默认全部平台。闲鱼 / 淘宝渠道需扫码登录，且仅在勾选后参与搜索。',
+  'sources.desc': '选择每种搜索模式查询的平台。标准模式默认 Discogs + eBay；深度模式默认全部平台。',
   'sources.fastMode': 'Fast Mode（跳过详情页）',
   'sources.fastModeDesc': '跳过商品详情页导航，以更少请求换取更快速度（详情字段可能缺失）',
   'sources.standard': '标准搜索',
   'sources.deep': '深度搜索',
-  'sources.channelXianyu': '闲鱼',
-  'sources.channelTaobao': '淘宝图搜',
-  'sources.channelVerified': '已登录',
-  'sources.channelNotVerified': '未登录',
 
   // Search cache
   'cache.label': '搜索缓存',
@@ -213,27 +208,6 @@ const zh = {
   'llm.model': 'Model',
   'llm.platformSelection': '智能生成数据源',
   'llm.smartSourcesHint': '智能生成固定排除 Discogs 与 eBay；只会逐个分析能搜索到商品的来源。',
-
-  // Special channels (QR-code login)
-  'login.desc': '特殊渠道共用一个真实 Chrome 会话：闲鱼 / 淘宝需扫码登录。渠道需在「搜索源」中勾选、且登录有效才会参与搜索；登录与搜索都在这个 Chrome 窗口里进行。',
-  'login.status': '平台状态',
-  'login.stateVerified': '已登录（有效期至 {expires}）',
-  'login.stateVerifiedShort': '已登录',
-  'login.stateExpired': '登录已过期（需重新扫码）',
-  'login.stateUnverified': 'Chrome 已启动，尚未登录',
-  'login.stateStarting': 'Chrome 启动中…',
-  'login.stateNotStarted': 'Chrome 未启动',
-  'login.closeSession': '关闭 Chrome 会话',
-  'login.hint': '提示：登录与搜索会在同一个真实 Chrome 窗口里进行。关闭该 Chrome 后需重新启动并扫码登录；登录有效期由平台决定，失效后重新扫码即可。',
-  'login.toastFailedUnknown': '登录失败',
-  'login.unknownError': '未知错误',
-  'channels.xianyu': '闲鱼（goofish 网页）',
-  'channels.taobao': '淘宝图搜（拍立淘）',
-  'channels.login': '扫码登录',
-  'channels.loggingIn': '登录中…（请在打开的 Chrome 窗口完成扫码）',
-  'channels.toastSuccess': '登录成功，可正常搜索了',
-  'channels.toastCancelled': '已取消登录',
-  'channels.toastFailed': '登录失败: {error}',
 
   // Detail modal
   'detail.catalogNumber': '目录号',
@@ -294,7 +268,7 @@ const zh = {
   'settings.publishUploadCover': '上传封面图',
 
   // Every 闲鱼 target owns its own browser profile, so this list manages its
-  // login lifecycle independently from the search-channel login.
+  // login lifecycle independently per target.
   'settings.publishStatusChecking': '检查登录状态…',
   'settings.publishStatusUnknown': '状态未知',
   'settings.publishStatusLoggedIn': '已登录',
@@ -310,8 +284,8 @@ const zh = {
   'settings.publishLoginFailed': '扫码登录失败',
   'settings.publishLogoutSuccess': '已退出该目标的闲鱼登录',
   'settings.publishLogoutFailed': '退出登录失败',
-  'settings.publishXianyuLoginGuide': '点「编辑」，用该目标自己的闲鱼账号扫码登录（独立会话，与搜索源登录互不影响）。',
-  'settings.publishXianyuIndependentNote': '每个闲鱼目标都是一个独立账号，需要各自「扫码登录」；该登录与「设置 → 登录」里搜索源的闲鱼登录互不影响，也不会共用 cookie。',
+  'settings.publishXianyuLoginGuide': '点「编辑」，用该目标自己的闲鱼账号扫码登录（独立会话）。',
+  'settings.publishXianyuIndependentNote': '每个闲鱼目标都是一个独立账号，需要各自「扫码登录」；每个目标各自拥有独立会话，不会共用 cookie。',
   'settings.publishDeleteConfirmXianyu': '确定删除发布目标「{name}」吗？同时会清除该目标自己的闲鱼登录数据。',
 
   // Enable switch gate: a target whose account is not verified cannot be

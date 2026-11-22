@@ -14,20 +14,19 @@ import {
   setChromeWindowVisible,
   waitForDevToolsPort,
   type ChromeSessionMode
-} from '../login/session'
-import { LOGIN_DEFS, checkLoginState, type LoginState } from '../login/defs'
+} from '../browser/real-chrome'
+import { LOGIN_DEFS, checkLoginState, type LoginState } from './xianyu-login'
 import { logger } from '../logger'
 
 /**
  * Multi-profile real-Chrome sessions, one profile per publishing target.
  *
- * 闲鱼 publishing must NOT share the search channel's login: every target is an
- * independent account, so each gets its own `--user-data-dir` (its own cookie
- * jar) and its own Chrome process. Sessions stay resident until the user logs
- * the target out or deletes it, which is what makes switching targets instant.
+ * Every 闲鱼 target is an independent account, so each gets its own
+ * `--user-data-dir` (its own cookie jar) and its own Chrome process. Sessions
+ * stay resident until the user logs the target out or deletes it, which is
+ * what makes switching targets instant.
  *
- * The launch/attach primitives are shared with the single-profile search
- * session (see src/main/login/session.ts) so both behave identically.
+ * The launch/attach primitives live in src/main/browser/real-chrome.ts.
  */
 
 interface ProfileSession {
@@ -208,8 +207,8 @@ export async function acquirePublishPage(
 
   const release = await pageMutexFor(profileId).acquire()
 
-  // Headless sessions must present a normal Chrome UA (goofish otherwise serves
-  // a bot-wall), exactly like the search channel does.
+  // Headless sessions must present a normal Chrome UA (goofish otherwise
+  // serves a bot-wall), so the scrape looks like a normal desktop client.
   if (session.maskedUa) await session.page.setUserAgent(session.maskedUa).catch(() => {})
 
   return { page: session.page, release }

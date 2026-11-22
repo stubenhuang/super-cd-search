@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, LanSearchState, LanSearchPhase, LoginPlatform, DetailEnrichProgress } from './electron-api'
+import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, LanSearchState, LanSearchPhase, DetailEnrichProgress } from './electron-api'
 import { SettingsPanel } from './Settings'
 import type { SectionKey } from './Settings'
 import { LanPanel } from './LanPanel'
@@ -11,7 +11,7 @@ import { aggregateDetails, missingDetailKeys, buildDetailsText, fillMissingDetai
 import type { PublishTarget } from '../../shared/publish'
 import { isLlmConfigured } from '../../shared/llm'
 import { errorMessage, normalizeCatalogNumber } from '../../shared/utils'
-import { platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, CHANNEL_PLATFORMS, resolveDeepDigPlatforms } from '../../shared/platforms'
+import { platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, resolveDeepDigPlatforms } from '../../shared/platforms'
 import { makeProgressKey, buildProgressByCatalog, clearProgressEntries, countCompletedCatalogs } from '../../shared/progress'
 import { QueryEvents } from '../../shared/events'
 import { useCoverImage } from './hooks/useCoverImage'
@@ -57,25 +57,6 @@ function hasCompleteDetails(results: QueryResult[], enrichedDetails?: CDDetails)
     }
   }
   return missingDetailKeys(merged).length === 0
-}
-
-/**
- * A marketplace channel only joins a search while its QR login is verified;
- * unverified channels are skipped silently. Text platforms pass through
- * unchanged and verified channels keep their position at the end of the list.
- */
-async function filterVerifiedChannels(platforms: Platform[]): Promise<Platform[]> {
-  const channels = platforms.filter((p): p is LoginPlatform => CHANNEL_PLATFORMS.includes(p))
-  if (channels.length === 0) return platforms
-  const statuses = await Promise.all(
-    channels.map(p => window.electronAPI.getLoginStatus(p).catch(() => null))
-  )
-  const verified = channels.filter((_, i) => statuses[i]?.state === 'verified')
-  const skipped = channels.filter((_, i) => statuses[i]?.state !== 'verified')
-  if (skipped.length > 0) {
-    window.electronAPI.log('debug', 'app.channels', 'channels skipped: login not verified', { skipped })
-  }
-  return [...platforms.filter(p => !CHANNEL_PLATFORMS.includes(p)), ...verified]
 }
 
 interface PlatformResultRowProps {
@@ -414,9 +395,7 @@ function App() {
     const modePlatforms = searchMode === 'standard'
       ? (settings?.standardPlatforms ?? DEFAULT_STANDARD_PLATFORMS)
       : (settings?.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
-    // Checked marketplace channels only join the search while their QR login
-    // is verified; unverified ones are skipped silently (both modes).
-    const platforms = await filterVerifiedChannels(modePlatforms)
+    const platforms = modePlatforms
 
     if (platforms.length === 0) {
       setError(t('error.noPlatforms'))
@@ -446,7 +425,7 @@ function App() {
       // pass (deep mode already queries every platform). Otherwise go straight
       // to the completeness check for smart generation.
       if (!cancelledRef.current) {
-        const digPlatforms = searchMode === 'standard' ? await filterVerifiedChannels(resolveDeepDigPlatforms(settings)) : []
+        const digPlatforms = searchMode === 'standard' ? resolveDeepDigPlatforms(settings) : []
         const emptyTargets = digPlatforms.length > 0
           ? catalogNumbers.filter(cn => {
               const rs = completedResults.get(cn)
