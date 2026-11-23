@@ -41,6 +41,23 @@ describe('listingsToQueryResult', () => {
     expect(vi.mocked(convertToUSDWithFallback)).toHaveBeenCalledWith(70, 'CNY')
   })
 
+  it('caps the price range at 3 listings and keeps the first item as the cover', async () => {
+    const listings = [
+      listing({ title: 'Best', priceCNY: 70, coverUrl: 'https://example.com/best.jpg' }),
+      listing({ priceCNY: 140 }),
+      listing({ priceCNY: 210 }),
+      listing({ priceCNY: 9999 })
+    ]
+
+    const result = await listingsToQueryResult('taobao', listings, 3)
+
+    expect(result.name).toBe('Best')
+    expect(result.coverUrl).toBe('https://example.com/best.jpg')
+    expect(result.priceMin).toBe(10)
+    expect(result.priceMax).toBe(30)
+    expect(vi.mocked(convertToUSDWithFallback)).toHaveBeenCalledTimes(3)
+  })
+
   it('respects topN when building the price range', async () => {
     const listings = [
       listing({ priceCNY: 70 }),

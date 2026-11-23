@@ -3,7 +3,8 @@ import { BrowserWindow } from 'electron'
 
 const {
   mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQueryYahoo,
-  mockQueryCdjapan, mockQueryTower, mockQueryXianyu, mockQueryTaobao
+  mockQueryCdjapan, mockQueryTower, mockQueryXianyu, mockQueryTaobao,
+  mockDownloadImage
 } = vi.hoisted(() => ({
   mockQueryDiscogs: vi.fn(),
   mockQueryEbay: vi.fn(),
@@ -13,7 +14,8 @@ const {
   mockQueryCdjapan: vi.fn(),
   mockQueryTower: vi.fn(),
   mockQueryXianyu: vi.fn(),
-  mockQueryTaobao: vi.fn()
+  mockQueryTaobao: vi.fn(),
+  mockDownloadImage: vi.fn()
 }))
 
 vi.mock('../src/main/queries/discogs', () => ({ queryDiscogs: mockQueryDiscogs }))
@@ -25,6 +27,7 @@ vi.mock('../src/main/queries/cdjapan', () => ({ queryCdjapan: mockQueryCdjapan }
 vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
 vi.mock('../src/main/queries/xianyu', () => ({ queryXianyu: mockQueryXianyu }))
 vi.mock('../src/main/queries/taobao', () => ({ queryTaobao: mockQueryTaobao }))
+vi.mock('../src/main/image', () => ({ downloadImage: mockDownloadImage }))
 
 import {
   executeBatchQuery,
@@ -60,6 +63,7 @@ beforeEach(() => {
   mockQueryTower.mockResolvedValue(found('tower'))
   mockQueryXianyu.mockResolvedValue(found('xianyu'))
   mockQueryTaobao.mockResolvedValue(found('taobao'))
+  mockDownloadImage.mockResolvedValue({ base64: 'BASE64', mimeType: 'image/jpeg' })
 })
 
 afterEach(() => {
@@ -179,8 +183,10 @@ describe('executeBatchQuery', () => {
     expect(calls[0]).toBe('discogs')
     expect(calls).toContain('xianyu')
     expect(calls).toContain('taobao')
-    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', coverUrl, expect.anything())
-    expect(mockQueryXianyu).toHaveBeenCalledWith('X-1', coverUrl, expect.anything())
+    expect(mockDownloadImage).toHaveBeenCalledTimes(1)
+    expect(mockDownloadImage).toHaveBeenCalledWith(coverUrl, 1000)
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'BASE64', expect.anything())
+    expect(mockQueryXianyu).toHaveBeenCalledWith('X-1', 'BASE64', expect.anything())
     expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'xianyu', 'taobao'])
     expect(sendMock.mock.calls.filter(([, data]) => data.event === 'query:complete')).toHaveLength(1)
   })
@@ -193,6 +199,20 @@ describe('executeBatchQuery', () => {
     for (const platform of ['taobao', 'xianyu']) {
       const result = results[0].results.find(r => r.platform === platform)
       expect(result).toMatchObject({ status: 'not_found', error: '无可用封面图，无法执行以图搜物' })
+    }
+  })
+
+  it('skips image sources when the cover download fails', async () => {
+    mockQueryDiscogs.mockResolvedValue({ ...found('discogs'), coverUrl: 'https://cover.example/x.jpg' })
+    mockDownloadImage.mockResolvedValue(null)
+
+    const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
+
+    expect(mockQueryTaobao).not.toHaveBeenCalled()
+    expect(mockQueryXianyu).not.toHaveBeenCalled()
+    for (const platform of ['taobao', 'xianyu']) {
+      const result = results[0].results.find(r => r.platform === platform)
+      expect(result).toMatchObject({ status: 'not_found', error: '封面图下载失败，无法执行以图搜物' })
     }
   })
 

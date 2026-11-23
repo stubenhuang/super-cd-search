@@ -10,7 +10,7 @@ export const DEFAULT_APIFY_SETTINGS: ApifySettings = {
   token: '',
   taobaoActor: 'dev00~taobao-reverse-image-search',
   xianyuActor: 'zen-studio~goofish-xianyu-visual-search-scraper',
-  num: 20,
-  maxItems: 100,
+  num: 3,
+  maxItems: 3,
   timeoutMs: 180_000
 }

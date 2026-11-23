@@ -12,6 +12,7 @@ import { normalizeCatalogNumber } from '../../shared/utils'
 import { PLATFORMS, IMAGE_PLATFORMS, TEXT_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { logger } from '../logger'
+import { downloadImage } from '../image'
 import { broadcastToWindows } from '../window-broadcast'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult, Platform } from '../../shared/types'
 
@@ -94,10 +95,10 @@ function resolveImageSearchCover(results: QueryResult[]): string | null {
 }
 
 /** Dispatch an enabled image source to its Apify-backed query. */
-function imageQuery(name: Platform, catalogNumber: string, coverUrl: string, signal: AbortSignal): Promise<QueryResult> {
+function imageQuery(name: Platform, catalogNumber: string, imageBase64: string, signal: AbortSignal): Promise<QueryResult> {
   return name === 'taobao'
-    ? queryTaobao(catalogNumber, coverUrl, signal)
-    : queryXianyu(catalogNumber, coverUrl, signal)
+    ? queryTaobao(catalogNumber, imageBase64, signal)
+    : queryXianyu(catalogNumber, imageBase64, signal)
 }
 
 /** Build the generic "unknown error" placeholder for one platform. */
@@ -152,18 +153,26 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
   })
 
   // Phase two: the image sources need a cover image collected above, so they
-  // run afterwards (still concurrently with each other and abort-aware).
+  // run afterwards (still concurrently with each other and abort-aware). The
+  // cover is downloaded once and sent to both actors as base64.
   let imageResults: QueryResult[] = []
   if (enabledImages.length > 0 && !signal.aborted) {
     const coverUrl = resolveImageSearchCover(textResults)
+    const downloaded = coverUrl ? await downloadImage(coverUrl, 1000) : null
+    if (signal.aborted) {
+      logger.debug('orchestrator', 'query aborted while downloading cover', { catalogNumber, durationMs: Date.now() - catalogStartedAt })
+      throw new Error('Aborted')
+    }
+    const imageBase64 = downloaded?.base64 ?? null
     const imageSettled = await Promise.allSettled(
       enabledImages.map(name => runPlatformQuery(catalogNumber, signal, name, () => {
-        // Bypass the query runner so a transient "no cover" failure is never
-        // cached for the rest of the day.
-        if (!coverUrl) {
-          return Promise.resolve({ ...notFound(name), error: '无可用封面图，无法执行以图搜物' })
+        // Bypass the query runner so a transient "no cover" / download failure
+        // is never cached for the rest of the day.
+        if (!imageBase64) {
+          const error = coverUrl ? '封面图下载失败，无法执行以图搜物' : '无可用封面图，无法执行以图搜物'
+          return Promise.resolve({ ...notFound(name), error })
         }
-        return imageQuery(name, catalogNumber, coverUrl, signal)
+        return imageQuery(name, catalogNumber, imageBase64, signal)
       }))
     )
     imageResults = enabledImages.map((name, index) => {

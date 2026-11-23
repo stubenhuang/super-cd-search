@@ -86,7 +86,7 @@ describe('searchTaobaoByImage', () => {
       { title: 'CD', price: 88, productUrl: 'https://item.taobao.com/1', imageUrl: 'https://img/1.jpg' }
     ]))
 
-    const listings = await searchTaobaoByImage('https://cover.example/x.jpg')
+    const listings = await searchTaobaoByImage('BASE64')
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, options] = fetchMock.mock.calls[0]
@@ -94,7 +94,8 @@ describe('searchTaobaoByImage', () => {
     expect(url).not.toContain('token=')
     expect(options.method).toBe('POST')
     expect(options.headers.Authorization).toBe('Bearer test-token')
-    expect(JSON.parse(options.body)).toEqual({ imageUrl: 'https://cover.example/x.jpg', num: 20 })
+    expect(JSON.parse(options.body)).toEqual({ imageBase64: 'BASE64', num: 3 })
+    expect(JSON.parse(options.body)).not.toHaveProperty('imageUrl')
     expect(listings[0]).toMatchObject({ title: 'CD', priceCNY: 88 })
   })
 
@@ -102,7 +103,7 @@ describe('searchTaobaoByImage', () => {
     setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', taobaoActor: 'dev00/taobao-reverse-image-search' })
     fetchMock.mockResolvedValue(jsonResponse([]))
 
-    await searchTaobaoByImage('https://cover.example/x.jpg')
+    await searchTaobaoByImage('BASE64')
 
     expect(fetchMock.mock.calls[0][0]).toContain('/acts/dev00~taobao-reverse-image-search/')
   })
@@ -110,7 +111,7 @@ describe('searchTaobaoByImage', () => {
   it('refuses to make a paid request without a token', async () => {
     deleteSetting('apify')
 
-    await expect(searchTaobaoByImage('https://cover.example/x.jpg'))
+    await expect(searchTaobaoByImage('BASE64'))
       .rejects.toMatchObject({ name: 'ApifyClientError', code: 'missing_token' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -149,15 +150,18 @@ describe('searchXianyuByImage', () => {
         { title: 'Used CD', price: 66, url: 'https://www.goofish.com/item?id=1' }
       ]))
 
-    const listings = await searchXianyuByImage('https://cover.example/x.jpg')
+    const listings = await searchXianyuByImage('BASE64')
 
     expect(fetchMock).toHaveBeenCalledTimes(4)
     expect(fetchMock.mock.calls[0][0]).toContain('/acts/zen-studio~goofish-xianyu-visual-search-scraper/runs')
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
-      imageUrls: ['https://cover.example/x.jpg'],
-      maxItems: 100,
-      detailLevel: 'summary'
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toMatchObject({
+      imageBase64: 'BASE64',
+      maxItems: 3,
+      detailLevel: 'summary',
+      sortBy: 'relevance'
     })
+    expect(body).not.toHaveProperty('imageUrls')
     expect(fetchMock.mock.calls[1][0]).toContain('/actor-runs/run1')
     expect(fetchMock.mock.calls[3][0]).toContain('/datasets/ds1/items')
     expect(listings[0]).toMatchObject({ title: 'Used CD', priceCNY: 66 })

@@ -11,6 +11,8 @@ const SYNC_TIMEOUT_SECONDS = 60
 const SYNC_REQUEST_TIMEOUT_MS = (SYNC_TIMEOUT_SECONDS + 5) * 1000
 const POLL_INTERVAL_MS = 2_000
 const XIANYU_DETAIL_LEVEL = 'summary'
+/** Rank visual matches by similarity so the first item is the closest match. */
+const XIANYU_SORT_BY = 'relevance'
 
 /** A single listing returned by either image-search actor, normalized. */
 export interface ApifyListing {
@@ -177,16 +179,16 @@ interface ActorRun {
 
 /**
  * Taobao actor is fast enough for a synchronous run: one POST returns the
- * default dataset items directly.
+ * default dataset items directly. The cover image is supplied as raw base64.
  */
-export async function searchTaobaoByImage(imageUrl: string, signal?: AbortSignal): Promise<ApifyListing[]> {
+export async function searchTaobaoByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
   const settings = apifySettings()
   const token = requireToken(settings)
   const path = `/acts/${actorPath(settings.taobaoActor)}/run-sync-get-dataset-items?timeout=${SYNC_TIMEOUT_SECONDS}`
   logger.debug('apify', 'taobao image search start', { actor: settings.taobaoActor })
   const raw = await apifyFetch<unknown>(path, token, {
     method: 'POST',
-    body: { imageUrl, num: settings.num },
+    body: { imageBase64, num: settings.num },
     signal,
     timeoutMs: SYNC_REQUEST_TIMEOUT_MS
   })
@@ -201,7 +203,7 @@ export async function searchTaobaoByImage(imageUrl: string, signal?: AbortSignal
  * bounded by one wall-clock timeout and stays abortable so cancelling a batch
  * stops both polling and billing.
  */
-export async function searchXianyuByImage(imageUrl: string, signal?: AbortSignal): Promise<ApifyListing[]> {
+export async function searchXianyuByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
   const settings = apifySettings()
   const token = requireToken(settings)
   const actorPathSegment = actorPath(settings.xianyuActor)
@@ -211,9 +213,10 @@ export async function searchXianyuByImage(imageUrl: string, signal?: AbortSignal
       const started = await apifyFetch<ActorRun>(`/acts/${actorPathSegment}/runs`, token, {
         method: 'POST',
         body: {
-          imageUrls: [imageUrl],
+          imageBase64,
           maxItems: settings.maxItems,
-          detailLevel: XIANYU_DETAIL_LEVEL
+          detailLevel: XIANYU_DETAIL_LEVEL,
+          sortBy: XIANYU_SORT_BY
         },
         signal: runSignal
       })
