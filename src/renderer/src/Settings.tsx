@@ -671,6 +671,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
           <div className="st-section-content">
             <div className="st-section-desc">
               {t('feishu.desc')}
+              <div className="st-field-hint">{t('feishu.primaryHint')}</div>
             </div>
             <div className="st-toggle-row">
               <div className="st-toggle-info">

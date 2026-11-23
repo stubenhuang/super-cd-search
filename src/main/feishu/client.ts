@@ -1,7 +1,7 @@
 import type { FeishuSettings } from '../../shared/types'
 import {
   DEFAULT_FEISHU_SETTINGS,
-  FEISHU_FIELDS,
+  FEISHU_AUTO_FIELDS,
   FEISHU_FIELD_TYPE_TEXT,
   FEISHU_PRIMARY_FIELD,
   type FeishuTestResult
@@ -84,7 +84,7 @@ interface ApiEnvelope {
 
 interface FieldsResponse extends ApiEnvelope {
   data?: {
-    items?: Array<{ field_name?: string }>
+    items?: Array<{ field_name?: string; is_primary?: boolean }>
     has_more?: boolean
     page_token?: string
   }
@@ -233,20 +233,47 @@ function tablePath(settings: FeishuSettings, suffix: string): string {
   return `/bitable/v1/apps/${encodeURIComponent(settings.appToken)}/tables/${encodeURIComponent(settings.tableId)}/${suffix}`
 }
 
-/** Read every existing field name (paged) so we can add only the missing ones. */
-async function listFieldNames(settings: FeishuSettings, signal?: AbortSignal): Promise<string[]> {
-  const names: string[] = []
+interface FieldInfo {
+  field_name: string
+  is_primary: boolean
+}
+
+/** Read every field (paged) with its primary/index flag. */
+async function listFields(settings: FeishuSettings, signal?: AbortSignal): Promise<FieldInfo[]> {
+  const fields: FieldInfo[] = []
   let pageToken: string | undefined
   do {
     const params = new URLSearchParams({ page_size: '100' })
     if (pageToken) params.set('page_token', pageToken)
     const body = await callApi<FieldsResponse>(settings, `${tablePath(settings, 'fields')}?${params}`, { method: 'GET', signal })
     for (const item of body.data?.items ?? []) {
-      if (item.field_name) names.push(item.field_name)
+      if (item.field_name) fields.push({ field_name: item.field_name, is_primary: item.is_primary === true })
     }
     pageToken = body.data?.has_more ? body.data?.page_token : undefined
   } while (pageToken)
-  return names
+  return fields
+}
+
+/**
+ * Feishu always returns exactly one primary field. Fall back to the first
+ * column for responses that omit the flag — the primary field is always first.
+ */
+function primaryFieldName(fields: FieldInfo[]): string {
+  return (fields.find(field => field.is_primary) ?? fields[0])?.field_name ?? ''
+}
+
+/**
+ * The business key must be the table's primary (first) column. Feishu cannot
+ * change which field is primary through the API, so all we can do is fail with
+ * actionable guidance instead of silently creating a second 编号 column.
+ */
+function assertPrimaryField(fields: FieldInfo[]): void {
+  const name = primaryFieldName(fields)
+  if (name !== FEISHU_PRIMARY_FIELD) {
+    throw new Error(
+      `飞书多维表格的主字段（首列）必须命名为「${FEISHU_PRIMARY_FIELD}」，当前为「${name || '（无）'}」；请在飞书表格中把第一列重命名为「${FEISHU_PRIMARY_FIELD}」后重试。`
+    )
+  }
 }
 
 async function createField(settings: FeishuSettings, fieldName: string, signal?: AbortSignal): Promise<void> {
@@ -258,18 +285,19 @@ async function createField(settings: FeishuSettings, fieldName: string, signal?:
 }
 
 /**
- * Create any of the twelve columns that are missing. Cached per
- * app_token/table_id pair; a failed run leaves the cache unset so the next
- * sync retries. All columns are multi-line text so URLs, JSON strings and
- * empty values never hit numeric/URL write validation.
+ * Create the eleven non-primary columns that are missing; 编号 must already be
+ * the table's primary (first) column. Cached per app_token/table_id pair; a
+ * failed run leaves the cache unset so the next sync retries.
  */
 export async function ensureFields(settings: FeishuSettings, signal?: AbortSignal): Promise<void> {
   const key = `${settings.appToken}:${settings.tableId}`
   if (fieldsEnsuredKey === key) return
 
-  const existing = new Set(await listFieldNames(settings, signal))
+  const fields = await listFields(settings, signal)
+  assertPrimaryField(fields)
+  const existing = new Set(fields.map(field => field.field_name))
   let created = 0
-  for (const name of FEISHU_FIELDS) {
+  for (const name of FEISHU_AUTO_FIELDS) {
     if (!existing.has(name)) {
       await createField(settings, name, signal)
       created++
@@ -344,8 +372,9 @@ export async function batchUpdate(
 export async function testFeishuConnection(settings: FeishuSettings): Promise<FeishuTestResult> {
   try {
     await getTenantAccessToken(settings)
-    const names = await listFieldNames(settings)
-    return { ok: true, message: `连接成功，当前表格共有 ${names.length} 个字段` }
+    const fields = await listFields(settings)
+    assertPrimaryField(fields)
+    return { ok: true, message: `连接成功，主字段为「${FEISHU_PRIMARY_FIELD}」，当前表格共有 ${fields.length} 个字段` }
   } catch (err) {
     return { ok: false, message: errorMessage(err) }
   }

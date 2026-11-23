@@ -12,13 +12,18 @@ export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
   tableId: ''
 }
 
-/** Business primary key column. Kept as a plain text field, not the index column. */
+/**
+ * Bitable primary (index) field and our business key. Feishu fixes the primary
+ * field as the table's first column and the API cannot promote an existing
+ * field into it, so the user must name that first column 编号. We never create
+ * 编号 ourselves — creating it would produce an ordinary, non-primary column.
+ */
 export const FEISHU_PRIMARY_FIELD = '编号'
 
 /**
- * The twelve columns written for each catalog number. Missing columns are
- * created on first sync; all of them are multi-line text so URLs, JSON and
- * empty values never hit numeric/URL write validation.
+ * The twelve columns written for each catalog number. All of them are
+ * multi-line text so URLs, JSON and empty values never hit numeric/URL write
+ * validation.
  */
 export const FEISHU_FIELDS = [
   '编号',
@@ -36,6 +41,11 @@ export const FEISHU_FIELDS = [
 ] as const
 
 export type FeishuFieldName = (typeof FEISHU_FIELDS)[number]
+
+/** Columns ensureFields creates on first sync; excludes the primary field. */
+export const FEISHU_AUTO_FIELDS: readonly string[] = FEISHU_FIELDS.filter(
+  name => name !== FEISHU_PRIMARY_FIELD
+)
 
 /** Feishu Bitable field type 1 = multi-line text. */
 export const FEISHU_FIELD_TYPE_TEXT = 1

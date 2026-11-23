@@ -27,7 +27,8 @@ function json(body: unknown, status = 200): Response {
 }
 
 const okToken = () => json({ code: 0, tenant_access_token: 'tnt-token', expire: 7200 })
-const okFields = (items: Array<{ field_name: string }> = []) =>
+/** Default to a table whose first column is already the 编号 primary field. */
+const okFields = (items: Array<{ field_name: string; is_primary?: boolean }> = [{ field_name: '编号', is_primary: true }]) =>
   () => json({ code: 0, data: { items, has_more: false } })
 const okApi = () => json({ code: 0, data: {} })
 
@@ -89,7 +90,7 @@ describe('ensureFields', () => {
   it('creates only the missing columns as multi-line text and caches the result', async () => {
     setupRoutes({
       'POST /auth/v3/tenant_access_token/internal': okToken,
-      'GET /fields?': okFields([{ field_name: '编号' }, { field_name: 'name' }]),
+      'GET /fields?': okFields([{ field_name: '编号', is_primary: true }, { field_name: 'name' }]),
       'POST /fields': okApi
     })
 
@@ -107,6 +108,62 @@ describe('ensureFields', () => {
     const before = fetchMock.mock.calls.length
     await ensureFields(CONFIG)
     expect(fetchMock.mock.calls.length).toBe(before)
+  })
+
+  it('rejects with actionable guidance when the primary field is not 编号', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'GET /fields?': okFields([{ field_name: '标题', is_primary: true }, { field_name: '编号' }]),
+      'POST /fields': okApi
+    })
+
+    await expect(ensureFields(CONFIG)).rejects.toThrow(/主字段（首列）必须命名为「编号」/)
+    // A wrong primary field must not leave a stale cache or half-created columns.
+    expect(calls('POST', '/fields')).toHaveLength(0)
+  })
+
+  it('finds the primary field by is_primary and never creates 编号', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'GET /fields?': okFields([{ field_name: 'name' }, { field_name: '编号', is_primary: true }]),
+      'POST /fields': okApi
+    })
+
+    await ensureFields(CONFIG)
+    const names = calls('POST', '/fields').map(([, options]) => JSON.parse((options as { body: string }).body).field_name)
+    expect(names).not.toContain('编号')
+    expect(names).toContain('artist')
+    expect(names).toHaveLength(10)
+  })
+
+  it('treats the first column as primary when is_primary is omitted', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'GET /fields?': okFields([{ field_name: '编号' }, { field_name: 'name' }]),
+      'POST /fields': okApi
+    })
+    await expect(ensureFields(CONFIG)).resolves.toBeUndefined()
+  })
+
+  it('reports a wrong primary field through the connection probe', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'GET /fields?': okFields([{ field_name: '标题', is_primary: true }])
+    })
+    const result = await testFeishuConnection(CONFIG)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('主字段（首列）必须命名为「编号」')
+    expect(result.message).toContain('标题')
+  })
+
+  it('reports the primary field on a successful connection probe', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'GET /fields?': okFields([{ field_name: '编号', is_primary: true }, { field_name: 'name' }])
+    })
+    const result = await testFeishuConnection(CONFIG)
+    expect(result.ok).toBe(true)
+    expect(result.message).toContain('主字段为「编号」')
   })
 
   it('keeps credentials out of URLs and sends the token only as a Bearer header', async () => {

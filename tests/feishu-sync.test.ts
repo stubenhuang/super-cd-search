@@ -141,6 +141,16 @@ describe('syncToFeishu', () => {
     const recovered = await syncToFeishu({ rows: [oneRow('B')] })
     expect(recovered.status).toBe('ok')
   })
+
+  it('surfaces the primary-field guidance as a sync error', async () => {
+    setSetting('feishu', CONFIG)
+    mockEnsureFields.mockRejectedValueOnce(new Error('飞书多维表格的主字段（首列）必须命名为「编号」'))
+
+    const result = await syncToFeishu({ rows: [oneRow('A')] })
+    expect(result.status).toBe('error')
+    expect(result.message).toContain('主字段（首列）必须命名为「编号」')
+    expect(mockBatchCreate).not.toHaveBeenCalled()
+  })
 })
 
 describe('testFeishu', () => {
