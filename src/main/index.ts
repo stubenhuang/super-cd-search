@@ -7,6 +7,7 @@ import { registerCurrencyIpc } from './ipc/currency'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
 import { registerPublishIpc } from './ipc/publish'
+import { registerFeishuIpc } from './ipc/feishu'
 import { registerUpdaterIpc } from './ipc/updater'
 import { initUpdater, disposeUpdater } from './updater'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
@@ -110,6 +111,7 @@ app.whenReady().then(async () => {
   registerLanIpc()
   registerCurrencyIpc()
   registerUpdaterIpc()
+  registerFeishuIpc()
 
   // Register shell.openExternal handler
   ipcMain.handle('openExternal', async (_event, url: string) => {

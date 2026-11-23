@@ -10,6 +10,7 @@ import {
 } from '../src/main/settings'
 import { DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../src/shared/platforms'
 import { DEFAULT_APIFY_SETTINGS } from '../src/shared/apify'
+import { DEFAULT_FEISHU_SETTINGS } from '../src/shared/feishu'
 
 beforeEach(() => {
   // Derived from the real key list so a newly added setting cannot leak
@@ -29,6 +30,7 @@ describe('settings', () => {
       proxyPort: undefined,
       llm: undefined,
       apify: DEFAULT_APIFY_SETTINGS,
+      feishu: DEFAULT_FEISHU_SETTINGS,
       standardPlatforms: DEFAULT_STANDARD_PLATFORMS,
       deepPlatforms: DEFAULT_DEEP_PLATFORMS,
       fastMode: undefined,
@@ -124,6 +126,19 @@ describe('settings', () => {
 
     setSetting('apify', { token: 'only-token' } as typeof DEFAULT_APIFY_SETTINGS)
     expect(getSettings().apify).toEqual({ ...DEFAULT_APIFY_SETTINGS, token: 'only-token' })
+  })
+
+  it('round-trips Feishu settings, merges defaults and keeps syncing off by default', () => {
+    expect(DEFAULT_FEISHU_SETTINGS.enabled).toBe(false)
+    expect(PUBLIC_SETTING_KEYS.has('feishu')).toBe(true)
+
+    setSetting('feishu', { ...DEFAULT_FEISHU_SETTINGS, enabled: true, appId: 'cli', appSecret: 'sec', appToken: 'app', tableId: 'tbl' })
+    expect(getSettings().feishu).toEqual({
+      ...DEFAULT_FEISHU_SETTINGS, enabled: true, appId: 'cli', appSecret: 'sec', appToken: 'app', tableId: 'tbl'
+    })
+
+    setSetting('feishu', { appId: 'only-id' } as typeof DEFAULT_FEISHU_SETTINGS)
+    expect(getSettings().feishu).toEqual({ ...DEFAULT_FEISHU_SETTINGS, appId: 'only-id' })
   })
 
   it('deletes settings', () => {

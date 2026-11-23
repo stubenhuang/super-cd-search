@@ -291,6 +291,36 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [mobileNotice, setMobileNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const mobileNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showSyncNotice = useCallback((kind: 'success' | 'error', text: string) => {
+    setMobileNotice({ kind, text })
+    if (mobileNoticeTimerRef.current) clearTimeout(mobileNoticeTimerRef.current)
+    mobileNoticeTimerRef.current = setTimeout(() => setMobileNotice(null), 4000)
+  }, [])
+
+  /**
+   * Archive a snapshot of the current results into Feishu. Callers pass local
+   * maps rather than reading state, which would still hold the previous render.
+   * The sync is fire-and-forget: a failed request must never block searching.
+   */
+  const syncResultsToFeishu = useCallback((
+    resultMap: Map<string, QueryResult[]>,
+    enriched: Map<string, CDDetails>
+  ) => {
+    const rows = [...resultMap.entries()].map(([catalogNumber, results]) => {
+      const details = enriched.get(catalogNumber)
+      return { catalogNumber, results, ...(details ? { enrichedDetails: details } : {}) }
+    })
+    if (rows.length === 0) return
+    void window.electronAPI.syncFeishu({ rows }).then(result => {
+      if (result.status === 'ok') {
+        showSyncNotice('success', t('feishu.syncOk', { created: result.created, updated: result.updated }))
+      } else if (result.status === 'error') {
+        showSyncNotice('error', t('feishu.syncFailed', { error: result.message || '' }))
+      }
+    }).catch(() => {})
+  }, [showSyncNotice, t])
+
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState<Map<string, QueryResult[]>>(new Map())
   const [enrichedDetails, setEnrichedDetails] = useState<Map<string, CDDetails>>(new Map())
@@ -421,6 +451,7 @@ function App() {
       window.electronAPI.log('debug', 'app.search', 'search finished', { resultCount: batchResults.length })
       const completedResults = applyBatchResults(new Map(), batchResults)
       setResults(prev => applyBatchResults(prev, batchResults))
+      syncResultsToFeishu(completedResults, new Map())
       // Standard-search runs that left numbers unfound are offered a deep dig
       // pass (deep mode already queries every platform). Otherwise go straight
       // to the completeness check for smart generation.
@@ -447,7 +478,7 @@ function App() {
       setIsLoading(false)
       setIsCancelling(false)
     }
-  }, [input, maybePromptSmartGenerate, parseCatalogNumbers, searchMode, t])
+  }, [input, maybePromptSmartGenerate, parseCatalogNumbers, searchMode, syncResultsToFeishu, t])
 
   const handleCancel = useCallback(async () => {
     window.electronAPI.log('debug', 'app.search', 'cancel requested')
@@ -719,8 +750,9 @@ function App() {
     setAutoFlow(null)
     const merged = await runDeepDig(catalogs, platforms, results)
     if (cancelledRef.current) return
+    syncResultsToFeishu(merged ?? results, enrichedDetails)
     await maybePromptSmartGenerate(catalogOrder, merged ?? results, enrichedDetails)
-  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, runDeepDig])
+  }, [autoFlow, catalogOrder, enrichedDetails, maybePromptSmartGenerate, results, runDeepDig, syncResultsToFeishu])
 
   const handleDeepDigSkip = useCallback(async () => {
     if (autoFlow?.kind !== 'deep-dig-prompt') return
@@ -775,6 +807,7 @@ function App() {
     }
 
     smartCurrentCatalogRef.current = null
+    syncResultsToFeishu(workingResults, workingEnriched)
 
     if (cancelled) {
       setAutoFlow({ kind: 'smart-cancelled', completed: completedCatalogs.length, total: targets.length })
@@ -782,7 +815,7 @@ function App() {
     }
 
     setAutoFlow({ kind: 'smart-done', failed })
-  }, [autoFlow, enrichedDetails, results])
+  }, [autoFlow, enrichedDetails, results, syncResultsToFeishu])
 
   const handleSmartCancel = useCallback(() => {
     if (autoFlow?.kind !== 'smart-running') return

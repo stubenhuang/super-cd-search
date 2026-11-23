@@ -16,6 +16,7 @@
  *                                        button, footer save reads 保存)
  *   artifacts/ui/shot-6b-apify.png        Apify 以图搜物设置分区（Token /
  *                                        Actor / 运行参数）
+ *   artifacts/ui/shot-6b-feishu.png       飞书多维表格设置分区（开关 / 凭证）
  *   artifacts/ui/shot-4-publish-settings.png  发布目标面板（头部按钮打开，
  *                                              Discogs 编辑器：Token + 引导）
  *   artifacts/ui/shot-4b-publish-token.png     Discogs 目标编辑器（必填
@@ -351,6 +352,23 @@ try {
   check('Apify 分区提供三个运行参数数字输入框', (await window.locator('.st-section-content input[type="number"]').count()) === 3)
   await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-apify.png') })
   checkScreenshot('Apify 以图搜物设置分区', join(ARTIFACTS, 'shot-6b-apify.png'))
+
+  // 6b-3. The Feishu archiving section must expose the master switch and all
+  //       four credential inputs (one of them a password field).
+  const feishuNav = window.locator('.settings-nav-item', { hasText: '飞书多维表格' })
+  check('设置导航出现「飞书多维表格」分区', (await feishuNav.count()) === 1)
+  await feishuNav.click()
+  await window.waitForTimeout(200)
+  check('飞书分区提供启用开关', (await window.locator('[data-field="feishu-enabled"]').count()) === 1)
+  const feishuFields = ['feishu-appId', 'feishu-appSecret', 'feishu-appToken', 'feishu-tableId']
+  const feishuCounts = await Promise.all(feishuFields.map(field => window.locator(`[data-field="${field}"]`).count()))
+  check('飞书分区提供四个凭证输入框', feishuCounts.every(count => count === 1), JSON.stringify(feishuCounts))
+  check('飞书分区把 App Secret 作为密码输入框',
+    (await window.locator('[data-field="feishu-appSecret"][type="password"]').count()) === 1)
+  check('飞书分区提供测试连接按钮',
+    (await window.locator('.st-section-content .st-btn-cancel', { hasText: '测试连接' }).count()) === 1)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-feishu.png') })
+  checkScreenshot('飞书多维表格设置分区', join(ARTIFACTS, 'shot-6b-feishu.png'))
 
   await window.locator('.settings-nav-item', { hasText: '搜索源' }).click()
   await window.waitForTimeout(200)

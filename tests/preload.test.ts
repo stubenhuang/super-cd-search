@@ -112,6 +112,19 @@ describe('preload API', () => {
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('fetchImage', 'https://example.com/a.png', 240)
   })
 
+  it('forwards Feishu sync and connection-test calls', async () => {
+    api = await loadPreload()
+    vi.mocked(ipcRenderer.invoke).mockResolvedValue({ status: 'skipped' })
+
+    const payload = { rows: [{ catalogNumber: 'X-1', results: [] }] }
+    await api.syncFeishu(payload)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('feishu:sync', payload)
+
+    const config = { enabled: true, appId: 'id', appSecret: 'sec', appToken: 'app', tableId: 'tbl' }
+    await api.testFeishu(config)
+    expect(ipcRenderer.invoke).toHaveBeenCalledWith('feishu:test', config)
+  })
+
   it('forwards LAN connection calls to ipcRenderer.invoke', async () => {
     api = await loadPreload()
     vi.mocked(ipcRenderer.invoke).mockResolvedValue({ state: 'disabled' })

@@ -4,10 +4,11 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { hostname, userInfo } from 'os'
 import electronStore from 'electron-store'
-import type { Settings, LLMSettings, ApifySettings, Platform, DisplayCurrency, BarcodeProvider } from '../../shared/types'
+import type { Settings, LLMSettings, ApifySettings, FeishuSettings, Platform, DisplayCurrency, BarcodeProvider } from '../../shared/types'
 import type { PublishTarget } from '../../shared/publish'
 import { PLATFORMS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { DEFAULT_APIFY_SETTINGS } from '../../shared/apify'
+import { DEFAULT_FEISHU_SETTINGS } from '../../shared/feishu'
 
 export type { Settings, LLMSettings }
 
@@ -63,6 +64,17 @@ const schema = {
       num: { type: 'number' as const, default: DEFAULT_APIFY_SETTINGS.num },
       maxItems: { type: 'number' as const, default: DEFAULT_APIFY_SETTINGS.maxItems },
       timeoutMs: { type: 'number' as const, default: DEFAULT_APIFY_SETTINGS.timeoutMs }
+    },
+    default: {}
+  },
+  feishu: {
+    type: 'object' as const,
+    properties: {
+      enabled: { type: 'boolean' as const, default: DEFAULT_FEISHU_SETTINGS.enabled },
+      appId: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.appId },
+      appSecret: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.appSecret },
+      appToken: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.appToken },
+      tableId: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.tableId }
     },
     default: {}
   }
@@ -235,6 +247,7 @@ export function getSettings(): Settings {
     proxyPort: store.get('proxyPort') as number || undefined,
     llm: store.get('llm') as LLMSettings | undefined,
     apify: { ...DEFAULT_APIFY_SETTINGS, ...(store.get('apify') as ApifySettings | undefined) },
+    feishu: { ...DEFAULT_FEISHU_SETTINGS, ...(store.get('feishu') as FeishuSettings | undefined) },
     // Drop platform ids from older versions that no longer exist (e.g. the
     // removed marketplace channels) so a stale settings file never leaks an
     // unknown platform into a search run.
@@ -272,7 +285,7 @@ export function updateSettings(values: Partial<Settings>): void {
  */
 export const PUBLIC_SETTING_KEYS = new Set<keyof Settings>([
   'discogsToken', 'ebayClientId', 'ebayClientSecret',
-  'proxyEnabled', 'proxyHost', 'proxyPort', 'llm', 'apify',
+  'proxyEnabled', 'proxyHost', 'proxyPort', 'llm', 'apify', 'feishu',
   'standardPlatforms', 'deepPlatforms', 'fastMode', 'displayCurrency',
   'lanEnabled', 'lanHost', 'lanPort',
   'barcodeProviders', 'lastExportDirectory', 'autoUpdateEnabled', 'publishTargets'

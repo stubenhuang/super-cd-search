@@ -34,6 +34,18 @@ export interface QueryResult {
   details?: CDDetails
 }
 
+/** Settings for syncing search results into a Feishu Bitable table. */
+export interface FeishuSettings {
+  /** Master switch; disabled and incomplete configs skip syncing silently. */
+  enabled: boolean
+  /** Self-built Feishu app credentials, used to obtain a tenant access token. */
+  appId: string
+  appSecret: string
+  /** Bitable app token and table id taken from the table URL. */
+  appToken: string
+  tableId: string
+}
+
 /** Settings for the Apify-powered reverse-image-search sources. */
 export interface ApifySettings {
   /** Apify API token; sent as an Authorization: Bearer header, never logged. */
@@ -205,6 +217,8 @@ export interface Settings {
   llm?: LLMSettings
   /** Apify token / actor configuration for the image-search sources. */
   apify?: ApifySettings
+  /** Feishu Bitable sink configuration for search-result archiving. */
+  feishu?: FeishuSettings
   /** Platforms queried by the standard search mode. */
   standardPlatforms?: Platform[]
   /** Platforms queried by the deep search mode. */

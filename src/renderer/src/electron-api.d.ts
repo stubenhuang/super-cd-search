@@ -16,7 +16,8 @@ import type {
   LanSearchPhase,
   LanSearchState,
   BarcodeProvider,
-  SettingsTransferResult
+  SettingsTransferResult,
+  FeishuSettings
 } from '../../shared/types'
 import type {
   PublishTarget,
@@ -29,6 +30,7 @@ import type {
   PublishTargetTestResult
 } from '../../shared/publish'
 import type { UpdateState } from '../../shared/updater'
+import type { FeishuSyncPayload, FeishuSyncResult, FeishuTestResult } from '../../shared/feishu'
 
 export type {
   UpdateState,
@@ -56,7 +58,11 @@ export type {
   LanSearchPhase,
   LanSearchState,
   BarcodeProvider,
-  SettingsTransferResult
+  SettingsTransferResult,
+  FeishuSettings,
+  FeishuSyncPayload,
+  FeishuSyncResult,
+  FeishuTestResult
 }
 
 // Extended progress type for received messages (includes event)
@@ -143,6 +149,13 @@ export interface IElectronAPI {
   runPublish: (request: PublishRunRequest) => Promise<PublishOutcome>
   /** Abort the running publish run (harmless when nothing is running). */
   cancelPublish: () => Promise<void>
+  /**
+   * Archive the given catalog numbers into the configured Feishu Bitable table.
+   * Never rejects: disabled/incomplete config resolves as `status: 'skipped'`.
+   */
+  syncFeishu: (payload: FeishuSyncPayload) => Promise<FeishuSyncResult>
+  /** Read-only credential/table probe against the current form values. */
+  testFeishu: (settings: FeishuSettings) => Promise<FeishuTestResult>
 }
 
 declare global {

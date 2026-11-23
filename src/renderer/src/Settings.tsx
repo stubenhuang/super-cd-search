@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Settings, Platform, BarcodeProvider, SettingsTransferResult } from './electron-api'
-import type { ApifySettings } from '../../shared/types'
+import type { ApifySettings, FeishuSettings } from '../../shared/types'
 import { DEFAULT_APIFY_SETTINGS } from '../../shared/apify'
+import { DEFAULT_FEISHU_SETTINGS } from '../../shared/feishu'
 import { PLATFORMS, platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, BARCODE_PROVIDERS, BARCODE_PROVIDER_LABELS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { useI18n } from './i18n'
 import { useUpdateState } from './hooks/useUpdateState'
@@ -15,7 +16,7 @@ interface SettingsPanelProps {
   section?: SectionKey
 }
 
-export type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'apify' | 'llm' | 'backup' | 'about'
+export type SectionKey = 'api' | 'proxy' | 'barcode' | 'sources' | 'apify' | 'feishu' | 'llm' | 'backup' | 'about'
 
 export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) {
   const { t } = useI18n()
@@ -42,6 +43,8 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
   const [deepPlatforms, setDeepPlatforms] = useState<Platform[]>(DEFAULT_DEEP_PLATFORMS)
   const [fastMode, setFastMode] = useState(false)
   const [apify, setApify] = useState<ApifySettings>(DEFAULT_APIFY_SETTINGS)
+  const [feishu, setFeishu] = useState<FeishuSettings>(DEFAULT_FEISHU_SETTINGS)
+  const [feishuTesting, setFeishuTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [backupExportPassword, setBackupExportPassword] = useState('')
@@ -96,6 +99,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
     setDeepPlatforms(settings.deepPlatforms ?? DEFAULT_DEEP_PLATFORMS)
     setFastMode(settings.fastMode || false)
     setApify({ ...DEFAULT_APIFY_SETTINGS, ...settings.apify })
+    setFeishu({ ...DEFAULT_FEISHU_SETTINGS, ...settings.feishu })
     setAutoUpdateEnabled(settings.autoUpdateEnabled !== false)
   }, [])
 
@@ -166,6 +170,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
         deepPlatforms,
         fastMode,
         apify,
+        feishu,
         llm: {
           enabled: llmEnabled,
           apiBaseUrl: llmApiBaseUrl,
@@ -247,6 +252,7 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
     { key: 'barcode', icon: '▣', label: t('nav.barcodeProviders') },
     { key: 'sources', icon: '◎', label: t('nav.sources') },
     { key: 'apify', icon: '▧', label: t('nav.apify') },
+    { key: 'feishu', icon: '▤', label: t('nav.feishu') },
     { key: 'llm', icon: '◇', label: t('nav.llm') },
     { key: 'backup', icon: '⇅', label: t('nav.backup') },
     { key: 'about', icon: '⟳', label: t('nav.about') }
@@ -255,6 +261,18 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
   const showToast = (text: string, kind: 'success' | 'error' = 'success') => {
     setToast({ kind, text })
     setTimeout(() => setToast(null), 4000)
+  }
+
+  const handleTestFeishu = async () => {
+    setFeishuTesting(true)
+    try {
+      const result = await window.electronAPI.testFeishu(feishu)
+      showToast(result.message, result.ok ? 'success' : 'error')
+    } catch {
+      showToast(t('feishu.testFailed'), 'error')
+    } finally {
+      setFeishuTesting(false)
+    }
   }
 
   const handleToggleAutoUpdate = (enabled: boolean) => {
@@ -644,6 +662,98 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
                 />
                 <div className="st-field-hint">{t('apify.timeoutHint')}</div>
               </div>
+            </div>
+          </div>
+        )
+
+      case 'feishu':
+        return (
+          <div className="st-section-content">
+            <div className="st-section-desc">
+              {t('feishu.desc')}
+            </div>
+            <div className="st-toggle-row">
+              <div className="st-toggle-info">
+                <span className="st-toggle-title">{t('feishu.enable')}</span>
+                <span className="st-toggle-desc">{t('feishu.enableDesc')}</span>
+              </div>
+              <label className="st-switch">
+                <input
+                  type="checkbox"
+                  data-field="feishu-enabled"
+                  checked={feishu.enabled}
+                  onChange={e => setFeishu(prev => ({ ...prev, enabled: e.target.checked }))}
+                />
+                <span className="st-slider"></span>
+              </label>
+            </div>
+            <div className="st-field-group">
+              <div className="st-field-group-title">
+                <span className="st-icon">◆</span> {t('feishu.credentials')}
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◆</span> {t('feishu.appId')}
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  data-field="feishu-appId"
+                  value={feishu.appId}
+                  onChange={e => setFeishu(prev => ({ ...prev, appId: e.target.value }))}
+                  placeholder={t('feishu.appIdPlaceholder')}
+                />
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('feishu.appSecret')}
+                </label>
+                <input
+                  type="password"
+                  className="st-input"
+                  data-field="feishu-appSecret"
+                  value={feishu.appSecret}
+                  onChange={e => setFeishu(prev => ({ ...prev, appSecret: e.target.value }))}
+                  placeholder={t('feishu.appSecretPlaceholder')}
+                />
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('feishu.appToken')}
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  data-field="feishu-appToken"
+                  value={feishu.appToken}
+                  onChange={e => setFeishu(prev => ({ ...prev, appToken: e.target.value }))}
+                  placeholder={t('feishu.appTokenPlaceholder')}
+                />
+              </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('feishu.tableId')}
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  data-field="feishu-tableId"
+                  value={feishu.tableId}
+                  onChange={e => setFeishu(prev => ({ ...prev, tableId: e.target.value }))}
+                  placeholder={t('feishu.tableIdPlaceholder')}
+                />
+              </div>
+              <div className="st-field-hint">{t('feishu.hint')}</div>
+            </div>
+            <div className="st-cf-actions">
+              <button
+                type="button"
+                className="st-btn-cancel"
+                onClick={() => void handleTestFeishu()}
+                disabled={feishuTesting}
+              >
+                {feishuTesting ? t('feishu.testing') : t('feishu.test')}
+              </button>
             </div>
           </div>
         )

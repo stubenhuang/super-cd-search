@@ -14,6 +14,8 @@ import type {
   SettingsTransferResult
 } from '../shared/types'
 import type { UpdateState } from '../shared/updater'
+import type { FeishuSyncPayload, FeishuSyncResult, FeishuTestResult } from '../shared/feishu'
+import type { FeishuSettings } from '../shared/types'
 import type {
   PublishDraft,
   PublishOutcome,
@@ -126,6 +128,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('lan:setCatalogCount', count),
   setLanSearchState: (state: LanSearchState): Promise<void> =>
     ipcRenderer.invoke('lan:setSearchState', state),
+  syncFeishu: (payload: FeishuSyncPayload): Promise<FeishuSyncResult> =>
+    ipcRenderer.invoke('feishu:sync', payload),
+  testFeishu: (settings: FeishuSettings): Promise<FeishuTestResult> =>
+    ipcRenderer.invoke('feishu:test', settings),
   getUpdateState: (): Promise<UpdateState> =>
     ipcRenderer.invoke('updater:getState'),
   checkForUpdates: (): Promise<UpdateState> =>

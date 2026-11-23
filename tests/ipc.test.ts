@@ -38,6 +38,16 @@ const { mockLogFromRenderer } = vi.hoisted(() => ({
   mockLogFromRenderer: vi.fn()
 }))
 
+const { mockSyncToFeishu, mockTestFeishu } = vi.hoisted(() => ({
+  mockSyncToFeishu: vi.fn(),
+  mockTestFeishu: vi.fn()
+}))
+
+vi.mock('../src/main/feishu/sync', () => ({
+  syncToFeishu: mockSyncToFeishu,
+  testFeishu: mockTestFeishu
+}))
+
 const { mockGetLanStatus, mockGetLanCandidates, mockApplyLanServer, mockRegenerateLanToken, mockSetLanSearchAvailability, mockSetLanSearchCatalogCount, mockSetLanSearchState } = vi.hoisted(() => ({
   mockGetLanStatus: vi.fn(),
   mockGetLanCandidates: vi.fn(),
@@ -113,6 +123,7 @@ import { registerCurrencyIpc } from '../src/main/ipc/currency'
 import { registerEnrichmentIpc } from '../src/main/ipc/enrich'
 import { registerLoggingIpc } from '../src/main/ipc/log'
 import { registerLanIpc } from '../src/main/ipc/lan'
+import { registerFeishuIpc } from '../src/main/ipc/feishu'
 
 const handler = (channel: string) => registeredHandler(ipcMain, channel)
 
@@ -296,5 +307,32 @@ describe('registerLoggingIpc', () => {
 
     onHandler('renderer:log')(null, 'info', 'app.search', 'no meta')
     expect(mockLogFromRenderer).toHaveBeenCalledWith('info', 'app.search', 'no meta', undefined)
+  })
+})
+
+describe('registerFeishuIpc', () => {
+  it('forwards sync payloads and returns the outcome', async () => {
+    const outcome = { status: 'ok', created: 1, updated: 0, failed: 0 }
+    mockSyncToFeishu.mockResolvedValue(outcome)
+    registerFeishuIpc()
+
+    const payload = { rows: [{ catalogNumber: 'X-1', results: [] }] }
+    expect(await handler('feishu:sync')(null, payload)).toEqual(outcome)
+    expect(mockSyncToFeishu).toHaveBeenCalledWith(payload)
+  })
+
+  it('skips malformed sync payloads without reaching the sync layer', async () => {
+    registerFeishuIpc()
+    expect(await handler('feishu:sync')(null, null)).toMatchObject({ status: 'skipped' })
+    expect(mockSyncToFeishu).not.toHaveBeenCalled()
+  })
+
+  it('never rejects from the connection probe', async () => {
+    mockTestFeishu.mockResolvedValue({ ok: true, message: '连接成功' })
+    registerFeishuIpc()
+    expect(await handler('feishu:test')(null, { appId: 'id' })).toEqual({ ok: true, message: '连接成功' })
+
+    mockTestFeishu.mockRejectedValue(new Error('boom'))
+    expect(await handler('feishu:test')(null, { appId: 'id' })).toEqual({ ok: false, message: 'boom' })
   })
 })
