@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setSetting, deleteSetting } from '../src/main/settings'
-import { DEFAULT_APIFY_SETTINGS } from '../src/shared/apify'
+import { DEFAULT_APIFY_SETTINGS, resolveApifySettings } from '../src/shared/apify'
 import {
   searchTaobaoByImage,
   searchXianyuByImage,
@@ -38,6 +38,24 @@ afterEach(() => {
   deleteSetting('apify')
 })
 
+describe('resolveApifySettings', () => {
+  it('migrates the known broken Taobao actor id', () => {
+    expect(resolveApifySettings({ token: 't', taobaoActor: 'dev00~taobao-reverse-image-search' }).taobaoActor)
+      .toBe(DEFAULT_APIFY_SETTINGS.taobaoActor)
+    expect(resolveApifySettings({ taobaoActor: 'dev00/taobao-reverse-image-search' }).taobaoActor)
+      .toBe(DEFAULT_APIFY_SETTINGS.taobaoActor)
+  })
+
+  it('keeps custom actor ids and fills defaults', () => {
+    expect(resolveApifySettings({ taobaoActor: 'me/my-actor' })).toMatchObject({
+      token: '',
+      taobaoActor: 'me/my-actor',
+      num: 3
+    })
+    expect(resolveApifySettings()).toEqual(DEFAULT_APIFY_SETTINGS)
+  })
+})
+
 describe('normalizeListings / parsePriceCNY', () => {
   it('parses numeric and string CNY prices and normalizes image URLs', () => {
     const listings = normalizeListings([
@@ -66,6 +84,20 @@ describe('normalizeListings / parsePriceCNY', () => {
       .toBe('https://img/b.jpg')
   })
 
+  it('reads the Xianyu pictureUrl and object-shaped gallery entries', () => {
+    const listings = normalizeListings([
+      { title: 'A', price: 10, pictureUrl: '//img.alicdn.com/a.jpg', images: [{ url: 'https://img.alicdn.com/gallery.jpg', width: 800 }] },
+      { title: 'B', price: 20, images: [{ url: 'https://img.alicdn.com/b.jpg' }] }
+    ])
+    expect(listings[0].coverUrl).toBe('https://img.alicdn.com/a.jpg')
+    expect(listings[1].coverUrl).toBe('https://img.alicdn.com/b.jpg')
+  })
+
+  it('reads priceCny and flattens a results wrapper (Taobao/1688 actor)', () => {
+    expect(normalizeListings({ results: [{ title: 'P', priceCny: 39.9, productUrl: 'https://item.taobao.com/p', imageUrl: 'https://img/p.jpg' }] }))
+      .toEqual([{ title: 'P', priceCNY: 39.9, url: 'https://item.taobao.com/p', coverUrl: 'https://img/p.jpg' }])
+  })
+
   it('drops rows with no title, price or link', () => {
     expect(normalizeListings([{}, null, 42, undefined, { title: 'Kept' }])).toHaveLength(1)
   })
@@ -81,31 +113,56 @@ describe('normalizeListings / parsePriceCNY', () => {
 })
 
 describe('searchTaobaoByImage', () => {
-  it('calls the sync actor with a Bearer token and returns normalized listings', async () => {
-    fetchMock.mockResolvedValue(jsonResponse([
-      { title: 'CD', price: 88, productUrl: 'https://item.taobao.com/1', imageUrl: 'https://img/1.jpg' }
-    ]))
+  it('starts an async run, polls until SUCCEEDED, then reads the dataset', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'run1', defaultDatasetId: 'ds1', status: 'RUNNING' } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([
+        { title: 'CD', priceCny: 88, productUrl: 'https://item.taobao.com/1', imageUrl: 'https://img/1.jpg', marketplace: 'taobao' }
+      ]))
 
     const listings = await searchTaobaoByImage('BASE64')
 
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url, options] = fetchMock.mock.calls[0]
-    expect(url).toBe('https://api.apify.com/v2/acts/dev00~taobao-reverse-image-search/run-sync-get-dataset-items?timeout=60')
-    expect(url).not.toContain('token=')
-    expect(options.method).toBe('POST')
-    expect(options.headers.Authorization).toBe('Bearer test-token')
-    expect(JSON.parse(options.body)).toEqual({ imageBase64: 'BASE64', num: 3 })
-    expect(JSON.parse(options.body)).not.toHaveProperty('imageUrl')
-    expect(listings[0]).toMatchObject({ title: 'CD', priceCNY: 88 })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.apify.com/v2/acts/apivault_labs~1688-image-search/runs')
+    expect(fetchMock.mock.calls[0][0]).not.toContain('token=')
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer test-token')
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toEqual({
+      imagesBase64: ['BASE64'],
+      marketplace: 'taobao',
+      maxResults: 3,
+      sortBy: 'relevance',
+      runTimeout: 150
+    })
+    expect(body).not.toHaveProperty('imageUrl')
+    expect(body).not.toHaveProperty('imageUrls')
+    expect(fetchMock.mock.calls[1][0]).toContain('/actor-runs/run1')
+    expect(fetchMock.mock.calls[2][0]).toContain('/datasets/ds1/items')
+    expect(listings[0]).toMatchObject({ title: 'CD', priceCNY: 88, coverUrl: 'https://img/1.jpg' })
   })
 
   it('normalizes a slash-form actor id', async () => {
-    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', taobaoActor: 'dev00/taobao-reverse-image-search' })
-    fetchMock.mockResolvedValue(jsonResponse([]))
+    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', taobaoActor: 'apivault_labs/1688-image-search' })
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([]))
 
     await searchTaobaoByImage('BASE64')
 
-    expect(fetchMock.mock.calls[0][0]).toContain('/acts/dev00~taobao-reverse-image-search/')
+    expect(fetchMock.mock.calls[0][0]).toContain('/acts/apivault_labs~1688-image-search/runs')
+  })
+
+  it('migrates a saved legacy actor id before starting the run', async () => {
+    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', taobaoActor: 'dev00~taobao-reverse-image-search' })
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([]))
+
+    await searchTaobaoByImage('BASE64')
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/acts/apivault_labs~1688-image-search/runs')
   })
 
   it('refuses to make a paid request without a token', async () => {
@@ -134,9 +191,40 @@ describe('searchTaobaoByImage', () => {
     await expect(searchTaobaoByImage('x')).rejects.toMatchObject({ code: 'invalid_response' })
   })
 
-  it('returns an empty list for an empty dataset', async () => {
-    fetchMock.mockResolvedValue(jsonResponse([]))
+  it('returns an empty list for a SUCCEEDED run with an empty dataset', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([]))
     expect(await searchTaobaoByImage('x')).toEqual([])
+  })
+
+  it('throws when the run FAILED', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'RUNNING' } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { status: 'FAILED', statusMessage: 'captcha' } }))
+
+    await expect(searchTaobaoByImage('x')).rejects.toThrow(/运行失败/)
+  })
+
+  it('throws when a timed-out run has no rows', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'RUNNING' } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { status: 'TIMED-OUT' } }))
+      .mockResolvedValueOnce(jsonResponse([]))
+
+    await expect(searchTaobaoByImage('x')).rejects.toMatchObject({ code: 'run_failed' })
+  })
+
+  it('rejects a run response without an id/dataset', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: {} }))
+    await expect(searchTaobaoByImage('x')).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
+  it('does not start a run when the batch is already cancelled', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(searchTaobaoByImage('x', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
@@ -147,7 +235,7 @@ describe('searchXianyuByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { status: 'RUNNING' } }))
       .mockResolvedValueOnce(jsonResponse({ data: { status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse([
-        { title: 'Used CD', price: 66, url: 'https://www.goofish.com/item?id=1' }
+        { title: 'Used CD', price: 66, url: 'https://www.goofish.com/item?id=1', pictureUrl: '//img.alicdn.com/x.jpg' }
       ]))
 
     const listings = await searchXianyuByImage('BASE64')
@@ -164,7 +252,7 @@ describe('searchXianyuByImage', () => {
     expect(body).not.toHaveProperty('imageUrls')
     expect(fetchMock.mock.calls[1][0]).toContain('/actor-runs/run1')
     expect(fetchMock.mock.calls[3][0]).toContain('/datasets/ds1/items')
-    expect(listings[0]).toMatchObject({ title: 'Used CD', priceCNY: 66 })
+    expect(listings[0]).toMatchObject({ title: 'Used CD', priceCNY: 66, coverUrl: 'https://img.alicdn.com/x.jpg' })
   })
 
   it('surfaces partial rows from a TIMED-OUT run', async () => {

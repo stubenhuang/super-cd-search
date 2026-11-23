@@ -20,8 +20,8 @@ export function queryXianyu(
   return runPlatformQuery(catalogNumber, signal, {
     platform: 'xianyu',
     tag: 'queries.xianyu',
-    // Isolate from results cached by the previous URL-based implementation.
-    cacheContext: 'apify-base64',
+    // Bust cached results from before the cover field was normalized.
+    cacheContext: 'apify-xianyu-v2',
     mapError: (err) => {
       if (isTimeoutError(err) || err instanceof ApifyClientError) {
         return queryError('xianyu', err instanceof Error ? err.message : '闲鱼图搜失败，请稍后重试')

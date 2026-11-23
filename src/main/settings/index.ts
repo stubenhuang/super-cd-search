@@ -7,7 +7,7 @@ import electronStore from 'electron-store'
 import type { Settings, LLMSettings, ApifySettings, FeishuSettings, Platform, DisplayCurrency, BarcodeProvider } from '../../shared/types'
 import type { PublishTarget } from '../../shared/publish'
 import { PLATFORMS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
-import { DEFAULT_APIFY_SETTINGS } from '../../shared/apify'
+import { DEFAULT_APIFY_SETTINGS, resolveApifySettings } from '../../shared/apify'
 import { DEFAULT_FEISHU_SETTINGS } from '../../shared/feishu'
 
 export type { Settings, LLMSettings }
@@ -246,7 +246,7 @@ export function getSettings(): Settings {
     proxyHost: store.get('proxyHost') as string || undefined,
     proxyPort: store.get('proxyPort') as number || undefined,
     llm: store.get('llm') as LLMSettings | undefined,
-    apify: { ...DEFAULT_APIFY_SETTINGS, ...(store.get('apify') as ApifySettings | undefined) },
+    apify: resolveApifySettings(store.get('apify') as ApifySettings | undefined),
     feishu: { ...DEFAULT_FEISHU_SETTINGS, ...(store.get('feishu') as FeishuSettings | undefined) },
     // Drop platform ids from older versions that no longer exist (e.g. the
     // removed marketplace channels) so a stale settings file never leaks an

@@ -1,18 +1,19 @@
 import type { ApifySettings } from '../../shared/types'
-import { DEFAULT_APIFY_SETTINGS } from '../../shared/apify'
+import { resolveApifySettings } from '../../shared/apify'
 import { getSetting } from '../settings'
 import { createAbortError, throwIfAborted, abortableDelay, withTimeout } from '../browser/abort'
 import { logger } from '../logger'
 
 const APIFY_API_BASE = 'https://api.apify.com/v2'
 const REQUEST_TIMEOUT_MS = 60_000
-const SYNC_TIMEOUT_SECONDS = 60
-/** Client deadline for the sync call, slightly above the Actor-side timeout. */
-const SYNC_REQUEST_TIMEOUT_MS = (SYNC_TIMEOUT_SECONDS + 5) * 1000
 const POLL_INTERVAL_MS = 2_000
 const XIANYU_DETAIL_LEVEL = 'summary'
 /** Rank visual matches by similarity so the first item is the closest match. */
 const XIANYU_SORT_BY = 'relevance'
+/** Keep the actor-side deadline below the client's 180s wall-clock timeout. */
+const TAOBAO_RUN_TIMEOUT_SECONDS = 150
+
+const ACTOR_LABELS = { taobao: '淘宝', xianyu: '闲鱼' } as const
 
 /** A single listing returned by either image-search actor, normalized. */
 export interface ApifyListing {
@@ -99,7 +100,7 @@ async function apifyFetch<T>(path: string, token: string, options: ApifyFetchOpt
 
 /** Read the stored config, filling in defaults for keys never saved. */
 function apifySettings(): ApifySettings {
-  return { ...DEFAULT_APIFY_SETTINGS, ...(getSetting('apify') as ApifySettings | undefined) }
+  return resolveApifySettings(getSetting('apify') as ApifySettings | undefined)
 }
 
 function requireToken(settings: ApifySettings): string {
@@ -115,12 +116,12 @@ function actorPath(actorId: string): string {
   return encodeURIComponent(actorId.trim().replace(/\//g, '~'))
 }
 
-/** Accept bare rows, a wrapper object with products/items/data, or a single row. */
+/** Accept bare rows, a wrapper object with products/items/data/results, or a single row. */
 function toRows(raw: unknown): unknown[] {
   if (Array.isArray(raw)) return raw
   if (!raw || typeof raw !== 'object') return []
   const obj = raw as Record<string, unknown>
-  for (const key of ['products', 'items', 'data']) {
+  for (const key of ['products', 'items', 'data', 'results']) {
     if (Array.isArray(obj[key])) return obj[key] as unknown[]
   }
   return [obj]
@@ -146,6 +147,15 @@ function normalizeHttpUrl(value: unknown): string | null {
   return raw
 }
 
+/** Galleries are string arrays (Taobao) or objects carrying `url` (Xianyu). */
+function firstImageUrl(images: unknown[]): unknown {
+  const first = images[0]
+  if (first && typeof first === 'object') {
+    return (first as Record<string, unknown>).url
+  }
+  return first
+}
+
 /**
  * Flatten the two actors' differently-shaped outputs into one ordered list.
  * The actor's own ordering is treated as the match ranking, so `listings[0]`
@@ -157,9 +167,9 @@ export function normalizeListings(raw: unknown): ApifyListing[] {
     if (!row || typeof row !== 'object') continue
     const obj = row as Record<string, unknown>
     const images = Array.isArray(obj.images) ? obj.images : Array.isArray(obj.imageGallery) ? obj.imageGallery : []
-    const coverCandidate = obj.imageUrl ?? obj.coverUrl ?? images[0] ?? null
+    const coverCandidate = obj.imageUrl ?? obj.coverUrl ?? obj.pictureUrl ?? firstImageUrl(images)
     const title = readString(obj.title)
-    const priceCNY = parsePriceCNY(obj.price ?? obj.priceText)
+    const priceCNY = parsePriceCNY(obj.price ?? obj.priceText ?? obj.priceCny)
     const url = normalizeHttpUrl(obj.productUrl ?? obj.itemUrl ?? obj.url ?? obj.link)
     const coverUrl = normalizeHttpUrl(coverCandidate)
     if (!title && priceCNY === null && !url) continue
@@ -178,55 +188,36 @@ interface ActorRun {
 }
 
 /**
- * Taobao actor is fast enough for a synchronous run: one POST returns the
- * default dataset items directly. The cover image is supplied as raw base64.
+ * Both image-search actors run longer than the synchronous endpoint allows:
+ * start a run, poll its status, then read the default dataset. The whole chain
+ * is bounded by one wall-clock timeout and stays abortable so cancelling a
+ * batch stops both polling and billing.
  */
-export async function searchTaobaoByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
-  const settings = apifySettings()
-  const token = requireToken(settings)
-  const path = `/acts/${actorPath(settings.taobaoActor)}/run-sync-get-dataset-items?timeout=${SYNC_TIMEOUT_SECONDS}`
-  logger.debug('apify', 'taobao image search start', { actor: settings.taobaoActor })
-  const raw = await apifyFetch<unknown>(path, token, {
-    method: 'POST',
-    body: { imageBase64, num: settings.num },
-    signal,
-    timeoutMs: SYNC_REQUEST_TIMEOUT_MS
-  })
-  const listings = normalizeListings(raw)
-  logger.debug('apify', 'taobao image search complete', { actor: settings.taobaoActor, count: listings.length })
-  return listings
-}
-
-/**
- * Xianyu actor often runs longer than the synchronous endpoint allows: start
- * a run, poll its status, then read the default dataset. The whole chain is
- * bounded by one wall-clock timeout and stays abortable so cancelling a batch
- * stops both polling and billing.
- */
-export async function searchXianyuByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
-  const settings = apifySettings()
-  const token = requireToken(settings)
-  const actorPathSegment = actorPath(settings.xianyuActor)
+async function runActorImageSearch(
+  settings: ApifySettings,
+  token: string,
+  actorId: string,
+  input: Record<string, unknown>,
+  logTag: keyof typeof ACTOR_LABELS,
+  signal?: AbortSignal
+): Promise<ApifyListing[]> {
+  const label = ACTOR_LABELS[logTag]
+  const actorPathSegment = actorPath(actorId)
 
   return withTimeout(
     async (runSignal) => {
       const started = await apifyFetch<ActorRun>(`/acts/${actorPathSegment}/runs`, token, {
         method: 'POST',
-        body: {
-          imageBase64,
-          maxItems: settings.maxItems,
-          detailLevel: XIANYU_DETAIL_LEVEL,
-          sortBy: XIANYU_SORT_BY
-        },
+        body: input,
         signal: runSignal
       })
       const runId = started.data?.id
       const datasetId = started.data?.defaultDatasetId
       if (!runId || !datasetId) {
-        throw new ApifyClientError('闲鱼图搜未返回有效的运行 ID', 'invalid_response')
+        throw new ApifyClientError(`${label}图搜未返回有效的运行 ID`, 'invalid_response')
       }
 
-      logger.debug('apify', 'xianyu run started', { actor: settings.xianyuActor, runId })
+      logger.debug('apify', `${logTag} run started`, { actor: actorId, runId })
       let status = started.data?.status ?? 'READY'
       let statusMessage = ''
       while (status !== 'SUCCEEDED' && status !== 'FAILED' && status !== 'ABORTED' && status !== 'TIMED-OUT') {
@@ -238,24 +229,54 @@ export async function searchXianyuByImage(imageBase64: string, signal?: AbortSig
         })
         status = run.data?.status ?? status
         statusMessage = run.data?.statusMessage ?? ''
-        logger.debug('apify', 'xianyu run poll', { runId, status })
+        logger.debug('apify', `${logTag} run poll`, { runId, status })
       }
 
       const itemsPath = `/datasets/${encodeURIComponent(datasetId)}/items`
       if (status === 'FAILED') {
-        throw new ApifyClientError(`闲鱼图搜运行失败：${statusMessage || 'FAILED'}`, 'run_failed')
+        throw new ApifyClientError(`${label}图搜运行失败：${statusMessage || 'FAILED'}`, 'run_failed')
       }
       // TIMED-OUT / ABORTED runs can still hold partial rows; surface them.
       const raw = await apifyFetch<unknown>(itemsPath, token, { method: 'GET', signal: runSignal })
       const listings = normalizeListings(raw)
-      logger.debug('apify', 'xianyu image search complete', { runId, status, count: listings.length })
+      logger.debug('apify', `${logTag} image search complete`, { runId, status, count: listings.length })
       if (listings.length === 0 && status !== 'SUCCEEDED') {
-        throw new ApifyClientError(`闲鱼图搜运行${status}，未返回可用结果`, 'run_failed')
+        throw new ApifyClientError(`${label}图搜运行${status}，未返回可用结果`, 'run_failed')
       }
       return listings
     },
     settings.timeoutMs,
-    `闲鱼图搜超过 ${Math.round(settings.timeoutMs / 1000)} 秒未完成，请稍后重试`,
+    `${label}图搜超过 ${Math.round(settings.timeoutMs / 1000)} 秒未完成，请稍后重试`,
     signal
   )
+}
+
+/**
+ * Taobao and 1688 photo search. The cover is supplied as raw base64 (no data:
+ * prefix, no URL ever leaves the app). If the actor rejects raw base64, wrap it
+ * as `data:image/jpeg;base64,` — downloadImage re-encodes covers as JPEG.
+ */
+export async function searchTaobaoByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
+  const settings = apifySettings()
+  const token = requireToken(settings)
+  logger.debug('apify', 'taobao image search start', { actor: settings.taobaoActor })
+  return runActorImageSearch(settings, token, settings.taobaoActor, {
+    imagesBase64: [imageBase64],
+    marketplace: 'taobao',
+    maxResults: settings.num,
+    sortBy: 'relevance',
+    runTimeout: TAOBAO_RUN_TIMEOUT_SECONDS
+  }, 'taobao', signal)
+}
+
+/** Xianyu (Goofish) visual search; the first item is the closest match. */
+export async function searchXianyuByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
+  const settings = apifySettings()
+  const token = requireToken(settings)
+  return runActorImageSearch(settings, token, settings.xianyuActor, {
+    imageBase64,
+    maxItems: settings.maxItems,
+    detailLevel: XIANYU_DETAIL_LEVEL,
+    sortBy: XIANYU_SORT_BY
+  }, 'xianyu', signal)
 }

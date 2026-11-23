@@ -29,7 +29,7 @@ vi.mock('../src/main/feishu/client', async (importOriginal) => {
   }
 })
 
-import { syncToFeishu, testFeishu } from '../src/main/feishu/sync'
+import { resetFeishuSyncState, syncToFeishu, testFeishu } from '../src/main/feishu/sync'
 
 const CONFIG: FeishuSettings = {
   enabled: true,
@@ -52,10 +52,12 @@ const oneRow = (name: string) => ({ catalogNumber: 'X-1', results: [found(name)]
 beforeEach(() => {
   vi.resetAllMocks()
   deleteSetting('feishu')
+  resetFeishuSyncState()
   mockEnsureFields.mockResolvedValue(undefined)
   mockFindRecordIds.mockResolvedValue(new Map())
-  mockBatchCreate.mockImplementation(async (_settings, records: unknown[]) => records.length)
-  mockBatchUpdate.mockImplementation(async (_settings, updates: unknown[]) => updates.length)
+  mockBatchCreate.mockImplementation(async (_settings, records: unknown[]) =>
+    (records as unknown[]).map((_, index) => `rec-new-${index}`))
+  mockBatchUpdate.mockImplementation(async (_settings, updates: unknown[]) => (updates as unknown[]).length)
   mockTestConnection.mockResolvedValue({ ok: true, message: '连接成功' })
 })
 
@@ -110,7 +112,7 @@ describe('syncToFeishu', () => {
     expect(created[0].name).toBe('Second')
   })
 
-  it('serializes overlapping syncs so the second one sees the first one writes', async () => {
+  it('serializes overlapping syncs so the second one updates what the first created', async () => {
     setSetting('feishu', CONFIG)
     let release!: () => void
     mockEnsureFields.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
@@ -123,10 +125,23 @@ describe('syncToFeishu', () => {
 
     release()
     const [r1, r2] = await Promise.all([first, second])
-    expect(r1.status).toBe('ok')
-    expect(r2.status).toBe('ok')
+    expect(r1).toEqual({ status: 'ok', created: 1, updated: 0, failed: 0 })
+    expect(r2).toEqual({ status: 'ok', created: 0, updated: 1, failed: 0 })
     expect(mockEnsureFields).toHaveBeenCalledTimes(2)
-    expect(mockBatchCreate).toHaveBeenCalledTimes(2)
+    expect(mockBatchCreate).toHaveBeenCalledTimes(1)
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+    expect((mockBatchUpdate.mock.calls[0][1] as Array<{ record_id: string }>)[0].record_id).toBe('rec-new-0')
+  })
+
+  it('never inserts when findRecordIds already knows the record', async () => {
+    setSetting('feishu', CONFIG)
+    mockFindRecordIds.mockResolvedValue(new Map([['X-1', 'rec-existing']]))
+
+    const result = await syncToFeishu({ rows: [oneRow('Existing')] })
+
+    expect(result).toEqual({ status: 'ok', created: 0, updated: 1, failed: 0 })
+    expect(mockBatchCreate).not.toHaveBeenCalled()
+    expect((mockBatchUpdate.mock.calls[0][1] as Array<{ record_id: string }>)[0].record_id).toBe('rec-existing')
   })
 
   it('turns failures into an error outcome and leaves the queue usable', async () => {

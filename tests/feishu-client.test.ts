@@ -9,10 +9,12 @@ import {
   ensureFields,
   findRecordIds,
   isFeishuConfigured,
+  parsePrimaryFieldText,
   readFeishuSettings,
   resetFeishuClientState,
   testFeishuConnection
 } from '../src/main/feishu/client'
+import { resetFeishuSyncState, syncToFeishu } from '../src/main/feishu/sync'
 
 const CONFIG: FeishuSettings = {
   enabled: true,
@@ -67,12 +69,14 @@ beforeEach(() => {
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
   resetFeishuClientState()
+  resetFeishuSyncState()
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
   deleteSetting('feishu')
   resetFeishuClientState()
+  resetFeishuSyncState()
 })
 
 describe('settings helpers', () => {
@@ -273,37 +277,89 @@ describe('record upsert endpoints', () => {
     setupRoutes({
       'POST /auth/v3/tenant_access_token/internal': okToken,
       'POST /records/search': [
-        () => json({ code: 0, data: { items: [{ record_id: 'rec-1', fields: { '编号': 'X-1' } }], has_more: true, page_token: 'p2' } }),
-        () => json({ code: 0, data: { items: [{ record_id: 'rec-2', fields: { '编号': 'X-2' } }], has_more: false } })
+        () => json({ code: 0, data: { items: [{ record_id: 'rec-1', fields: { '编号': [{ text: 'X-1', type: 'text' }] } }], has_more: true, page_token: 'p2' } }),
+        () => json({ code: 0, data: { items: [{ record_id: 'rec-2', fields: { '编号': [{ text: 'X-2', type: 'text' }] } }], has_more: false } })
       ]
     })
 
     const ids = await findRecordIds(CONFIG, ['X-1', 'X-2'])
     expect(ids).toEqual(new Map([['X-1', 'rec-1'], ['X-2', 'rec-2']]))
-    const first = calls('POST', '/records/search')[0]
-    const body = JSON.parse((first[1] as { body: string }).body)
+    const searches = calls('POST', '/records/search')
+    const body = JSON.parse((searches[0][1] as { body: string }).body)
     expect(body.filter.conjunction).toBe('or')
     expect(body.filter.conditions).toHaveLength(2)
     expect(body.filter.conditions[0]).toEqual({ field_name: '编号', operator: 'is', value: ['X-1'] })
-    expect(calls('POST', '/records/search')).toHaveLength(2)
-    expect(JSON.parse((calls('POST', '/records/search')[1][1] as { body: string }).body).page_token).toBe('p2')
+    expect(body.field_names).toEqual(['编号'])
+    expect(body.automatic_fields).toBe(false)
+    expect(body).not.toHaveProperty('page_size')
+    expect(searches).toHaveLength(2)
+    expect(searches[0][0]).toContain('page_size=100')
+    expect(searches[1][0]).toContain('page_token=p2')
+    expect(JSON.parse((searches[1][1] as { body: string }).body)).not.toHaveProperty('page_token')
   })
 
-  it('sends batch_create / batch_update payloads and skips empty batches', async () => {
+  it('flattens text segments and string arrays into a lookup key', () => {
+    expect(parsePrimaryFieldText([{ text: 'SICP-', type: 'text' }, { text: '6480', type: 'text' }])).toBe('SICP-6480')
+    expect(parsePrimaryFieldText(['X-1'])).toBe('X-1')
+    expect(parsePrimaryFieldText(' X-2 ')).toBe('X-2')
+    expect(parsePrimaryFieldText(null)).toBe('')
+  })
+
+  it('sends batch_create / batch_update payloads and returns created ids', async () => {
     setupRoutes({
       'POST /auth/v3/tenant_access_token/internal': okToken,
-      'POST /records/batch_create': () => json({ code: 0, data: { records: [{}, {}] } }),
+      'POST /records/batch_create': () => json({ code: 0, data: { records: [{ record_id: 'rec-a' }, { record_id: 'rec-b' }] } }),
       'POST /records/batch_update': () => json({ code: 0, data: { records: [{}] } })
     })
 
-    expect(await batchCreate(CONFIG, [{ '编号': 'A' }, { '编号': 'B' }])).toBe(2)
+    expect(await batchCreate(CONFIG, [{ '编号': 'A' }, { '编号': 'B' }])).toEqual(['rec-a', 'rec-b'])
     expect(await batchUpdate(CONFIG, [{ record_id: 'r1', fields: { '编号': 'C' } }])).toBe(1)
-    expect(await batchCreate(CONFIG, [])).toBe(0)
+    expect(await batchCreate(CONFIG, [])).toEqual([])
     expect(await batchUpdate(CONFIG, [])).toBe(0)
 
     const createBody = JSON.parse((calls('POST', '/records/batch_create')[0][1] as { body: string }).body)
     expect(createBody.records).toEqual([{ fields: { '编号': 'A' } }, { fields: { '编号': 'B' } }])
     const updateBody = JSON.parse((calls('POST', '/records/batch_update')[0][1] as { body: string }).body)
     expect(updateBody.records).toEqual([{ record_id: 'r1', fields: { '编号': 'C' } }])
+  })
+})
+
+describe('feishu upsert end to end (real client)', () => {
+  it('creates once and updates the second time for the same 编号', async () => {
+    setSetting('feishu', CONFIG)
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'GET /fields?': okFields(),
+      'POST /fields': okApi,
+      'POST /records/search': () => json({ code: 0, data: { items: [], has_more: false } }),
+      'POST /records/batch_create': () => json({ code: 0, data: { records: [{ record_id: 'rec-new' }] } }),
+      'POST /records/batch_update': () => json({ code: 0, data: { records: [{}] } })
+    })
+
+    const row = { catalogNumber: 'X-1', results: [] }
+    const first = await syncToFeishu({ rows: [row] })
+    const second = await syncToFeishu({ rows: [row] })
+
+    expect(first).toEqual({ status: 'ok', created: 1, updated: 0, failed: 0 })
+    expect(second).toEqual({ status: 'ok', created: 0, updated: 1, failed: 0 })
+    expect(calls('POST', '/records/batch_create')).toHaveLength(1)
+    expect(calls('POST', '/records/batch_update')).toHaveLength(1)
+  })
+
+  it('updates an existing record when search returns text segments', async () => {
+    setSetting('feishu', CONFIG)
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'GET /fields?': okFields(),
+      'POST /fields': okApi,
+      'POST /records/search': () => json({ code: 0, data: { items: [{ record_id: 'rec-existing', fields: { '编号': [{ text: 'X-1', type: 'text' }] } }], has_more: false } }),
+      'POST /records/batch_create': okApi,
+      'POST /records/batch_update': () => json({ code: 0, data: { records: [{}] } })
+    })
+
+    const result = await syncToFeishu({ rows: [{ catalogNumber: 'X-1', results: [] }] })
+
+    expect(result).toEqual({ status: 'ok', created: 0, updated: 1, failed: 0 })
+    expect(calls('POST', '/records/batch_create')).toHaveLength(0)
   })
 })

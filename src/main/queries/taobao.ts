@@ -20,8 +20,8 @@ export function queryTaobao(
   return runPlatformQuery(catalogNumber, signal, {
     platform: 'taobao',
     tag: 'queries.taobao',
-    // Isolate from results cached by the previous URL-based implementation.
-    cacheContext: 'apify-base64',
+    // Isolate from results cached by the previous (broken) actor.
+    cacheContext: 'apify-taobao-v2',
     mapError: (err) => {
       if (isTimeoutError(err) || err instanceof ApifyClientError) {
         return queryError('taobao', err instanceof Error ? err.message : '淘宝图搜失败，请稍后重试')

@@ -307,6 +307,27 @@ export async function ensureFields(settings: FeishuSettings, signal?: AbortSigna
   logger.debug('feishu', 'fields ensured', { created })
 }
 
+/**
+ * A type-1 text field is written as a plain string but read back as an array
+ * of `{ text, type }` segments (sometimes a string / string[]). Flatten it so
+ * the primary field can be used as a lookup key.
+ */
+export function parsePrimaryFieldText(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim()
+  if (!Array.isArray(raw)) return ''
+  return raw
+    .map(segment => {
+      if (typeof segment === 'string') return segment
+      if (segment && typeof segment === 'object') {
+        const text = (segment as Record<string, unknown>).text
+        return typeof text === 'string' ? text : ''
+      }
+      return ''
+    })
+    .join('')
+    .trim()
+}
+
 /** Find existing record ids for the batch's catalog numbers in one query. */
 export async function findRecordIds(
   settings: FeishuSettings,
@@ -323,16 +344,17 @@ export async function findRecordIds(
   }))
   let pageToken: string | undefined
   do {
+    // records/search takes paging as query params, not body fields.
+    const params = new URLSearchParams({ page_size: '100' })
+    if (pageToken) params.set('page_token', pageToken)
     const payload: Record<string, unknown> = {
       filter: { conjunction: 'or', conditions },
       field_names: [FEISHU_PRIMARY_FIELD],
-      page_size: 100,
-      ...(pageToken ? { page_token: pageToken } : {})
+      automatic_fields: false
     }
-    const body = await callApi<RecordsResponse>(settings, tablePath(settings, 'records/search'), { method: 'POST', body: payload, signal })
+    const body = await callApi<RecordsResponse>(settings, `${tablePath(settings, 'records/search')}?${params}`, { method: 'POST', body: payload, signal })
     for (const item of body.data?.items ?? []) {
-      const raw = item.fields?.[FEISHU_PRIMARY_FIELD]
-      const value = typeof raw === 'string' ? raw : Array.isArray(raw) ? String(raw[0] ?? '') : ''
+      const value = parsePrimaryFieldText(item.fields?.[FEISHU_PRIMARY_FIELD])
       if (item.record_id && value) result.set(value, item.record_id)
     }
     pageToken = body.data?.has_more ? body.data?.page_token : undefined
@@ -340,18 +362,26 @@ export async function findRecordIds(
   return result
 }
 
+/**
+ * Return the created record ids (empty string when the API omits one) so a
+ * following sync can update these rows even before the search index catches up.
+ */
 export async function batchCreate(
   settings: FeishuSettings,
   records: Array<Record<string, string>>,
   signal?: AbortSignal
-): Promise<number> {
-  if (records.length === 0) return 0
+): Promise<string[]> {
+  if (records.length === 0) return []
   const body = await callApi<BatchResponse>(settings, tablePath(settings, 'records/batch_create'), {
     method: 'POST',
     body: { records: records.map(fields => ({ fields })) },
     signal
   })
-  return body.data?.records?.length ?? records.length
+  const created = body.data?.records
+  return records.map((_, index) => {
+    const id = (Array.isArray(created) ? created[index] : undefined) as { record_id?: unknown } | undefined
+    return typeof id?.record_id === 'string' ? id.record_id : ''
+  })
 }
 
 export async function batchUpdate(

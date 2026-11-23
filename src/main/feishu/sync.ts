@@ -1,6 +1,7 @@
 import type { FeishuSettings } from '../../shared/types'
 import {
   emptySyncResult,
+  FEISHU_PRIMARY_FIELD,
   type FeishuSyncPayload,
   type FeishuSyncResult,
   type FeishuSyncRow,
@@ -27,6 +28,39 @@ import { buildFeishuFields } from './record'
  */
 let queue: Promise<FeishuSyncResult> = Promise.resolve(emptySyncResult('skipped'))
 
+/**
+ * records/search can lag behind a just-finished batch_create, so remember the
+ * ids we created and reuse them for the next few minutes. Bounded by TTL and
+ * size so a long-running session cannot grow without limit.
+ */
+interface CachedRecordId {
+  id: string
+  at: number
+}
+const CREATED_ID_TTL_MS = 10 * 60 * 1000
+const CREATED_ID_CACHE_MAX = 1000
+const createdIds = new Map<string, CachedRecordId>()
+
+/** Test hook: drop the id cache and the serialization queue between cases. */
+export function resetFeishuSyncState(): void {
+  createdIds.clear()
+  queue = Promise.resolve(emptySyncResult('skipped'))
+}
+
+function cacheKey(settings: FeishuSettings, catalogNumber: string): string {
+  return `${settings.appToken}:${settings.tableId}:${catalogNumber}`
+}
+
+function purgeCreatedIds(now: number): void {
+  for (const [key, entry] of createdIds) {
+    if (now - entry.at > CREATED_ID_TTL_MS) createdIds.delete(key)
+  }
+  const overflow = createdIds.size - CREATED_ID_CACHE_MAX
+  if (overflow > 0) {
+    for (const key of [...createdIds.keys()].slice(0, overflow)) createdIds.delete(key)
+  }
+}
+
 export function syncToFeishu(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
   const task = queue.then(() => doSync(payload), () => doSync(payload))
   queue = task
@@ -52,6 +86,15 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
     await ensureFields(settings)
     const ids = await findRecordIds(settings, list.map(row => row.catalogNumber))
 
+    // A record created moments ago may not be visible to records/search yet.
+    const now = Date.now()
+    purgeCreatedIds(now)
+    for (const row of list) {
+      if (ids.has(row.catalogNumber)) continue
+      const cached = createdIds.get(cacheKey(settings, row.catalogNumber))
+      if (cached) ids.set(row.catalogNumber, cached.id)
+    }
+
     const creates: Array<Record<string, string>> = []
     const updates: Array<{ record_id: string; fields: Record<string, string> }> = []
     for (const row of list) {
@@ -61,8 +104,16 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
       else creates.push(fields)
     }
 
-    const created = await batchCreate(settings, creates)
-    const updated = await batchUpdate(settings, updates)
+    const createdRecordIds = creates.length > 0 ? await batchCreate(settings, creates) : []
+    const updated = updates.length > 0 ? await batchUpdate(settings, updates) : 0
+    for (let i = 0; i < createdRecordIds.length; i++) {
+      const id = createdRecordIds[i]
+      const catalogNumber = creates[i]?.[FEISHU_PRIMARY_FIELD]
+      if (id && catalogNumber) {
+        createdIds.set(cacheKey(settings, catalogNumber), { id, at: now })
+      }
+    }
+    const created = createdRecordIds.length
     const failed = Math.max(0, list.length - created - updated)
     logger.debug('feishu', 'sync completed', { total: list.length, created, updated, failed })
     return { status: 'ok', created, updated, failed }
