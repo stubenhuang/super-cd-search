@@ -41,6 +41,37 @@ interface ApifyFetchOptions {
   body?: Record<string, unknown>
   signal?: AbortSignal
   timeoutMs?: number
+  /** Source name used to make permission errors actionable. */
+  actorLabel?: string
+}
+
+interface ApifyErrorPayload {
+  error?: {
+    type?: unknown
+    message?: unknown
+    data?: { approvalUrl?: unknown }
+  }
+}
+
+/**
+ * Apify reports failures as `{ error: { type, message, data } }`. The 403 for
+ * a full-permission Actor that has not been approved carries a Console URL —
+ * keep it so the error can explain what the user must actually do instead of
+ * blaming the token.
+ */
+function parseApifyError(text: string): { type: string | null; message: string | null; approvalUrl: string | null } {
+  try {
+    const error = (JSON.parse(text) as ApifyErrorPayload)?.error
+    const str = (value: unknown): string | null =>
+      typeof value === 'string' && value.trim() ? value.trim() : null
+    return {
+      type: str(error?.type),
+      message: str(error?.message),
+      approvalUrl: str(error?.data?.approvalUrl)
+    }
+  } catch {
+    return { type: null, message: null, approvalUrl: null }
+  }
 }
 
 /**
@@ -72,13 +103,33 @@ async function apifyFetch<T>(path: string, token: string, options: ApifyFetchOpt
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
-      if (response.status === 401 || response.status === 403) {
+      const apiError = parseApifyError(errorText)
+      const detail = (apiError.message ?? errorText).trim().slice(0, 200)
+      logger.debug('apify', 'request failed', { path, method, status: response.status, errorType: apiError.type })
+
+      // 401 really is a bad token; 403 is actor-level (approval/subscription)
+      // and must not be reported as an invalid token when other sources work.
+      if (response.status === 401) {
         throw new ApifyClientError('Apify Token 无效或已过期，请在设置中检查', 'http')
+      }
+      if (response.status === 403) {
+        const source = options.actorLabel ? `${options.actorLabel}图搜的 Apify Actor` : '该 Apify Actor'
+        if (apiError.type === 'full-permission-actor-not-approved') {
+          const approvalUrl = apiError.approvalUrl ?? 'https://console.apify.com/actors/?approvePermissions=true'
+          throw new ApifyClientError(
+            `${source} 需要「完整权限」，Apify 要求先在控制台批准一次（仅首次）：${approvalUrl}`,
+            'http'
+          )
+        }
+        throw new ApifyClientError(
+          `${source}没有运行权限：${detail || '403 Forbidden'}。请在 Apify 控制台检查是否已订阅/授权该 Actor`,
+          'http'
+        )
       }
       if (response.status === 429) {
         throw new ApifyClientError('Apify 请求过于频繁，请稍后重试', 'http')
       }
-      throw new ApifyClientError(`Apify API ${response.status}: ${errorText.slice(0, 200)}`, 'http')
+      throw new ApifyClientError(`Apify API ${response.status}: ${detail}`, 'http')
     }
 
     try {
@@ -209,7 +260,8 @@ async function runActorImageSearch(
       const started = await apifyFetch<ActorRun>(`/acts/${actorPathSegment}/runs`, token, {
         method: 'POST',
         body: input,
-        signal: runSignal
+        signal: runSignal,
+        actorLabel: label
       })
       const runId = started.data?.id
       const datasetId = started.data?.defaultDatasetId

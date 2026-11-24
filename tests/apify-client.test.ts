@@ -102,6 +102,17 @@ describe('normalizeListings / parsePriceCNY', () => {
     expect(normalizeListings([{}, null, 42, undefined, { title: 'Kept' }])).toHaveLength(1)
   })
 
+  it('ignores the 1688 actor SUMMARY / ERRORS diagnostic rows in a mixed dataset', () => {
+    const rows = normalizeListings([
+      { kind: 'SUMMARY', totalCount: 1, lowestPriceCny: 88, highestPriceCny: 88, OUTPUT: { count: 1 } },
+      { kind: 'ERRORS', message: 'taobao_details_source_access_unavailable' },
+      { title: 'CD', priceCny: 88, productUrl: 'https://item.taobao.com/1', imageUrl: 'https://img/1.jpg', marketplace: 'taobao' }
+    ])
+    expect(rows).toEqual([
+      { title: 'CD', priceCNY: 88, url: 'https://item.taobao.com/1', coverUrl: 'https://img/1.jpg' }
+    ])
+  })
+
   it('rejects non-positive and unparseable prices', () => {
     expect(parsePriceCNY('¥1,234.00')).toBe(1234)
     expect(parsePriceCNY('88元')).toBe(88)
@@ -173,12 +184,65 @@ describe('searchTaobaoByImage', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('maps 401/403 and 429 to friendly errors', async () => {
+  it('maps 401 and 429 to friendly errors', async () => {
     fetchMock.mockResolvedValueOnce(new Response('unauthorized', { status: 401 }))
     await expect(searchTaobaoByImage('x')).rejects.toThrow(/Token 无效/)
 
     fetchMock.mockResolvedValueOnce(new Response('slow down', { status: 429 }))
     await expect(searchTaobaoByImage('x')).rejects.toThrow(/过于频繁/)
+  })
+
+  it('reports 401 as a bad token but never blames the token for a 403', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      error: {
+        type: 'full-permission-actor-not-approved',
+        message: 'This Actor requires full access to your account.',
+        data: { approvalUrl: 'https://console.apify.com/actors/abc123?approvePermissions=true' }
+      }
+    }, 403))
+
+    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    expect(err).toBeInstanceOf(ApifyClientError)
+    expect(err.code).toBe('http')
+    expect(err.message).toContain('完整权限')
+    expect(err.message).toContain('https://console.apify.com/actors/abc123?approvePermissions=true')
+    expect(err.message).not.toContain('Token 无效')
+    // A single rejected start must not fall through to polling / dataset reads.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to a generic approval URL when Apify omits one', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      error: { type: 'full-permission-actor-not-approved', message: 'approve me' }
+    }, 403))
+
+    await expect(searchTaobaoByImage('x'))
+      .rejects.toThrow(/console\.apify\.com\/actors\/\?approvePermissions=true/)
+  })
+
+  it('surfaces the actor-level reason for other 403s', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      error: { type: 'insufficient-permissions', message: 'Actor is not rented' }
+    }, 403))
+
+    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    expect(err.message).toContain('没有运行权限')
+    expect(err.message).toContain('Actor is not rented')
+    expect(err.message).not.toContain('Token 无效')
+  })
+
+  it('surfaces Apify structured error messages on other non-ok statuses', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      error: { type: 'invalid-input', message: 'imagesBase64 must decode as an image' }
+    }, 400))
+
+    await expect(searchTaobaoByImage('x'))
+      .rejects.toThrow(/imagesBase64 must decode as an image/)
+  })
+
+  it('keeps plain-text error bodies as a fallback', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
+    await expect(searchTaobaoByImage('x')).rejects.toThrow(/Apify API 502: bad gateway/)
   })
 
   it('reports a non-ok status with its code', async () => {
