@@ -9,18 +9,20 @@ import { isTimeoutError } from '../browser/abort'
 import { logger } from '../logger'
 
 /**
- * Taobao keyword-search source, powered by an Apify actor. The catalog number
- * is used as the search keyword (no cover image is needed).
+ * Taobao keyword-search source, powered by an Apify actor. `keyword` is the
+ * album/artist resolved from the phase-one text results; `catalogNumber` stays
+ * the cache key so results are still cached per catalog number.
  */
 export function queryTaobao(
   catalogNumber: string,
+  keyword: string,
   signal?: AbortSignal
 ): Promise<QueryResult> {
   return runPlatformQuery(catalogNumber, signal, {
     platform: 'taobao',
     tag: 'queries.taobao',
-    // Isolate from results cached by the previous reverse-image implementations.
-    cacheContext: 'apify-taobao-v4',
+    // Keyword semantics changed (album/artist instead of catalog number).
+    cacheContext: 'apify-taobao-v5',
     mapError: (err) => {
       if (isTimeoutError(err) || err instanceof ApifyClientError) {
         return queryError('taobao', err instanceof Error ? err.message : '淘宝搜索失败，请稍后重试')
@@ -28,8 +30,8 @@ export function queryTaobao(
       return queryError('taobao', err instanceof Error ? err.message : 'Unknown error')
     },
     run: async (runSignal) => {
-      const listings = await searchTaobaoByKeyword(catalogNumber, runSignal)
-      logger.debug('queries.taobao', 'actor listings', { catalogNumber, count: listings.length })
+      const listings = await searchTaobaoByKeyword(keyword, runSignal)
+      logger.debug('queries.taobao', 'actor listings', { catalogNumber, keyword, count: listings.length })
       const settings = { ...DEFAULT_APIFY_SETTINGS, ...getSetting('apify') }
       return listingsToQueryResult('taobao', listings, settings.num)
     }

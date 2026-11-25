@@ -40,9 +40,9 @@ beforeEach(() => {
 
 describe('queryTaobao', () => {
   it('returns a found result with a USD price range', async () => {
-    const result = await queryTaobao('X-1')
+    const result = await queryTaobao('X-1', 'Pink Floyd Animals')
 
-    expect(vi.mocked(searchTaobaoByKeyword).mock.calls[0][0]).toBe('X-1')
+    expect(vi.mocked(searchTaobaoByKeyword).mock.calls[0][0]).toBe('Pink Floyd Animals')
     expect(result).toMatchObject({
       platform: 'taobao',
       status: 'found',
@@ -57,7 +57,7 @@ describe('queryTaobao', () => {
   it('maps an ApifyClientError to a friendly error result', async () => {
     vi.mocked(searchTaobaoByKeyword).mockRejectedValue(new ApifyClientError('Token 无效或已过期', 'http'))
 
-    const result = await queryTaobao('X-1')
+    const result = await queryTaobao('X-1', 'Pink Floyd Animals')
 
     expect(result).toMatchObject({ platform: 'taobao', status: 'error', error: 'Token 无效或已过期' })
   })
@@ -65,7 +65,7 @@ describe('queryTaobao', () => {
   it('maps a timeout to a retryable error result', async () => {
     vi.mocked(searchTaobaoByKeyword).mockRejectedValue(timeoutError('淘宝搜索超时'))
 
-    const result = await queryTaobao('X-1')
+    const result = await queryTaobao('X-1', 'Pink Floyd Animals')
 
     expect(result).toMatchObject({ platform: 'taobao', status: 'error', error: '淘宝搜索超时' })
   })

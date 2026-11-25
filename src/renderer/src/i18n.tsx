@@ -212,7 +212,7 @@ const zh = {
   'llm.smartSourcesHint': '智能生成固定排除 Discogs 与 eBay；只会逐个分析能搜索到商品的来源。',
 
   // Apify search sources
-  'apify.desc': '淘宝按目录号关键词搜索、闲鱼以图搜物，均通过 Apify 云端 Actor 运行，按次计费。请先在「搜索源」勾选对应平台并填写 Apify API Token。淘宝以目录号作为 keyword（该 Actor 最少返回 10 条）；闲鱼会自动下载文字搜索结果的第一张封面图并以 base64 传入。两个源都把第一条 item 的图片作为结果卡片封面。',
+  'apify.desc': '淘宝按「艺人名 + 专辑名」关键词搜索、闲鱼以图搜物，均通过 Apify 云端 Actor 运行，按次计费，且都在文字源跑完后才执行。请先在「搜索源」勾选对应平台并填写 Apify API Token。淘宝取文字源结果里的艺人/专辑名拼成 keyword，两者都缺则跳过、不发起付费搜索；闲鱼会自动下载文字搜索结果的第一张封面图并以 base64 传入。两个源都把第一条 item 的图片作为结果卡片封面。',
   'apify.token': 'Apify API Token',
   'apify.tokenPlaceholder': '在 Apify Console → API & Integrations 获取',
   'apify.tokenHint': '令牌仅保存在本机加密配置中，并通过 Authorization 请求头发送，不会写入日志。',

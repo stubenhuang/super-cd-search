@@ -47,6 +47,17 @@ const found = (platform: string) => ({
   status: 'found' as const
 })
 
+const foundWith = (platform: string, name: string | null, artist: string | null) => ({
+  platform,
+  name,
+  artist,
+  priceMin: 10,
+  priceMax: 20,
+  coverUrl: null,
+  link: null,
+  status: 'found' as const
+})
+
 let sendMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -168,7 +179,7 @@ describe('executeBatchQuery', () => {
     expect(sendMock.mock.calls.some(([, data]) => data.event === 'query:batch-cancelled')).toBe(true)
   })
 
-  it('runs Taobao as a keyword text source and Xianyu as a second-phase image source', async () => {
+  it('runs Taobao as a second-phase keyword source and Xianyu as a second-phase image source', async () => {
     const coverUrl = 'https://cover.example/x.jpg'
     const calls: string[] = []
     mockQueryDiscogs.mockImplementation(async () => {
@@ -183,21 +194,67 @@ describe('executeBatchQuery', () => {
     expect(calls[0]).toBe('discogs')
     expect(calls).toContain('taobao')
     expect(calls).toContain('xianyu')
-    // Taobao runs in phase one, before the cover download / Xianyu phase.
-    expect(calls.indexOf('taobao')).toBeLessThan(calls.indexOf('xianyu'))
+    // Both Taobao (keyword) and Xianyu (image) now run in phase two, after the
+    // phase-one text source. They are enqueued together; the image source is
+    // registered first, so its query is invoked before Taobao's.
+    expect(calls.indexOf('taobao')).toBeGreaterThan(calls.indexOf('discogs'))
+    expect(calls.indexOf('xianyu')).toBeGreaterThan(calls.indexOf('discogs'))
+    expect(calls.indexOf('xianyu')).toBeLessThan(calls.indexOf('taobao'))
     expect(mockDownloadImage).toHaveBeenCalledTimes(1)
     expect(mockDownloadImage).toHaveBeenCalledWith(coverUrl, 1000)
-    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', expect.anything())
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'Artist Album', expect.anything())
     expect(mockQueryXianyu).toHaveBeenCalledWith('X-1', 'BASE64', expect.anything())
     expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'xianyu', 'taobao'])
     expect(sendMock.mock.calls.filter(([, data]) => data.event === 'query:complete')).toHaveLength(1)
+  })
+
+  it('builds the Taobao keyword as "{artist} {name}" from phase-one results', async () => {
+    mockQueryDiscogs.mockResolvedValue(foundWith('discogs', 'Animals', 'Pink Floyd'))
+
+    await executeBatchQuery(['X-1'], ['discogs', 'taobao'])
+
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'Pink Floyd Animals', expect.anything())
+  })
+
+  it('uses only the album name for the keyword when the artist is missing', async () => {
+    mockQueryDiscogs.mockResolvedValue(foundWith('discogs', 'Animals', null))
+
+    await executeBatchQuery(['X-1'], ['discogs', 'taobao'])
+
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'Animals', expect.anything())
+  })
+
+  it('uses only the artist for the keyword when the album name is missing', async () => {
+    mockQueryDiscogs.mockResolvedValue(foundWith('discogs', null, 'Pink Floyd'))
+
+    await executeBatchQuery(['X-1'], ['discogs', 'taobao'])
+
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'Pink Floyd', expect.anything())
+  })
+
+  it('does not duplicate the keyword when artist equals album name', async () => {
+    mockQueryDiscogs.mockResolvedValue(foundWith('discogs', 'Pink Floyd', 'Pink Floyd'))
+
+    await executeBatchQuery(['X-1'], ['discogs', 'taobao'])
+
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'Pink Floyd', expect.anything())
+  })
+
+  it('skips the paid Taobao search without issuing a request when no album/artist is available', async () => {
+    mockQueryDiscogs.mockResolvedValue(foundWith('discogs', null, null))
+
+    const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao'])
+
+    expect(mockQueryTaobao).not.toHaveBeenCalled()
+    expect(results[0].results.find(r => r.platform === 'taobao'))
+      .toMatchObject({ status: 'not_found', error: '无可用专辑信息，无法执行淘宝搜索' })
   })
 
   it('skips only the image source with a clear not_found when no cover is available', async () => {
     const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
 
     // Taobao is keyword-based and must still run without a cover.
-    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', expect.anything())
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'Artist Album', expect.anything())
     expect(mockQueryXianyu).not.toHaveBeenCalled()
     expect(results[0].results.find(r => r.platform === 'xianyu'))
       .toMatchObject({ status: 'not_found', error: '无可用封面图，无法执行以图搜物' })
@@ -209,7 +266,7 @@ describe('executeBatchQuery', () => {
 
     const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
 
-    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', expect.anything())
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'Artist Album', expect.anything())
     expect(mockQueryXianyu).not.toHaveBeenCalled()
     expect(results[0].results.find(r => r.platform === 'xianyu'))
       .toMatchObject({ status: 'not_found', error: '封面图下载失败，无法执行以图搜物' })

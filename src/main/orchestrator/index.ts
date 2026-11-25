@@ -94,6 +94,23 @@ function resolveImageSearchCover(results: QueryResult[]): string | null {
   return null
 }
 
+/**
+ * Taobao's keyword comes from the phase-one results, in canonical platform
+ * order: the first found result's artist/name as "{artist} {name}". Whichever
+ * part exists is used; null means no usable identity, so the caller skips the
+ * paid search instead of falling back to the (near-useless) catalog number.
+ */
+function resolveTaobaoKeyword(results: QueryResult[]): string | null {
+  const primary = results.find(r => r.status === 'found' && r.name?.trim()) ??
+    results.find(r => r.status === 'found')
+  const name = primary?.name?.trim() ?? ''
+  const artist = primary?.artist?.trim() ?? ''
+  const parts: string[] = []
+  if (artist && artist !== name) parts.push(artist)
+  if (name) parts.push(name)
+  return parts.length > 0 ? parts.join(' ') : null
+}
+
 /** Build the generic "unknown error" placeholder for one platform. */
 function errorResult(platform: Platform, message: string): QueryResult {
   return { platform, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
@@ -117,12 +134,13 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     { name: 'hmv', query: () => queryHmv(catalogNumber, signal) },
     { name: 'yahoo', query: () => queryYahoo(catalogNumber, signal) },
     { name: 'cdjapan', query: () => queryCdjapan(catalogNumber, signal) },
-    { name: 'tower', query: () => queryTower(catalogNumber, signal) },
-    { name: 'taobao', query: () => queryTaobao(catalogNumber, signal) }
+    { name: 'tower', query: () => queryTower(catalogNumber, signal) }
   ]
 
   const enabledText = registry.filter(p => enabledPlatforms.includes(p.name))
   const enabledImages = IMAGE_PLATFORMS.filter(p => enabledPlatforms.includes(p))
+  // Taobao needs the album/artist from phase one, so it also runs in phase two.
+  const enabledTaobao = enabledPlatforms.includes('taobao')
 
   // Phase one: run every text platform concurrently; the browser pool and
   // per-domain throttles act as natural concurrency limits.
@@ -146,39 +164,50 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     return errorResult(platform.name, message)
   })
 
-  // Phase two: the remaining image source (Xianyu) needs a cover image
-  // collected above, so it runs afterwards, abort-aware. The cover is
-  // downloaded once and sent as base64.
-  let imageResults: QueryResult[] = []
-  if (enabledImages.length > 0 && !signal.aborted) {
-    const coverUrl = resolveImageSearchCover(textResults)
+  // Phase two: Xianyu needs a cover image and Taobao needs the album/artist,
+  // both collected from the phase-one results above. They run concurrently and
+  // abort-aware. A missing prerequisite produces an uncached not_found result
+  // (so a transient download/metadata gap never sticks for the rest of the day).
+  let phaseTwoResults: QueryResult[] = []
+  if ((enabledImages.length > 0 || enabledTaobao) && !signal.aborted) {
+    // Only download a cover when an image source actually needs it.
+    const coverUrl = enabledImages.length > 0 ? resolveImageSearchCover(textResults) : null
     const downloaded = coverUrl ? await downloadImage(coverUrl, 1000) : null
     if (signal.aborted) {
       logger.debug('orchestrator', 'query aborted while downloading cover', { catalogNumber, durationMs: Date.now() - catalogStartedAt })
       throw new Error('Aborted')
     }
     const imageBase64 = downloaded?.base64 ?? null
-    const imageSettled = await Promise.allSettled(
-      enabledImages.map(name => runPlatformQuery(catalogNumber, signal, name, () => {
-        // Bypass the query runner so a transient "no cover" / download failure
-        // is never cached for the rest of the day.
-        if (!imageBase64) {
-          const error = coverUrl ? '封面图下载失败，无法执行以图搜物' : '无可用封面图，无法执行以图搜物'
-          return Promise.resolve({ ...notFound(name), error })
-        }
-        return queryXianyu(catalogNumber, imageBase64, signal)
-      }))
-    )
-    imageResults = enabledImages.map((name, index) => {
-      const outcome = imageSettled[index]
-      if (outcome && outcome.status === 'fulfilled') {
-        return outcome.value
+    const keyword = enabledTaobao ? resolveTaobaoKeyword(textResults) : null
+
+    const entries: Array<{ name: Platform; query: () => Promise<QueryResult> }> = []
+    for (const name of enabledImages) {
+      if (!imageBase64) {
+        const error = coverUrl ? '封面图下载失败，无法执行以图搜物' : '无可用封面图，无法执行以图搜物'
+        phaseTwoResults.push({ ...notFound(name), error })
+        continue
       }
+      entries.push({ name, query: () => queryXianyu(catalogNumber, imageBase64, signal) })
+    }
+    if (enabledTaobao) {
+      if (!keyword) {
+        phaseTwoResults.push({ ...notFound('taobao'), error: '无可用专辑信息，无法执行淘宝搜索' })
+      } else {
+        entries.push({ name: 'taobao', query: () => queryTaobao(catalogNumber, keyword, signal) })
+      }
+    }
+
+    const settled = await Promise.allSettled(
+      entries.map(({ name, query }) => runPlatformQuery(catalogNumber, signal, name, query))
+    )
+    phaseTwoResults.push(...entries.map(({ name }, index) => {
+      const outcome = settled[index]
+      if (outcome && outcome.status === 'fulfilled') return outcome.value
       const message = outcome && 'reason' in outcome
         ? (outcome.reason instanceof Error ? outcome.reason.message : 'Unknown error')
         : 'Unknown error'
       return errorResult(name, message)
-    })
+    }))
   }
 
   if (signal.aborted) {
@@ -188,7 +217,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
 
   // Keep results in the canonical platform order regardless of completion order.
   const byPlatform = new Map<Platform, QueryResult>()
-  for (const result of [...textResults, ...imageResults]) byPlatform.set(result.platform, result)
+  for (const result of [...textResults, ...phaseTwoResults]) byPlatform.set(result.platform, result)
   const results: QueryResult[] = PLATFORMS
     .filter(p => enabledPlatforms.includes(p))
     .map(p => byPlatform.get(p) ?? errorResult(p, 'Unknown error'))
