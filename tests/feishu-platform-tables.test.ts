@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { BatchQueryResult, FeishuSettings, QueryResult } from '../src/shared/types'
 import {
+  FEISHU_FIELD_TYPE_ATTACHMENT,
   FEISHU_PRIMARY_FIELD,
   MAPPING_TARGET_FIELD,
   PLATFORM_TABLE_COMMON_FIELDS,
   PLATFORM_TABLE_FIELDS,
   platformTableAutoColumns,
-  platformTableColumns
+  platformTableColumns,
+  platformTableImageColumn
 } from '../src/shared/feishu'
 import { PLATFORMS } from '../src/shared/platforms'
 import { deleteSetting, setSetting } from '../src/main/settings'
@@ -31,7 +33,8 @@ const CONFIG: FeishuSettings = {
   appSecret: 'secret',
   appToken: 'appTOKEN',
   tableId: 'tblAGG',
-  mappingTableId: 'tblMAP'
+  mappingTableId: 'tblMAP',
+  syncImages: false
 }
 
 const OK = () => json({ code: 0, data: {} })
@@ -90,8 +93,12 @@ const mappingFields = () => json({ code: 0, data: {
 const emptyRecords = () => json({ code: 0, data: { items: [], has_more: false } })
 
 /** Platform table: all columns already exist and 编号 is primary. */
-const platformFields = (platform: keyof typeof PLATFORM_TABLE_FIELDS) => () => json({ code: 0, data: {
-  items: platformTableColumns(platform).map((name, index) => ({ field_name: name, is_primary: index === 0 })),
+const platformFields = (platform: keyof typeof PLATFORM_TABLE_FIELDS, imageType = 1) => () => json({ code: 0, data: {
+  items: platformTableColumns(platform).map((name, index) => ({
+    field_name: name,
+    is_primary: index === 0,
+    type: name === platformTableImageColumn(platform) ? imageType : 1
+  })),
   has_more: false
 } })
 
@@ -233,7 +240,7 @@ describe('client additions', () => {
     expect(calls('GET', 'page_token=P2')).toHaveLength(1)
   })
 
-  it('ensureFields honours a custom column list and caches per tableId', async () => {
+  it('ensureFields honours a custom column list per table (no stale type cache)', async () => {
     setupRoutes({
       'POST /auth/v3/tenant_access_token/internal': okToken,
       'GET /tables/tblA/fields?': () => json({ code: 0, data: { items: [{ field_name: '编号', is_primary: true }], has_more: false } }),
@@ -242,13 +249,15 @@ describe('client additions', () => {
       'POST /tables/tblB/fields': OK
     })
     await ensureFields({ ...CONFIG, tableId: 'tblA' }, ['自定义列'])
-    await ensureFields({ ...CONFIG, tableId: 'tblA' }, ['自定义列'])
+    const types = await ensureFields({ ...CONFIG, tableId: 'tblA' }, ['自定义列'])
     await ensureFields({ ...CONFIG, tableId: 'tblB' }, ['自定义列'])
     const aCreates = calls('POST', '/tables/tblA/fields')
     const bCreates = calls('POST', '/tables/tblB/fields')
-    expect(aCreates).toHaveLength(1)
+    // The field-type cache was removed: each call re-reads the real types.
+    expect(aCreates).toHaveLength(2)
     expect(bCreates).toHaveLength(1)
     expect((bodyOf(aCreates[0]) as { field_name: string }).field_name).toBe('自定义列')
+    expect(types.get('自定义列')).toBe(1)
   })
 })
 
@@ -320,8 +329,11 @@ describe('flushPlatformTables end-to-end', () => {
 
     // Create-table used the tower schema with 编号 first.
     expect(createTableCalls()).toHaveLength(1)
-    const createBody = bodyOf(createTableCalls()[0]) as { table: { fields: Array<{ field_name: string }> } }
+    const createBody = bodyOf(createTableCalls()[0]) as { table: { fields: Array<{ field_name: string; type: number }> } }
     expect(createBody.table.fields.map(f => f.field_name)).toEqual(platformTableColumns('tower'))
+    // Toggle is off by default: a fresh table keeps the historical text column.
+    expect(createBody.table.fields.find(f => f.field_name === platformTableImageColumn('tower'))?.type)
+      .toBe(1)
 
     // Two rows written with composite primary keys.
     const createRows = bodyOf(calls('POST', '/tables/tblTOWER/records/batch_create')[0]) as {
@@ -334,6 +346,19 @@ describe('flushPlatformTables end-to-end', () => {
     expect(createRows.records[1].fields).toMatchObject({
       [FEISHU_PRIMARY_FIELD]: 'X-1#2', 目录号: 'X-1', 序号: '2', name: 'B'
     })
+  })
+
+  it('creates the platform image column as an attachment when image sync is on', async () => {
+    setupRoutes(baseRoutes())
+    setSetting('feishu', { ...CONFIG, syncImages: true })
+
+    flushPlatformTables([{ catalogNumber: 'X-1', results: [result('tower', [{ name: 'A' }])] }])
+
+    await waitFor(() => calls('POST', '/tables/tblTOWER/records/batch_create').length === 1)
+    expect(createTableCalls()).toHaveLength(1)
+    const createBody = bodyOf(createTableCalls()[0]) as { table: { fields: Array<{ field_name: string; type: number }> } }
+    expect(createBody.table.fields.find(f => f.field_name === platformTableImageColumn('tower'))?.type)
+      .toBe(FEISHU_FIELD_TYPE_ATTACHMENT)
   })
 
   it('reuses an existing mapping and updates an existing record instead of creating', async () => {
@@ -404,5 +429,41 @@ describe('flushPlatformTables end-to-end', () => {
     await waitFor(() => calls('POST', '/tables/tblEXISTING/records/batch_create').length === 1)
     const mapRows = calls('POST', '/tables/tblMAP/records/batch_create')
     expect(bodyOf(mapRows[0])).toEqual({ records: [{ fields: { 平台: 'tower', tableId: 'tblEXISTING' } }] })
+  })
+
+  it('never writes a URL string into an attachment image column when image sync is off', async () => {
+    setupRoutes({
+      ...baseRoutes(),
+      'GET /tables/tblTOWER/fields?': platformFields('tower', FEISHU_FIELD_TYPE_ATTACHMENT)
+    })
+    setSetting('feishu', CONFIG)
+
+    flushPlatformTables([{
+      catalogNumber: 'X-1',
+      results: [result('tower', [{ name: 'A', coverUrl: 'https://img/a.jpg' }])]
+    }])
+
+    await waitFor(() => calls('POST', '/tables/tblTOWER/records/batch_create').length === 1)
+    const createRows = bodyOf(calls('POST', '/tables/tblTOWER/records/batch_create')[0]) as {
+      records: Array<{ fields: Record<string, unknown> }>
+    }
+    expect(createRows.records[0].fields).not.toHaveProperty(platformTableImageColumn('tower'))
+  })
+
+  it('keeps the URL string and uploads nothing when the image column is still text', async () => {
+    setupRoutes(baseRoutes())
+    setSetting('feishu', { ...CONFIG, syncImages: true })
+
+    flushPlatformTables([{
+      catalogNumber: 'X-1',
+      results: [result('tower', [{ name: 'A', coverUrl: 'https://img/a.jpg' }])]
+    }])
+
+    await waitFor(() => calls('POST', '/tables/tblTOWER/records/batch_create').length === 1)
+    const createRows = bodyOf(calls('POST', '/tables/tblTOWER/records/batch_create')[0]) as {
+      records: Array<{ fields: Record<string, unknown> }>
+    }
+    expect(createRows.records[0].fields[platformTableImageColumn('tower')]).toBe('https://img/a.jpg')
+    expect(calls('POST', '/drive/v1/medias/upload_all')).toHaveLength(0)
   })
 })

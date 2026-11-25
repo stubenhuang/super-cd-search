@@ -4,7 +4,10 @@ import {
   MAPPING_TARGET_FIELD,
   PLATFORM_TABLE_FIELDS,
   platformTableAutoColumns,
-  platformTableColumns
+  platformTableColumns,
+  platformTableFieldTypes,
+  platformTableImageColumn,
+  type FeishuRecordFields
 } from '../../shared/feishu'
 import { PLATFORM_LABELS } from '../../shared/platforms'
 import { errorMessage } from '../../shared/utils'
@@ -26,6 +29,7 @@ import {
   primaryFieldName,
   readFeishuSettings
 } from './client'
+import { applyImageDecision, createImageSyncContext, decideImageValue, type ImageSyncContext } from './media'
 import { putField } from './record'
 import { enqueueFeishu, getCachedCreatedId, purgeCreatedIds, rememberCreatedIds } from './sync'
 
@@ -146,7 +150,9 @@ async function resolvePlatformTable(
   const name = `${TABLE_NAME_PREFIX}${PLATFORM_LABELS[platform]}`
   let tableId: string
   try {
-    tableId = await createTable(base, name, platformTableColumns(platform))
+    tableId = await createTable(base, name, platformTableColumns(platform), {
+      fieldTypes: base.syncImages ? platformTableFieldTypes(platform) : undefined
+    })
     await delay(SCHEMA_SETTLE_MS)
   } catch (err) {
     if (err instanceof FeishuClientError && err.apiCode === 1254013) {
@@ -176,9 +182,13 @@ async function resolvePlatformTable(
 async function upsertRows(
   platformSettings: FeishuSettings,
   platform: Platform,
-  entries: readonly RawEntry[]
+  entries: readonly RawEntry[],
+  imageContext: ImageSyncContext
 ): Promise<{ created: number; updated: number }> {
-  await ensureFields(platformSettings, platformTableAutoColumns(platform))
+  const types = await ensureFields(platformSettings, platformTableAutoColumns(platform), {
+    fieldTypes: imageContext.settings.syncImages ? platformTableFieldTypes(platform) : undefined
+  })
+  const imageColumn = platformTableImageColumn(platform)
 
   // Last entry wins for a repeated key, mirroring the aggregate sync.
   const unique = new Map<string, RawEntry>()
@@ -199,10 +209,13 @@ async function upsertRows(
     if (cached) ids.set(key, cached)
   }
 
-  const creates: Array<{ key: string; fields: Record<string, string> }> = []
-  const updates: Array<{ record_id: string; fields: Record<string, string> }> = []
+  const creates: Array<{ key: string; fields: FeishuRecordFields }> = []
+  const updates: Array<{ record_id: string; fields: FeishuRecordFields }> = []
   for (const entry of list) {
-    const fields = buildRawRecord(platform, entry)
+    const base = buildRawRecord(platform, entry)
+    const url = typeof base[imageColumn] === 'string' ? base[imageColumn] : null
+    const decision = await decideImageValue(imageContext, url, imageColumn, types.get(imageColumn))
+    const fields = applyImageDecision(base, imageColumn, decision)
     const key = platformRecordKey(entry)
     const recordId = ids.get(key)
     if (recordId) updates.push({ record_id: recordId, fields })
@@ -228,6 +241,9 @@ async function doFlush(settings: FeishuSettings, groups: PlatformGroups): Promis
 
   const mappingSettings: FeishuSettings = { ...settings, tableId: settings.mappingTableId }
   const mapping = await readMapping(mappingSettings)
+  // One context for the whole flush so a cover URL is uploaded once and its
+  // file_token is reused across every per-platform table.
+  const imageContext = createImageSyncContext(settings)
 
   let totalCreated = 0
   let totalUpdated = 0
@@ -236,7 +252,7 @@ async function doFlush(settings: FeishuSettings, groups: PlatformGroups): Promis
     try {
       const tableId = await resolvePlatformTable(settings, mappingSettings, mapping, platform)
       const platformSettings: FeishuSettings = { ...settings, tableId }
-      const { created, updated } = await upsertRows(platformSettings, platform, entries)
+      const { created, updated } = await upsertRows(platformSettings, platform, entries, imageContext)
       totalCreated += created
       totalUpdated += updated
     } catch (err) {

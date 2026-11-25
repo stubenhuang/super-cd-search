@@ -96,7 +96,7 @@ function urlHash(url: string): string {
   return createHash('sha1').update(url).digest('hex')
 }
 
-function extForMimeType(mimeType: string): string {
+export function extForMimeType(mimeType: string): string {
   if (mimeType.includes('png')) return 'png'
   if (mimeType.includes('gif')) return 'gif'
   if (mimeType.includes('webp')) return 'webp'

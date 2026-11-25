@@ -10,7 +10,8 @@ export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
   appSecret: '',
   appToken: '',
   tableId: '',
-  mappingTableId: ''
+  mappingTableId: '',
+  syncImages: false
 }
 
 /**
@@ -22,9 +23,9 @@ export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
 export const FEISHU_PRIMARY_FIELD = '编号'
 
 /**
- * The twelve columns written for each catalog number. All of them are
- * multi-line text so URLs, JSON and empty values never hit numeric/URL write
- * validation.
+ * The twelve columns written for each catalog number. `coverUrl` holds an
+ * image attachment when the user enabled image sync; the rest stay multi-line
+ * text so JSON and empty values never hit numeric/URL write validation.
  */
 export const FEISHU_FIELDS = [
   '编号',
@@ -50,6 +51,15 @@ export const FEISHU_AUTO_FIELDS: readonly string[] = FEISHU_FIELDS.filter(
 
 /** Feishu Bitable field type 1 = multi-line text. */
 export const FEISHU_FIELD_TYPE_TEXT = 1
+/** Feishu Bitable field type 17 = attachment (images render as thumbnails). */
+export const FEISHU_FIELD_TYPE_ATTACHMENT = 17
+
+/** Aggregate-table column holding the cover image. */
+export const FEISHU_IMAGE_FIELD = 'coverUrl'
+
+/** A Bitable cell value: plain text, or an attachment field's file-token list. */
+export type FeishuFieldValue = string | Array<{ file_token: string }>
+export type FeishuRecordFields = Record<string, FeishuFieldValue>
 
 /** Column in the mapping table holding the per-platform data table id. */
 export const MAPPING_TARGET_FIELD = 'tableId'
@@ -76,6 +86,37 @@ export const PLATFORM_TABLE_FIELDS: Record<Platform, readonly string[]> = {
   tower: ['name', 'artist', 'coverUrl', 'link', 'priceText', 'format', 'released', 'label', 'country'],
   xianyu: ['title', 'priceCNY', 'url', 'coverUrl'],
   taobao: ['title', 'priceCNY', 'url', 'coverUrl']
+}
+
+/**
+ * The per-platform column holding the listing image. Written as an attachment
+ * (type 17) once the user enables image sync and converts the column in Feishu;
+ * every other column stays type 1 text.
+ */
+export const PLATFORM_TABLE_IMAGE_FIELDS: Record<Platform, string> = {
+  discogs: 'cover_image',
+  ebay: 'imageUrl',
+  kojima: 'coverUrl',
+  hmv: 'coverUrl',
+  yahoo: 'coverUrl',
+  cdjapan: 'coverUrl',
+  tower: 'coverUrl',
+  xianyu: 'coverUrl',
+  taobao: 'coverUrl'
+}
+
+export function platformTableImageColumn(platform: Platform): string {
+  return PLATFORM_TABLE_IMAGE_FIELDS[platform]
+}
+
+/** Type overrides for missing aggregate columns (image column = attachment). */
+export function aggregateFieldTypes(): Record<string, number> {
+  return { [FEISHU_IMAGE_FIELD]: FEISHU_FIELD_TYPE_ATTACHMENT }
+}
+
+/** Type overrides for missing per-platform columns (image column = attachment). */
+export function platformTableFieldTypes(platform: Platform): Record<string, number> {
+  return { [platformTableImageColumn(platform)]: FEISHU_FIELD_TYPE_ATTACHMENT }
 }
 
 /** Full column list for create-table: the first field becomes the primary/index field. */

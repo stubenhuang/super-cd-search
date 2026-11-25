@@ -4,6 +4,7 @@ import {
   FEISHU_AUTO_FIELDS,
   FEISHU_FIELD_TYPE_TEXT,
   FEISHU_PRIMARY_FIELD,
+  type FeishuRecordFields,
   type FeishuTestResult
 } from '../../shared/feishu'
 import { errorMessage } from '../../shared/utils'
@@ -41,13 +42,10 @@ interface TokenCache {
 }
 
 let tokenCache: TokenCache | null = null
-/** Field sets already ensured, keyed by app_token:table_id. Each table has one fixed schema. */
-const fieldsEnsured = new Set<string>()
 
-/** Test hook: drop the in-memory token and field caches between cases. */
+/** Test hook: drop the cached tenant token between cases. */
 export function resetFeishuClientState(): void {
   tokenCache = null
-  fieldsEnsured.clear()
 }
 
 /** Read the stored config, filling in defaults for keys never saved. */
@@ -68,7 +66,8 @@ export function normalizeFeishuSettings(settings: FeishuSettings): FeishuSetting
     appSecret: settings.appSecret.trim(),
     appToken: settings.appToken.trim(),
     tableId: settings.tableId.trim(),
-    mappingTableId: (settings.mappingTableId ?? '').trim()
+    mappingTableId: (settings.mappingTableId ?? '').trim(),
+    syncImages: settings.syncImages === true
   }
 }
 
@@ -86,7 +85,7 @@ interface ApiEnvelope {
 
 interface FieldsResponse extends ApiEnvelope {
   data?: {
-    items?: Array<{ field_name?: string; is_primary?: boolean }>
+    items?: Array<{ field_name?: string; is_primary?: boolean; type?: number; field_id?: string }>
     has_more?: boolean
     page_token?: string
   }
@@ -102,6 +101,10 @@ interface RecordsResponse extends ApiEnvelope {
 
 interface BatchResponse extends ApiEnvelope {
   data?: { records?: unknown[] }
+}
+
+interface MediaUploadResponse extends ApiEnvelope {
+  data?: { file_token?: string }
 }
 
 interface CreateTableResponse extends ApiEnvelope {
@@ -125,6 +128,8 @@ export interface FeishuRecord {
 interface FetchOptions {
   method: 'GET' | 'POST'
   body?: Record<string, unknown>
+  /** Factory so a 401 retry rebuilds a fresh FormData + Blob. */
+  form?: () => FormData
   token?: string
   signal?: AbortSignal
   timeoutMs?: number
@@ -137,7 +142,7 @@ interface FetchOptions {
  * signal, following the Apify client's pattern.
  */
 async function rawFetch<T>(path: string, options: FetchOptions): Promise<T> {
-  const { method, body, token, signal, timeoutMs = REQUEST_TIMEOUT_MS } = options
+  const { method, body, form, token, signal, timeoutMs = REQUEST_TIMEOUT_MS } = options
   const startedAt = Date.now()
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
@@ -146,12 +151,21 @@ async function rawFetch<T>(path: string, options: FetchOptions): Promise<T> {
 
   try {
     throwIfAborted(signal)
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
+    // Multipart uploads must NOT set Content-Type: undici appends the boundary.
+    // A factory (not an instance) keeps the body reusable across 401 retries.
+    let payload: string | FormData | undefined
+    if (form) {
+      payload = form()
+    } else if (body) {
+      headers['Content-Type'] = 'application/json'
+      payload = JSON.stringify(body)
+    }
     const response = await fetch(`${FEISHU_API_BASE}${path}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: payload,
       signal: controller.signal
     })
 
@@ -215,6 +229,7 @@ async function getTenantAccessToken(settings: FeishuSettings, signal?: AbortSign
 interface ApiOptions {
   method: 'GET' | 'POST'
   body?: Record<string, unknown>
+  form?: () => FormData
   signal?: AbortSignal
 }
 
@@ -231,7 +246,13 @@ async function callApi<T extends ApiEnvelope>(
   const token = await getTenantAccessToken(settings, options.signal, forceRefresh)
   let body: T
   try {
-    body = await rawFetch<T>(path, { method: options.method, body: options.body, token, signal: options.signal })
+    body = await rawFetch<T>(path, {
+      method: options.method,
+      body: options.body,
+      form: options.form,
+      token,
+      signal: options.signal
+    })
   } catch (err) {
     if (!forceRefresh && err instanceof FeishuClientError && err.code === 'auth' && err.status === 401) {
       return callApi<T>(settings, path, options, true)
@@ -258,25 +279,35 @@ export function appPath(settings: FeishuSettings, suffix: string): string {
   return `/bitable/v1/apps/${encodeURIComponent(settings.appToken)}/${suffix}`
 }
 
+export interface CreateTableOptions {
+  /** Per-column type overrides; columns not listed default to multi-line text. */
+  fieldTypes?: Record<string, number>
+  signal?: AbortSignal
+}
+
 /**
  * Create a data table with the given columns. Feishu makes the FIRST field the
- * primary/index field, so callers must put 编号 first. Returns the new table_id.
+ * primary/index field, so callers must put 编号 first (type 1). Returns the new
+ * table_id.
  */
 export async function createTable(
   settings: FeishuSettings,
   name: string,
   fieldNames: readonly string[],
-  signal?: AbortSignal
+  options: CreateTableOptions = {}
 ): Promise<string> {
   const body = await callApi<CreateTableResponse>(settings, appPath(settings, 'tables'), {
     method: 'POST',
     body: {
       table: {
         name,
-        fields: fieldNames.map(fieldName => ({ field_name: fieldName, type: FEISHU_FIELD_TYPE_TEXT }))
+        fields: fieldNames.map(fieldName => ({
+          field_name: fieldName,
+          type: options.fieldTypes?.[fieldName] ?? FEISHU_FIELD_TYPE_TEXT
+        }))
       }
     },
-    signal
+    signal: options.signal
   })
   const tableId = body.data?.table_id
   if (!tableId) throw new Error('飞书新建数据表成功但未返回 table_id')
@@ -321,9 +352,12 @@ export async function listRecords(settings: FeishuSettings, signal?: AbortSignal
 export interface FieldInfo {
   field_name: string
   is_primary: boolean
+  /** Feishu field type (1 = text, 17 = attachment). */
+  type: number
+  field_id?: string
 }
 
-/** Read every field (paged) with its primary/index flag. */
+/** Read every field (paged) with its primary/index flag and type. */
 export async function listFields(settings: FeishuSettings, signal?: AbortSignal): Promise<FieldInfo[]> {
   const fields: FieldInfo[] = []
   let pageToken: string | undefined
@@ -332,7 +366,14 @@ export async function listFields(settings: FeishuSettings, signal?: AbortSignal)
     if (pageToken) params.set('page_token', pageToken)
     const body = await callApi<FieldsResponse>(settings, `${tablePath(settings, 'fields')}?${params}`, { method: 'GET', signal })
     for (const item of body.data?.items ?? []) {
-      if (item.field_name) fields.push({ field_name: item.field_name, is_primary: item.is_primary === true })
+      if (item.field_name) {
+        fields.push({
+          field_name: item.field_name,
+          is_primary: item.is_primary === true,
+          type: item.type ?? FEISHU_FIELD_TYPE_TEXT,
+          ...(item.field_id ? { field_id: item.field_id } : {})
+        })
+      }
     }
     pageToken = body.data?.has_more ? body.data?.page_token : undefined
   } while (pageToken)
@@ -361,40 +402,55 @@ function assertPrimaryField(fields: FieldInfo[]): void {
   }
 }
 
-export async function createField(settings: FeishuSettings, fieldName: string, signal?: AbortSignal): Promise<void> {
+export interface CreateFieldOptions {
+  type?: number
+  signal?: AbortSignal
+}
+
+export async function createField(
+  settings: FeishuSettings,
+  fieldName: string,
+  options: CreateFieldOptions = {}
+): Promise<void> {
   await callApi<ApiEnvelope>(settings, tablePath(settings, 'fields'), {
     method: 'POST',
-    body: { field_name: fieldName, type: FEISHU_FIELD_TYPE_TEXT },
-    signal
+    body: { field_name: fieldName, type: options.type ?? FEISHU_FIELD_TYPE_TEXT },
+    signal: options.signal
   })
+}
+
+export interface EnsureFieldsOptions {
+  /** Type overrides for columns that need creating; existing columns keep their type. */
+  fieldTypes?: Record<string, number>
+  signal?: AbortSignal
 }
 
 /**
  * Create the non-primary columns that are missing; 编号 must already be the
- * table's primary (first) column. Cached per app_token/table_id pair; a failed
- * run leaves the cache unset so the next sync retries. A custom field list is
- * used by the per-platform data tables (each has its own schema).
+ * table's primary (first) column. Returns the ACTUAL type of every column so
+ * callers only write attachment values into columns that really are type 17.
+ * No cache: the user may convert a column to 附件 in the Feishu UI at any time,
+ * and a stale type would make us write a URL string into an attachment field.
  */
 export async function ensureFields(
   settings: FeishuSettings,
   fieldNames: readonly string[] = FEISHU_AUTO_FIELDS,
-  signal?: AbortSignal
-): Promise<void> {
-  const key = `${settings.appToken}:${settings.tableId}`
-  if (fieldsEnsured.has(key)) return
-
-  const fields = await listFields(settings, signal)
+  options: EnsureFieldsOptions = {}
+): Promise<Map<string, number>> {
+  const fields = await listFields(settings, options.signal)
   assertPrimaryField(fields)
-  const existing = new Set(fields.map(field => field.field_name))
+  const types = new Map(fields.map(field => [field.field_name, field.type]))
   let created = 0
   for (const name of fieldNames) {
-    if (!existing.has(name)) {
-      await createField(settings, name, signal)
+    if (!types.has(name)) {
+      const type = options.fieldTypes?.[name] ?? FEISHU_FIELD_TYPE_TEXT
+      await createField(settings, name, { type, signal: options.signal })
+      types.set(name, type)
       created++
     }
   }
-  fieldsEnsured.add(key)
   logger.debug('feishu', 'fields ensured', { created })
+  return types
 }
 
 /**
@@ -458,7 +514,7 @@ export async function findRecordIds(
  */
 export async function batchCreate(
   settings: FeishuSettings,
-  records: Array<Record<string, string>>,
+  records: FeishuRecordFields[],
   signal?: AbortSignal
 ): Promise<string[]> {
   if (records.length === 0) return []
@@ -476,7 +532,7 @@ export async function batchCreate(
 
 export async function batchUpdate(
   settings: FeishuSettings,
-  updates: Array<{ record_id: string; fields: Record<string, string> }>,
+  updates: Array<{ record_id: string; fields: FeishuRecordFields }>,
   signal?: AbortSignal
 ): Promise<number> {
   if (updates.length === 0) return 0
@@ -486,6 +542,38 @@ export async function batchUpdate(
     signal
   })
   return body.data?.records?.length ?? updates.length
+}
+
+/**
+ * Upload image bytes to the Bitable app and return its file_token. The token is
+ * scoped to the app (app_token), so it can be reused across every table of that
+ * app. The body is a FormData factory so a token-refresh retry stays valid.
+ */
+export async function uploadMedia(
+  settings: FeishuSettings,
+  params: { fileName: string; bytes: Buffer; mimeType: string; parentNode: string; extra: string },
+  signal?: AbortSignal
+): Promise<string> {
+  const { fileName, bytes, mimeType, parentNode, extra } = params
+  const body = await callApi<MediaUploadResponse>(settings, '/drive/v1/medias/upload_all', {
+    method: 'POST',
+    form: () => {
+      const fd = new FormData()
+      fd.append('file_name', fileName)
+      fd.append('parent_type', 'bitable_image')
+      fd.append('parent_node', parentNode)
+      fd.append('size', String(bytes.length))
+      fd.append('extra', extra)
+      // Copy into a plain ArrayBuffer-backed Uint8Array: @types/node's Buffer
+      // is Uint8Array<ArrayBufferLike>, which DOM BlobPart does not accept.
+      fd.append('file', new Blob([Uint8Array.from(bytes)], { type: mimeType }), fileName)
+      return fd
+    },
+    signal
+  })
+  const fileToken = body.data?.file_token
+  if (!fileToken) throw new FeishuClientError('飞书上传素材成功但未返回 file_token', 'invalid_response')
+  return fileToken
 }
 
 /** Read-only probe used by the settings "测试连接" button; never rejects. */

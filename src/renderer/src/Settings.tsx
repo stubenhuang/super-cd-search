@@ -688,6 +688,22 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
                 <span className="st-slider"></span>
               </label>
             </div>
+            <div className="st-toggle-row">
+              <div className="st-toggle-info">
+                <span className="st-toggle-title">{t('feishu.syncImages')}</span>
+                <span className="st-toggle-desc">{t('feishu.syncImagesDesc')}</span>
+              </div>
+              <label className="st-switch">
+                <input
+                  type="checkbox"
+                  data-field="feishu-syncImages"
+                  checked={feishu.syncImages}
+                  onChange={e => setFeishu(prev => ({ ...prev, syncImages: e.target.checked }))}
+                />
+                <span className="st-slider"></span>
+              </label>
+            </div>
+            <div className="st-field-hint">{t('feishu.syncImagesHint')}</div>
             <div className="st-field-group">
               <div className="st-field-group-title">
                 <span className="st-icon">◆</span> {t('feishu.credentials')}

@@ -54,6 +54,8 @@ export interface FeishuSettings {
   tableId: string
   /** Table id of the mapping table (platform id -> per-platform table id). */
   mappingTableId: string
+  /** Upload cover images as Feishu attachments (type 17) instead of URL text. */
+  syncImages: boolean
 }
 
 /** Settings for the Apify-powered reverse-image-search sources. */

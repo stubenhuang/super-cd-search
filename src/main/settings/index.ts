@@ -75,7 +75,8 @@ const schema = {
       appSecret: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.appSecret },
       appToken: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.appToken },
       tableId: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.tableId },
-      mappingTableId: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.mappingTableId }
+      mappingTableId: { type: 'string' as const, default: DEFAULT_FEISHU_SETTINGS.mappingTableId },
+      syncImages: { type: 'boolean' as const, default: DEFAULT_FEISHU_SETTINGS.syncImages }
     },
     default: {}
   }

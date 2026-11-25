@@ -8,13 +8,17 @@ const {
   mockFindRecordIds,
   mockBatchCreate,
   mockBatchUpdate,
-  mockTestConnection
+  mockTestConnection,
+  mockDecideImageValue,
+  mockApplyImageDecision
 } = vi.hoisted(() => ({
   mockEnsureFields: vi.fn(),
   mockFindRecordIds: vi.fn(),
   mockBatchCreate: vi.fn(),
   mockBatchUpdate: vi.fn(),
-  mockTestConnection: vi.fn()
+  mockTestConnection: vi.fn(),
+  mockDecideImageValue: vi.fn(),
+  mockApplyImageDecision: vi.fn()
 }))
 
 vi.mock('../src/main/feishu/client', async (importOriginal) => {
@@ -29,6 +33,12 @@ vi.mock('../src/main/feishu/client', async (importOriginal) => {
   }
 })
 
+vi.mock('../src/main/feishu/media', () => ({
+  createImageSyncContext: vi.fn((settings: unknown) => ({ settings, uploads: 0, maxUploads: 200 })),
+  decideImageValue: mockDecideImageValue,
+  applyImageDecision: mockApplyImageDecision
+}))
+
 import { resetFeishuSyncState, syncToFeishu, testFeishu } from '../src/main/feishu/sync'
 
 const CONFIG: FeishuSettings = {
@@ -37,7 +47,8 @@ const CONFIG: FeishuSettings = {
   appSecret: 'secret',
   appToken: 'appTOKEN',
   tableId: 'tblXYZ',
-  mappingTableId: 'tblMAP'
+  mappingTableId: 'tblMAP',
+  syncImages: false
 }
 
 function found(name: string): QueryResult {
@@ -54,12 +65,19 @@ beforeEach(() => {
   vi.resetAllMocks()
   deleteSetting('feishu')
   resetFeishuSyncState()
-  mockEnsureFields.mockResolvedValue(undefined)
+  mockEnsureFields.mockResolvedValue(new Map<string, number>())
   mockFindRecordIds.mockResolvedValue(new Map())
   mockBatchCreate.mockImplementation(async (_settings, records: unknown[]) =>
     (records as unknown[]).map((_, index) => `rec-new-${index}`))
   mockBatchUpdate.mockImplementation(async (_settings, updates: unknown[]) => (updates as unknown[]).length)
   mockTestConnection.mockResolvedValue({ ok: true, message: '连接成功' })
+  mockDecideImageValue.mockResolvedValue({ action: 'keep-url' })
+  mockApplyImageDecision.mockImplementation((fields, column, decision) => {
+    const result: Record<string, unknown> = { ...fields }
+    if (decision.action === 'write-attachment') result[column] = decision.value
+    else if (decision.action === 'omit') delete result[column]
+    return result
+  })
 })
 
 describe('syncToFeishu', () => {
@@ -116,7 +134,9 @@ describe('syncToFeishu', () => {
   it('serializes overlapping syncs so the second one updates what the first created', async () => {
     setSetting('feishu', CONFIG)
     let release!: () => void
-    mockEnsureFields.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+    mockEnsureFields.mockImplementationOnce(() => new Promise(resolve => {
+      release = () => resolve(new Map<string, number>())
+    }))
 
     const first = syncToFeishu({ rows: [oneRow('A')] })
     const second = syncToFeishu({ rows: [oneRow('B')] })
@@ -166,6 +186,34 @@ describe('syncToFeishu', () => {
     expect(result.status).toBe('error')
     expect(result.message).toContain('主字段（首列）必须命名为「编号」')
     expect(mockBatchCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('syncToFeishu image decisions', () => {
+  it('passes the actual field type to the decision and writes a file_token list', async () => {
+    setSetting('feishu', { ...CONFIG, syncImages: true })
+    mockEnsureFields.mockResolvedValue(new Map([['coverUrl', 17]]))
+    mockDecideImageValue.mockResolvedValue({ action: 'write-attachment', value: [{ file_token: 'tok-1' }] })
+
+    const result = await syncToFeishu({ rows: [oneRow('A')] })
+
+    expect(result.status).toBe('ok')
+    expect(mockDecideImageValue).toHaveBeenCalledWith(
+      expect.anything(), 'https://img/a.jpg', 'coverUrl', 17
+    )
+    const created = mockBatchCreate.mock.calls[0][1] as Array<Record<string, unknown>>
+    expect(created[0].coverUrl).toEqual([{ file_token: 'tok-1' }])
+  })
+
+  it('omits the image column entirely (never a URL string) when the decision says omit', async () => {
+    setSetting('feishu', CONFIG)
+    mockEnsureFields.mockResolvedValue(new Map([['coverUrl', 17]]))
+    mockDecideImageValue.mockResolvedValue({ action: 'omit' })
+
+    await syncToFeishu({ rows: [oneRow('A')] })
+
+    const created = mockBatchCreate.mock.calls[0][1] as Array<Record<string, unknown>>
+    expect(created[0]).not.toHaveProperty('coverUrl')
   })
 })
 

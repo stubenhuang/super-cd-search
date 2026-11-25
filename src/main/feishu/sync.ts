@@ -1,7 +1,11 @@
 import type { FeishuSettings } from '../../shared/types'
 import {
+  aggregateFieldTypes,
   emptySyncResult,
+  FEISHU_AUTO_FIELDS,
+  FEISHU_IMAGE_FIELD,
   FEISHU_PRIMARY_FIELD,
+  type FeishuRecordFields,
   type FeishuSyncPayload,
   type FeishuSyncResult,
   type FeishuSyncRow,
@@ -19,12 +23,14 @@ import {
   readFeishuSettings,
   testFeishuConnection
 } from './client'
+import { applyImageDecision, createImageSyncContext, decideImageValue } from './media'
 import { buildFeishuFields } from './record'
 
 /**
  * Aggregate-table syncs, deep dig and per-platform flushes all funnel through
  * this queue. Serializing means the second run sees the record ids created by
  * the first, and two writes never hit the same Feishu table concurrently.
+ * Image uploads also ride on this queue — upload_all forbids concurrency.
  */
 let queue: Promise<unknown> = Promise.resolve(undefined)
 
@@ -106,8 +112,14 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
   const list = [...rows.values()]
 
   try {
-    await ensureFields(settings)
+    // With the toggle off, keep the historical behaviour: image columns are
+    // plain text and carry the URL string. Only opt-in users get type-17 columns
+    // created for them (existing columns are always read as-is).
+    const types = await ensureFields(settings, FEISHU_AUTO_FIELDS, {
+      fieldTypes: settings.syncImages ? aggregateFieldTypes() : undefined
+    })
     const ids = await findRecordIds(settings, list.map(row => row.catalogNumber))
+    const imageContext = createImageSyncContext(settings)
 
     // A record created moments ago may not be visible to records/search yet.
     const now = Date.now()
@@ -118,10 +130,13 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
       if (cached) ids.set(row.catalogNumber, cached.id)
     }
 
-    const creates: Array<Record<string, string>> = []
-    const updates: Array<{ record_id: string; fields: Record<string, string> }> = []
+    const creates: FeishuRecordFields[] = []
+    const updates: Array<{ record_id: string; fields: FeishuRecordFields }> = []
     for (const row of list) {
-      const fields = buildFeishuFields(row)
+      const base = buildFeishuFields(row)
+      const url = typeof base[FEISHU_IMAGE_FIELD] === 'string' ? base[FEISHU_IMAGE_FIELD] : null
+      const decision = await decideImageValue(imageContext, url, FEISHU_IMAGE_FIELD, types.get(FEISHU_IMAGE_FIELD))
+      const fields = applyImageDecision(base, FEISHU_IMAGE_FIELD, decision)
       const recordId = ids.get(row.catalogNumber)
       if (recordId) updates.push({ record_id: recordId, fields })
       else creates.push(fields)
@@ -132,7 +147,7 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
     for (let i = 0; i < createdRecordIds.length; i++) {
       const id = createdRecordIds[i]
       const catalogNumber = creates[i]?.[FEISHU_PRIMARY_FIELD]
-      if (id && catalogNumber) {
+      if (id && typeof catalogNumber === 'string') {
         createdIds.set(cacheKey(settings, catalogNumber), { id, at: now })
       }
     }

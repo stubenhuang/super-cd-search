@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { FeishuSettings } from '../src/shared/types'
-import { DEFAULT_FEISHU_SETTINGS } from '../src/shared/feishu'
+import { DEFAULT_FEISHU_SETTINGS, FEISHU_FIELD_TYPE_ATTACHMENT } from '../src/shared/feishu'
 import { deleteSetting, setSetting } from '../src/main/settings'
 import {
   FeishuClientError,
   batchCreate,
   batchUpdate,
+  createTable,
   ensureFields,
   findRecordIds,
   isFeishuConfigured,
@@ -13,7 +14,8 @@ import {
   parsePrimaryFieldText,
   readFeishuSettings,
   resetFeishuClientState,
-  testFeishuConnection
+  testFeishuConnection,
+  uploadMedia
 } from '../src/main/feishu/client'
 import { resetFeishuSyncState, syncToFeishu } from '../src/main/feishu/sync'
 
@@ -23,7 +25,8 @@ const CONFIG: FeishuSettings = {
   appSecret: 'secret-xyz',
   appToken: 'appTOKEN',
   tableId: 'tblXYZ',
-  mappingTableId: 'tblMAP'
+  mappingTableId: 'tblMAP',
+  syncImages: false
 }
 
 function json(body: unknown, status = 200): Response {
@@ -32,7 +35,7 @@ function json(body: unknown, status = 200): Response {
 
 const okToken = () => json({ code: 0, tenant_access_token: 'tnt-token', expire: 7200 })
 /** Default to a table whose first column is already the 编号 primary field. */
-const okFields = (items: Array<{ field_name: string; is_primary?: boolean }> = [{ field_name: '编号', is_primary: true }]) =>
+const okFields = (items: Array<{ field_name: string; is_primary?: boolean; type?: number }> = [{ field_name: '编号', is_primary: true }]) =>
   () => json({ code: 0, data: { items, has_more: false } })
 const okApi = () => json({ code: 0, data: {} })
 
@@ -91,24 +94,25 @@ describe('settings helpers', () => {
     expect(isFeishuConfigured(CONFIG)).toBe(true)
   })
 
-  it('normalizeFeishuSettings keeps and trims mappingTableId', () => {
+  it('normalizeFeishuSettings keeps and trims mappingTableId and syncImages', () => {
     expect(normalizeFeishuSettings({ ...CONFIG, mappingTableId: '  tblMAP  ' }))
       .toEqual({ ...CONFIG, mappingTableId: 'tblMAP' })
     // Old persisted configs may predate the field; do not drop or crash.
     expect(normalizeFeishuSettings({ ...CONFIG, mappingTableId: undefined as unknown as string }))
       .toEqual({ ...CONFIG, mappingTableId: '' })
+    expect(normalizeFeishuSettings({ ...CONFIG, syncImages: true }).syncImages).toBe(true)
   })
 })
 
 describe('ensureFields', () => {
-  it('creates only the missing columns as multi-line text and caches the result', async () => {
+  it('creates only the missing columns as multi-line text and reports their types', async () => {
     setupRoutes({
       'POST /auth/v3/tenant_access_token/internal': okToken,
       'GET /fields?': okFields([{ field_name: '编号', is_primary: true }, { field_name: 'name' }]),
       'POST /fields': okApi
     })
 
-    await ensureFields(CONFIG)
+    const types = await ensureFields(CONFIG)
     const created = calls('POST', '/fields')
     expect(created).toHaveLength(10)
     const names = created.map(([, options]) => JSON.parse((options as { body: string }).body).field_name)
@@ -118,10 +122,14 @@ describe('ensureFields', () => {
     for (const [, options] of created) {
       expect(JSON.parse((options as { body: string }).body).type).toBe(1)
     }
+    expect(types.get('编号')).toBe(1)
+    expect(types.get('priceAll')).toBe(1)
 
+    // No cache: a user may convert a column to 附件 in the Feishu UI at any
+    // time, so every call re-reads the real field types.
     const before = fetchMock.mock.calls.length
     await ensureFields(CONFIG)
-    expect(fetchMock.mock.calls.length).toBe(before)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(before)
   })
 
   it('rejects with actionable guidance when the primary field is not 编号', async () => {
@@ -156,7 +164,7 @@ describe('ensureFields', () => {
       'GET /fields?': okFields([{ field_name: '编号' }, { field_name: 'name' }]),
       'POST /fields': okApi
     })
-    await expect(ensureFields(CONFIG)).resolves.toBeUndefined()
+    await expect(ensureFields(CONFIG)).resolves.toBeInstanceOf(Map)
   })
 
   it('reports a wrong primary field through the connection probe', async () => {
@@ -279,6 +287,101 @@ describe('ensureFields', () => {
       'GET /fields?': okFields()
     })
     await expect(testFeishuConnection(CONFIG)).resolves.toMatchObject({ ok: false })
+  })
+})
+
+describe('field types', () => {
+  it('createTable applies per-column attachment overrides', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'POST /apps/appTOKEN/tables': () => json({ code: 0, data: { table_id: 'tblNEW' } })
+    })
+    await createTable(CONFIG, 'T', ['编号', 'coverUrl'], { fieldTypes: { coverUrl: FEISHU_FIELD_TYPE_ATTACHMENT } })
+
+    const body = JSON.parse((calls('POST', '/apps/appTOKEN/tables')[0][1] as { body: string }).body)
+    expect(body.table.fields).toEqual([
+      { field_name: '编号', type: 1 },
+      { field_name: 'coverUrl', type: FEISHU_FIELD_TYPE_ATTACHMENT }
+    ])
+  })
+
+  it('ensureFields reports the real type of an existing attachment column', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'GET /fields?': okFields([
+        { field_name: '编号', is_primary: true },
+        { field_name: 'coverUrl', type: FEISHU_FIELD_TYPE_ATTACHMENT }
+      ]),
+      'POST /fields': okApi
+    })
+    const types = await ensureFields(CONFIG)
+    expect(types.get('coverUrl')).toBe(FEISHU_FIELD_TYPE_ATTACHMENT)
+    const created = calls('POST', '/fields')
+      .map(([, options]) => JSON.parse((options as { body: string }).body).field_name)
+    expect(created).not.toContain('coverUrl')
+  })
+})
+
+describe('uploadMedia', () => {
+  const params = () => ({
+    fileName: 'cover.jpg',
+    bytes: Buffer.from('fake-jpeg-bytes'),
+    mimeType: 'image/jpeg',
+    parentNode: 'appTOKEN',
+    extra: JSON.stringify({ drive_route_token: 'appTOKEN' })
+  })
+
+  it('posts a multipart form without a JSON Content-Type and returns file_token', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'POST /drive/v1/medias/upload_all': () => json({ code: 0, data: { file_token: 'boxcnTOKEN' } })
+    })
+
+    expect(await uploadMedia(CONFIG, params())).toBe('boxcnTOKEN')
+
+    const call = calls('POST', '/drive/v1/medias/upload_all')[0]
+    const options = call[1] as unknown as { headers: Record<string, string>; body: FormData }
+    expect(options.headers['Content-Type']).toBeUndefined()
+    expect(options.headers.Authorization).toBe('Bearer tnt-token')
+    const fd = options.body
+    expect(fd.get('file_name')).toBe('cover.jpg')
+    expect(fd.get('parent_type')).toBe('bitable_image')
+    expect(fd.get('parent_node')).toBe('appTOKEN')
+    expect(fd.get('size')).toBe(String(Buffer.from('fake-jpeg-bytes').length))
+    expect(fd.get('extra')).toBe(JSON.stringify({ drive_route_token: 'appTOKEN' }))
+    expect((fd.get('file') as File).name).toBe('cover.jpg')
+    expect((fd.get('file') as File).type).toBe('image/jpeg')
+  })
+
+  it('rebuilds the FormData on a 401 token-refresh retry', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': [
+        () => json({ code: 0, tenant_access_token: 'token-1', expire: 7200 }),
+        () => json({ code: 0, tenant_access_token: 'token-2', expire: 7200 })
+      ],
+      'POST /drive/v1/medias/upload_all': [
+        () => new Response('unauthorized', { status: 401 }),
+        () => json({ code: 0, data: { file_token: 'boxcnRETRY' } })
+      ]
+    })
+
+    expect(await uploadMedia(CONFIG, params())).toBe('boxcnRETRY')
+    const attempts = calls('POST', '/drive/v1/medias/upload_all')
+    expect(attempts).toHaveLength(2)
+    const firstForm = (attempts[0][1] as unknown as { body: FormData }).body
+    const secondForm = (attempts[1][1] as unknown as { body: FormData }).body
+    expect(secondForm).not.toBe(firstForm)
+    expect(secondForm.get('file_name')).toBe('cover.jpg')
+    expect((attempts[1][1] as unknown as { headers: Record<string, string> }).headers.Authorization)
+      .toBe('Bearer token-2')
+  })
+
+  it('throws when upload_all omits file_token', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'POST /drive/v1/medias/upload_all': () => json({ code: 0, data: {} })
+    })
+    await expect(uploadMedia(CONFIG, params())).rejects.toMatchObject({ code: 'invalid_response' })
   })
 })
 

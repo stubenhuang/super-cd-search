@@ -361,6 +361,8 @@ try {
   await feishuNav.click()
   await window.waitForTimeout(200)
   check('飞书分区提供启用开关', (await window.locator('[data-field="feishu-enabled"]').count()) === 1)
+  check('飞书分区提供图片同步开关', (await window.locator('[data-field="feishu-syncImages"]').count()) === 1)
+  check('图片同步开关默认关闭', !(await window.locator('[data-field="feishu-syncImages"]').isChecked()))
   const feishuFields = ['feishu-appId', 'feishu-appSecret', 'feishu-appToken', 'feishu-tableId']
   const feishuCounts = await Promise.all(feishuFields.map(field => window.locator(`[data-field="${field}"]`).count()))
   check('飞书分区提供四个凭证输入框', feishuCounts.every(count => count === 1), JSON.stringify(feishuCounts))
