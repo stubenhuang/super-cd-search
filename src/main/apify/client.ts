@@ -290,10 +290,61 @@ export function normalizeListings(raw: unknown): ApifyListing[] {
   return listings
 }
 
+/**
+ * The 1688 actor writes SUMMARY / ERRORS diagnostics as rows that have no
+ * product identity. They used to be discarded, so a message like "see ERRORS"
+ * was a dead end — pull the human-readable reasons out instead.
+ */
+function datasetDiagnostics(raw: unknown): string | null {
+  const parts: string[] = []
+  for (const row of toRows(raw)) {
+    if (!row || typeof row !== 'object') continue
+    const obj = row as Record<string, unknown>
+    if (obj.title || obj.price !== undefined || obj.priceCny !== undefined || obj.productUrl || obj.url) continue
+    for (const key of ['message', 'error', 'statusMessage', 'errorCode', 'reason']) {
+      const value = obj[key]
+      if (typeof value === 'string' && value.trim()) parts.push(value.trim())
+    }
+    const status = obj.status
+    if (typeof status === 'string' && /FAILED|INVALID_INPUT|ERROR/i.test(status)) parts.push(status)
+  }
+  return parts.length ? [...new Set(parts)].join(' | ').slice(0, 400) : null
+}
+
+/** SUMMARY / ERRORS are also exposed as records in the run's default KV store. */
+async function keyValueDiagnostics(
+  kvStoreId: string | undefined,
+  token: string,
+  signal: AbortSignal
+): Promise<string | null> {
+  if (!kvStoreId) return null
+  const parts: string[] = []
+  for (const key of ['ERRORS', 'SUMMARY']) {
+    try {
+      const record = await apifyFetch<unknown>(
+        `/key-value-stores/${encodeURIComponent(kvStoreId)}/records/${key}`,
+        token,
+        { method: 'GET', signal }
+      )
+      if (record) parts.push(`${key}: ${JSON.stringify(record).slice(0, 300)}`)
+    } catch {
+      // Best-effort only: a missing record must not mask the original failure.
+    }
+  }
+  return parts.length ? parts.join(' | ').slice(0, 500) : null
+}
+
+function appendDiagnostics(message: string, diagnostics: string | null): string {
+  return diagnostics
+    ? `${message}（${diagnostics}）`
+    : `${message}（详情见 Apify Console 该次运行的 SUMMARY / ERRORS）`
+}
+
 interface ActorRun {
   data?: {
     id?: string
     defaultDatasetId?: string
+    defaultKeyValueStoreId?: string
     status?: string
     statusMessage?: string
   }
@@ -332,7 +383,8 @@ async function runActorImageSearch(
 
       logger.debug('apify', `${logTag} run started`, { actor: actorId, runId })
       let status = started.data?.status ?? 'READY'
-      let statusMessage = ''
+      // A run can already be FAILED in the start response; keep its message too.
+      let statusMessage = started.data?.statusMessage ?? ''
       while (status !== 'SUCCEEDED' && status !== 'FAILED' && status !== 'ABORTED' && status !== 'TIMED-OUT') {
         await abortableDelay(POLL_INTERVAL_MS, runSignal)
         throwIfAborted(runSignal)
@@ -346,15 +398,33 @@ async function runActorImageSearch(
       }
 
       const itemsPath = `/datasets/${encodeURIComponent(datasetId)}/items`
+      const kvStoreId = started.data?.defaultKeyValueStoreId
       if (status === 'FAILED') {
-        throw new ApifyClientError(`${label}图搜运行失败：${statusMessage || 'FAILED'}`, 'run_failed')
+        const diagnostics = await keyValueDiagnostics(kvStoreId, token, runSignal)
+        if (diagnostics) logger.warn('apify', `${logTag} run diagnostics`, { runId, status, diagnostics })
+        throw new ApifyClientError(
+          appendDiagnostics(`${label}图搜运行失败：${statusMessage || 'FAILED'}`, diagnostics),
+          'run_failed'
+        )
       }
       // TIMED-OUT / ABORTED runs can still hold partial rows; surface them.
       const raw = await apifyFetch<unknown>(itemsPath, token, { method: 'GET', signal: runSignal })
       const listings = normalizeListings(raw)
       logger.debug('apify', `${logTag} image search complete`, { runId, status, count: listings.length })
-      if (listings.length === 0 && status !== 'SUCCEEDED') {
-        throw new ApifyClientError(`${label}图搜运行${status}，未返回可用结果`, 'run_failed')
+      if (listings.length === 0) {
+        const datasetDiag = datasetDiagnostics(raw)
+        // A SUCCEEDED run can still carry a "all photo search failed" SUMMARY;
+        // only then (or on a non-terminal status) do we pull the KV records.
+        const failed = status !== 'SUCCEEDED' || /failed|INVALID_INPUT|fatkun/i.test(datasetDiag ?? '')
+        const kvDiag = failed ? await keyValueDiagnostics(kvStoreId, token, runSignal) : null
+        const diagnostics = [datasetDiag, kvDiag].filter((part): part is string => Boolean(part)).join(' | ') || null
+        if (diagnostics) logger.warn('apify', `${logTag} run diagnostics`, { runId, status, diagnostics })
+        if (failed) {
+          throw new ApifyClientError(
+            appendDiagnostics(`${label}图搜运行${status}，未返回可用结果`, diagnostics),
+            'run_failed'
+          )
+        }
       }
       return listings
     },
@@ -365,16 +435,26 @@ async function runActorImageSearch(
 }
 
 /**
- * Taobao and 1688 photo search. The cover is supplied as raw base64 (no data:
- * prefix, no URL ever leaves the app). If the actor rejects raw base64, wrap it
- * as `data:image/jpeg;base64,` — downloadImage re-encodes covers as JPEG.
+ * The 1688 actor wants data-URI-encoded images ("encoded JPG/PNG/WebP/GIF").
+ * Sniff the real MIME from the payload: downloadImage re-encodes covers as
+ * JPEG, but its fallback can hand back the original PNG/WebP/GIF bytes.
  */
+function imageDataUri(base64: string): string {
+  const mime = base64.startsWith('/9j/') ? 'image/jpeg'
+    : base64.startsWith('iVBOR') ? 'image/png'
+    : base64.startsWith('UklGR') ? 'image/webp'
+    : base64.startsWith('R0lGOD') ? 'image/gif'
+    : 'image/jpeg'
+  return `data:${mime};base64,${base64}`
+}
+
+/** Taobao and 1688 photo search. Only the image bytes leave the app, never a URL. */
 export async function searchTaobaoByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
   const settings = apifySettings()
   const token = requireToken(settings)
   logger.debug('apify', 'taobao image search start', { actor: settings.taobaoActor })
   return runActorImageSearch(settings, token, settings.taobaoActor, {
-    imagesBase64: [imageBase64],
+    imagesBase64: [imageDataUri(imageBase64)],
     marketplace: 'taobao',
     maxResults: settings.num,
     sortBy: 'relevance',

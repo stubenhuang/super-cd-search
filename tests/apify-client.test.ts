@@ -159,7 +159,7 @@ describe('searchTaobaoByImage', () => {
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer test-token')
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body).toEqual({
-      imagesBase64: ['BASE64'],
+      imagesBase64: ['data:image/jpeg;base64,BASE64'],
       marketplace: 'taobao',
       maxResults: 3,
       sortBy: 'relevance',
@@ -170,6 +170,17 @@ describe('searchTaobaoByImage', () => {
     expect(fetchMock.mock.calls[1][0]).toContain('/actor-runs/run1')
     expect(fetchMock.mock.calls[2][0]).toContain('/datasets/ds1/items')
     expect(listings[0]).toMatchObject({ title: 'CD', priceCNY: 88, coverUrl: 'https://img/1.jpg' })
+  })
+
+  it('sniffs the real image MIME when building the data URI', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([]))
+
+    await searchTaobaoByImage('iVBORw0KGgoAAAANSUhEUg==')
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.imagesBase64).toEqual(['data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=='])
   })
 
   it('normalizes a slash-form actor id', async () => {
@@ -343,6 +354,42 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { status: 'FAILED', statusMessage: 'captcha' } }))
 
     await expect(searchTaobaoByImage('x')).rejects.toThrow(/运行失败/)
+  })
+
+  it('surfaces the actor ERRORS/SUMMARY records on a FAILED run', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', defaultKeyValueStoreId: 'kv1', status: 'RUNNING' } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { status: 'FAILED', statusMessage: 'All photo search failed; see ERRORS' } }))
+      .mockResolvedValueOnce(jsonResponse([{ code: 'fatkun_rate_limited', message: 'upstream refused' }]))
+      .mockResolvedValueOnce(jsonResponse({ status: 'FAILED' }))
+
+    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    expect(err.code).toBe('run_failed')
+    expect(err.message).toContain('All photo search failed')
+    expect(err.message).toContain('fatkun_rate_limited')
+    expect(fetchMock.mock.calls[2][0]).toContain('/key-value-stores/kv1/records/ERRORS')
+    expect(fetchMock.mock.calls[3][0]).toContain('/key-value-stores/kv1/records/SUMMARY')
+  })
+
+  it('falls back to a Console hint when diagnostics are unreadable', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', defaultKeyValueStoreId: 'kv1', status: 'FAILED', statusMessage: 'All photo search failed; see ERRORS' } }))
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+      .mockResolvedValueOnce(new Response('not found', { status: 404 }))
+
+    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    expect(err.message).toContain('All photo search failed')
+    expect(err.message).toContain('Apify Console')
+  })
+
+  it('reports a SUMMARY failure even when the run is marked SUCCEEDED', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([{ status: 'FAILED', message: 'All photo search failed; see ERRORS' }]))
+
+    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    expect(err.code).toBe('run_failed')
+    expect(err.message).toContain('All photo search failed')
   })
 
   it('throws when a timed-out run has no rows', async () => {
