@@ -13,7 +13,7 @@ export const DEFAULT_APIFY_SETTINGS: ApifySettings = {
   token: '',
   taobaoActor: 'zen-studio~taobao-search-scraper',
   xianyuActor: 'zen-studio~goofish-xianyu-visual-search-scraper',
-  num: 3,
+  num: 10,
   maxItems: 3,
   timeoutMs: 180_000
 }
@@ -27,12 +27,19 @@ const BROKEN_TAOBAO_ACTORS = [
 /**
  * Merge saved config over defaults. Saved settings win, except for the known
  * broken reverse-image actor ids, which are migrated to the keyword-search
- * actor without overwriting a deliberately custom id.
+ * actor without overwriting a deliberately custom id. `num` is normalized to
+ * the Taobao actor's 10..1000 range, so the configured value is exactly the
+ * maxItems sent to the actor (old configs below 10 are raised here rather
+ * than being silently overridden at request time).
  */
 export function resolveApifySettings(raw?: Partial<ApifySettings>): ApifySettings {
   const settings = { ...DEFAULT_APIFY_SETTINGS, ...raw }
   if (BROKEN_TAOBAO_ACTORS.includes(settings.taobaoActor.trim().replace(/\//g, '~'))) {
     settings.taobaoActor = DEFAULT_APIFY_SETTINGS.taobaoActor
   }
+  const num = Number(settings.num)
+  settings.num = Number.isFinite(num)
+    ? Math.min(1000, Math.max(10, Math.round(num)))
+    : DEFAULT_APIFY_SETTINGS.num
   return settings
 }

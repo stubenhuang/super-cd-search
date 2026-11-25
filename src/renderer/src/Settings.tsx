@@ -610,14 +610,14 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
                 </label>
                 <input
                   type="number"
-                  min={1}
-                  max={50}
+                  min={10}
+                  max={1000}
                   className="st-input"
                   value={apify.num}
                   onChange={e => {
                     const value = e.target.valueAsNumber
                     if (!Number.isNaN(value)) {
-                      setApify(prev => ({ ...prev, num: Math.min(50, Math.max(1, Math.round(value))) }))
+                      setApify(prev => ({ ...prev, num: Math.min(1000, Math.max(10, Math.round(value))) }))
                     }
                   }}
                 />

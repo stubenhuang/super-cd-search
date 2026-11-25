@@ -120,9 +120,9 @@ describe('settings', () => {
   })
 
   it('round-trips Apify settings and merges defaults for partial values', () => {
-    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 'apify-token', num: 8 })
+    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 'apify-token', num: 20 })
     expect(getSetting('apify')?.token).toBe('apify-token')
-    expect(getSetting('apify')?.num).toBe(8)
+    expect(getSetting('apify')?.num).toBe(20)
 
     setSetting('apify', { token: 'only-token' } as typeof DEFAULT_APIFY_SETTINGS)
     expect(getSettings().apify).toEqual({ ...DEFAULT_APIFY_SETTINGS, token: 'only-token' })

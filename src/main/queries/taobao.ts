@@ -4,7 +4,7 @@ import { runPlatformQuery } from './runner'
 import { listingsToQueryResult } from './apify-results'
 import { searchTaobaoByKeyword, ApifyClientError } from '../apify/client'
 import { getSetting } from '../settings'
-import { DEFAULT_APIFY_SETTINGS } from '../../shared/apify'
+import { resolveApifySettings } from '../../shared/apify'
 import { isTimeoutError } from '../browser/abort'
 import { logger } from '../logger'
 
@@ -32,7 +32,7 @@ export function queryTaobao(
     run: async (runSignal) => {
       const listings = await searchTaobaoByKeyword(keyword, runSignal)
       logger.debug('queries.taobao', 'actor listings', { catalogNumber, keyword, count: listings.length })
-      const settings = { ...DEFAULT_APIFY_SETTINGS, ...getSetting('apify') }
+      const settings = resolveApifySettings(getSetting('apify'))
       return listingsToQueryResult('taobao', listings, settings.num)
     }
   })

@@ -222,7 +222,7 @@ const zh = {
   'apify.xianyuActor': '闲鱼 Actor ID',
   'apify.actorHint': '可填 用户名~名称 或 用户名/名称 形式。',
   'apify.num': '淘宝结果数 / 比价条数',
-  'apify.numHint': '每次淘宝关键词搜索返回的商品数（该 Actor 下限 10，默认取 10），也是计算价格区间时取前 N 条。',
+  'apify.numHint': '每次淘宝关键词搜索拉取的商品条数，也是计算价格区间时取前 N 条（10-1000，默认 10）。该 Actor 下限为 10，设置值即实际请求条数。',
   'apify.maxItems': '闲鱼最大条数',
   'apify.maxItemsHint': '每次闲鱼图搜返回的商品上限（1-1500，默认 3）。',
   'apify.timeoutMs': 'Actor 超时（毫秒）',

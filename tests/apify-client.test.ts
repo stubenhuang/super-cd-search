@@ -72,7 +72,7 @@ describe('resolveApifySettings', () => {
     expect(resolveApifySettings({ taobaoActor: 'me/my-actor' })).toMatchObject({
       token: '',
       taobaoActor: 'me/my-actor',
-      num: 3
+      num: 10
     })
     expect(resolveApifySettings()).toEqual(DEFAULT_APIFY_SETTINGS)
   })
@@ -186,20 +186,16 @@ describe('searchTaobaoByKeyword', () => {
     expect(listings[0]).toMatchObject({ title: 'CD', priceCNY: 88, coverUrl: 'https://img/1.jpg' })
   })
 
-  it('floors maxItems at the actor minimum of 10 and caps at 1000', async () => {
-    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', num: 1 })
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
-      .mockResolvedValueOnce(jsonResponse([]))
-    await searchTaobaoByKeyword('X-1')
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).maxItems).toBe(10)
-
-    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', num: 9999 })
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
-      .mockResolvedValueOnce(jsonResponse([]))
-    await searchTaobaoByKeyword('X-1')
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body).maxItems).toBe(1000)
+  it('sends the configured num as maxItems, normalized to the actor 10..1000 range', async () => {
+    const cases: Array<[number, number]> = [[1, 10], [25, 25], [9999, 1000]]
+    for (const [i, [configured, expected]] of cases.entries()) {
+      setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', num: configured })
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
+        .mockResolvedValueOnce(jsonResponse([]))
+      await searchTaobaoByKeyword('X-1')
+      expect(JSON.parse(fetchMock.mock.calls[2 * i][1].body).maxItems).toBe(expected)
+    }
   })
 
   it('normalizes a slash-form actor id', async () => {

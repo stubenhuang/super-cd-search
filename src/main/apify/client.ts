@@ -436,10 +436,10 @@ async function runActorQuery(
 }
 
 /**
- * Taobao/Tmall keyword search via zen-studio~taobao-search-scraper. The
- * catalog number is the keyword; maxItems is floored at 10 because the actor
- * rejects smaller values. Detail enrichment and reviews stay off to keep the
- * run cheap.
+ * Taobao/Tmall keyword search via zen-studio~taobao-search-scraper. `num` is
+ * normalized to the actor's 10..1000 range by resolveApifySettings, so the
+ * configured value is sent as maxItems as-is. Detail enrichment and reviews
+ * stay off to keep the run cheap.
  */
 export async function searchTaobaoByKeyword(keyword: string, signal?: AbortSignal): Promise<ApifyListing[]> {
   const settings = apifySettings()
@@ -447,7 +447,7 @@ export async function searchTaobaoByKeyword(keyword: string, signal?: AbortSigna
   logger.debug('apify', 'taobao keyword search start', { actor: settings.taobaoActor, keyword })
   return runActorQuery(settings, token, settings.taobaoActor, {
     keyword,
-    maxItems: Math.max(10, Math.min(1000, settings.num)),
+    maxItems: settings.num,
     sort: 'relevance',
     enrichWithDetails: false,
     fetchReviews: false
