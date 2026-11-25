@@ -26,14 +26,14 @@ description: "Super CD Search 的 UI 冒烟测试(playwright-core + 真实 Elect
 
 ## 看产物(每跑必做)
 
-- **必须 `read_image` 看 `artifacts/ui/*.png`**:断言通过 ≠ 界面没问题,排版、遮挡、空白帧只有看图才知道。各截图覆盖范围见 `scripts/verify-ui.mjs` 头部注释(搜索页、手机端、局域网面板、设置面板、发布目标全流程、空态发布入口)。
+- **必须 `read_image` 看 `artifacts/ui/*.png`**:断言通过 ≠ 界面没问题,排版、遮挡、空白帧只有看图才知道。各截图覆盖范围见 `scripts/verify-ui.mjs` 头部注释(搜索页、手机端、局域网面板、设置面板)。
 - 先读 `artifacts/ui/console.log`:含主进程 stdout/stderr、渲染进程 console 与未捕获异常,每条 FAIL 的上下文都在里面,失败先看它再决定重跑。
 - `artifacts/` 已 gitignore,产物不会误提交;失败时脚本非 0 退出且**保留全部产物**,别删,排查完再清。
 
 ## 安全与隔离
 
 - 脚本用工作区内临时 profile(`artifacts/ui-profile`、`artifacts/ui-home`),每次运行先清空重建,**不碰真实 userData**(设置、日志、登录会话都不会被读写)。
-- 预热数据(搜索缓存、发布目标配置)都在脚本内注入,不依赖网络,结果确定。
+- 预热数据(搜索缓存)都在脚本内注入,不依赖网络,结果确定。
 
 ## 扩展检查
 
@@ -42,5 +42,4 @@ description: "Super CD Search 的 UI 冒烟测试(playwright-core + 真实 Elect
 
 ## 受限宿主注意事项
 
-- 在受限宿主里跑应用,凡是应用自己 `spawn` Chrome 的场景(扫码登录 / 抓取 / 发布)需要 `SUPER_CD_CHROME_RESTRICTED=1` 才会附加 `--no-sandbox --use-mock-keychain`;`puppeteer.launch()` 的默认参数在这里不生效,否则会 SIGTRAP 秒退(macOS「Google Chrome 意外退出」)或弹钥匙串错误。
-- `verify:ui` 脚本内部已给 Electron 进程设好该变量;手动 `npm start` 或调试时需要自行带上。
+- 应用不再自行 `spawn` Chrome(搜索抓取走 `puppeteer.launch()`)。`verify:ui` 启动 Electron 时已带 `--no-sandbox` 与必要的渲染保活参数,见 `scripts/verify-ui.mjs`。

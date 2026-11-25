@@ -183,8 +183,7 @@ body {
 }
 
 .settings-button,
-.lan-button,
-.publish-targets-button {
+.lan-button {
   background: transparent;
   border: 1px solid var(--border-medium);
   color: var(--text-secondary);
@@ -199,8 +198,7 @@ body {
 }
 
 .settings-button:hover,
-.lan-button:hover,
-.publish-targets-button:hover {
+.lan-button:hover {
   background: var(--bg-card);
   color: var(--accent-primary);
   border-color: var(--accent-primary);

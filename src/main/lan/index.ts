@@ -6,7 +6,6 @@ import { getSetting, getLanToken, setLanToken } from '../settings'
 import { listLanCandidates, selectAutoLanAddress, isAllowedLanIPv4, normalizeLanPort } from './network'
 import { LanHttpServer } from './server'
 import { isBatchQueryRunning } from '../orchestrator'
-import { isPublishRunning } from '../publish'
 import { resolveBarcodeCatalogCached } from '../barcode/resolver'
 import { normalizeDiscogsBarcode } from '../queries/discogs'
 import { BARCODE_PROVIDER_LABELS } from '../../shared/platforms'
@@ -80,9 +79,6 @@ function canAcceptLanBarcodeLookup(): boolean {
     httpServer.running &&
     BrowserWindow.getAllWindows().length > 0 &&
     !isBatchQueryRunning() &&
-    // A publish owns the shared Chrome page: a barcode lookup would navigate it
-    // away mid-publish.
-    !isPublishRunning() &&
     rendererSearchAvailable &&
     rendererCatalogCount < MAX_SEARCH_INPUT_CATALOGS
   )
@@ -240,7 +236,6 @@ function canAcceptLanSearchControl(): boolean {
     httpServer.running &&
     BrowserWindow.getAllWindows().length > 0 &&
     !isBatchQueryRunning() &&
-    !isPublishRunning() &&
     rendererSearchAvailable
   )
 }

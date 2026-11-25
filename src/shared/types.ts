@@ -260,8 +260,6 @@ export interface Settings {
    * background. Defaults to true when unset.
    */
   autoUpdateEnabled?: boolean
-  /** Configured marketplace publishing destinations (闲鱼 / Discogs). */
-  publishTargets?: import('./publish').PublishTarget[]
 }
 
 /**

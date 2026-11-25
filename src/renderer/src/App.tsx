@@ -4,11 +4,8 @@ import { SettingsPanel } from './Settings'
 import type { SectionKey } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
-import { PublishDialog, PublishMenu, type PublishDialogRequest } from './Publish'
-import { PublishTargetsPanel } from './PublishTargetsPanel'
 import { FlowDialog, type AutoFlowState } from './FlowDialog'
-import { aggregateDetails, missingDetailKeys, buildDetailsText, fillMissingDetails } from '../../shared/details'
-import type { PublishTarget } from '../../shared/publish'
+import { aggregateDetails, missingDetailKeys } from '../../shared/details'
 import { isLlmConfigured } from '../../shared/llm'
 import { errorMessage, normalizeCatalogNumber } from '../../shared/utils'
 import { platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, resolveDeepDigPlatforms } from '../../shared/platforms'
@@ -176,13 +173,9 @@ interface ResultCardProps {
   onTitleClick: (catalogNumber: string) => void
   displayCurrency: DisplayCurrency
   usdToCnyRate: number | null
-  publishTargets: PublishTarget[]
-  onPublishTargetSelect: (catalogNumber: string, targetId: string) => void
-  /** Opens the 发布目标 panel from the card's publish menu. */
-  onAddPublishTarget: () => void
 }
 
-const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate, publishTargets, onPublishTargetSelect, onAddPublishTarget }: ResultCardProps) {
+const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate }: ResultCardProps) {
   const { t } = useI18n()
   const foundResult = results.find(r => r.status === 'found' && r.name)
   const displayName = foundResult?.name || catalogNumber
@@ -223,12 +216,6 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
           </span>
           {displayArtist && <span className="result-artist">— {displayArtist}</span>}
         </div>
-        <PublishMenu
-          catalogNumber={catalogNumber}
-          targets={publishTargets}
-          onSelect={onPublishTargetSelect}
-          onAddTarget={onAddPublishTarget}
-        />
       </div>
       <div className="platform-results">
         {results.map(r => {
@@ -331,7 +318,6 @@ function App() {
   /** Section the settings panel jumps to when it opens (deep links). */
   const [settingsSection, setSettingsSection] = useState<SectionKey>('api')
   const [showLanPanel, setShowLanPanel] = useState(false)
-  const [showPublishTargets, setShowPublishTargets] = useState(false)
   const cancelledRef = useRef(false)
   const smartCancelRef = useRef(false)
   const smartCurrentCatalogRef = useRef<string | null>(null)
@@ -351,13 +337,6 @@ function App() {
   // Auto-update state mirrored from the main process (banner only shows while
   // a newer build is being pulled in or is ready to install).
   const { state: updateState, install: installUpdate } = useUpdateState()
-
-  // Publish integration: configured targets for the result-card dropdown, the
-  // dialog request (draft arrives asynchronously from preparePublish) and a
-  // busy flag that locks the search controls while a run is in flight.
-  const [publishTargets, setPublishTargets] = useState<PublishTarget[]>([])
-  const [publishDialog, setPublishDialog] = useState<PublishDialogRequest | null>(null)
-  const [isPublishing, setIsPublishing] = useState(false)
 
   // Platforms queried by the currently running search. Resolved from the
   // latest settings each time a search starts (see handleSearch).
@@ -496,15 +475,14 @@ function App() {
   // Report whether the desktop search controls are idle to the LAN server.
   // Phone barcode submissions are rejected while any search or smart
   // generation work is in progress (checked again in the main process right
-  // before writing). Publishing owns the shared Chrome page, so it counts as
-  // busy too.
+  // before writing).
   useEffect(() => {
-    const available = !isLoading && !isCancelling && !isDeepSearching && !isPublishing && autoFlow?.kind !== 'smart-running'
+    const available = !isLoading && !isCancelling && !isDeepSearching && autoFlow?.kind !== 'smart-running'
     void window.electronAPI.setLanSearchAvailability(available).catch(() => {})
     return () => {
       void window.electronAPI.setLanSearchAvailability(false).catch(() => {})
     }
-  }, [isLoading, isCancelling, isDeepSearching, isPublishing, autoFlow])
+  }, [isLoading, isCancelling, isDeepSearching, autoFlow])
 
   // Numbers added from the phone are appended to the search box (deduplicated).
   useEffect(() => {
@@ -882,99 +860,6 @@ function App() {
     void window.electronAPI.setSetting('displayCurrency', currency).catch(() => {})
   }, [])
 
-  const refreshPublishTargets = useCallback(async () => {
-    try {
-      const targets = await window.electronAPI.listPublishTargets()
-      setPublishTargets(targets)
-    } catch (err) {
-      window.electronAPI.log('warn', 'app.publish', 'failed to load publish targets', {
-        error: errorMessage(err)
-      })
-    }
-  }, [])
-
-  // Fetch the target list once, then again whenever the 发布目标 panel closes
-  // so a target added there shows up on the cards without restarting the app.
-  useEffect(() => {
-    void refreshPublishTargets()
-  }, [refreshPublishTargets])
-
-  const handleClosePublishTargets = useCallback(() => {
-    setShowPublishTargets(false)
-    void refreshPublishTargets()
-  }, [refreshPublishTargets])
-
-  // Description text is composed in the renderer because it owns the i18n
-  // labels; the main process receives the finished string.
-  const buildPublishDescription = useCallback((catalogNumber: string): string => {
-    const catalogResults = results.get(catalogNumber) || []
-    const source = catalogResults.find(r => r.status === 'found' && (r.name || r.artist))
-    // Same merge order as DetailModal: aggregated results first, then the
-    // LLM-enriched details only for the fields still missing.
-    const merged: CDDetails = { ...aggregateDetails(catalogResults).details }
-    fillMissingDetails(merged, enrichedDetails.get(catalogNumber))
-    return buildDetailsText({
-      catalogNumber,
-      album: source?.name ?? null,
-      artist: source?.artist ?? null,
-      details: merged,
-      labels: {
-        catalogNumber: t('detail.catalogNumber'),
-        album: t('detail.album'),
-        artist: t('detail.artist'),
-        fields: {
-          label: t('detail.label'),
-          format: t('detail.format'),
-          country: t('detail.country'),
-          released: t('detail.released'),
-          genre: t('detail.genre')
-        }
-      }
-    })
-  }, [enrichedDetails, results, t])
-
-  const runPublishPrepare = useCallback(async (catalogNumber: string, targetId: string, targetName: string) => {
-    setPublishDialog({ catalogNumber, targetId, targetName })
-    try {
-      const draft = await window.electronAPI.preparePublish({
-        catalogNumber,
-        targetId,
-        results: results.get(catalogNumber) || [],
-        enrichedDetails: enrichedDetails.get(catalogNumber) ?? null,
-        descriptionText: buildPublishDescription(catalogNumber)
-      })
-      // Ignore the answer when the user already moved on to another session.
-      setPublishDialog(prev => (
-        prev && prev.catalogNumber === catalogNumber && prev.targetId === targetId
-          ? { ...prev, draft, prepareError: undefined }
-          : prev
-      ))
-    } catch (err) {
-      const message = errorMessage(err)
-      window.electronAPI.log('warn', 'app.publish', 'prepare publish failed', { catalogNumber, targetId, error: message })
-      setPublishDialog(prev => (
-        prev && prev.catalogNumber === catalogNumber && prev.targetId === targetId
-          ? { ...prev, prepareError: message }
-          : prev
-      ))
-    }
-  }, [buildPublishDescription, enrichedDetails, results])
-
-  const handlePublishTargetSelect = useCallback((catalogNumber: string, targetId: string) => {
-    const target = publishTargets.find(item => item.id === targetId)
-    void runPublishPrepare(catalogNumber, targetId, target?.name ?? '')
-  }, [publishTargets, runPublishPrepare])
-
-  const handlePublishRetry = useCallback(() => {
-    if (!publishDialog) return
-    void runPublishPrepare(publishDialog.catalogNumber, publishDialog.targetId, publishDialog.targetName)
-  }, [publishDialog, runPublishPrepare])
-
-  const handlePublishDialogClose = useCallback(() => {
-    setPublishDialog(null)
-    setIsPublishing(false)
-  }, [])
-
   // Load the saved display currency and pre-fetch the USD -> CNY rate once, so
   // toggling between currencies is instant afterwards.
   useEffect(() => {
@@ -1006,16 +891,6 @@ function App() {
             </svg>
           </button>
           <button
-            className="publish-targets-button"
-            onClick={() => setShowPublishTargets(true)}
-            title={t('nav.publish')}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
-          <button
             className="settings-button"
             onClick={() => {
               setSettingsSection('api')
@@ -1041,7 +916,7 @@ function App() {
               placeholder={t('input.placeholder')}
               value={input}
               onChange={e => handleInputChange(e.target.value)}
-              disabled={isLoading || isCancelling || isDeepSearching || isPublishing}
+              disabled={isLoading || isCancelling || isDeepSearching}
               rows={10}
             />
             {error && <div className="error-message">{error}</div>}
@@ -1078,7 +953,7 @@ function App() {
               <button
                 className="search-button"
                 onClick={handleSearch}
-                disabled={isLoading || isCancelling || isDeepSearching || isPublishing}
+                disabled={isLoading || isCancelling || isDeepSearching}
               >
                 {isCancelling ? t('search.cancelling') : isDeepSearching ? t('search.deepDigging') : isLoading ? t('search.searching') : t('search.button')}
               </button>
@@ -1207,9 +1082,6 @@ function App() {
                       onTitleClick={handleTitleClick}
                       displayCurrency={displayCurrency}
                       usdToCnyRate={usdToCnyRate}
-                      publishTargets={publishTargets}
-                      onPublishTargetSelect={handlePublishTargetSelect}
-                      onAddPublishTarget={() => setShowPublishTargets(true)}
                     />
                   )
                 })}
@@ -1221,7 +1093,6 @@ function App() {
       <UpdateBanner state={updateState} onInstall={() => void installUpdate()} />
       <LanPanel isOpen={showLanPanel} onClose={() => setShowLanPanel(false)} />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} section={settingsSection} />
-      <PublishTargetsPanel isOpen={showPublishTargets} onClose={handleClosePublishTargets} />
       <FlowDialog
         flow={autoFlow}
         onDeepDigConfirm={handleDeepDigConfirm}
@@ -1238,14 +1109,6 @@ function App() {
           catalogNumber={selectedCatalog}
           results={results.get(selectedCatalog) || []}
           enrichedDetails={enrichedDetails.get(selectedCatalog)}
-        />
-      )}
-      {publishDialog && (
-        <PublishDialog
-          request={publishDialog}
-          onClose={handlePublishDialogClose}
-          onRetryPrepare={handlePublishRetry}
-          onPublishingChange={setIsPublishing}
         />
       )}
     </div>

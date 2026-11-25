@@ -1,7 +1,13 @@
 import type { CDDetails, QueryResult, RawItemValue } from '../../shared/types'
 import { DETAIL_KEYS, aggregateDetails, fillMissingDetails } from '../../shared/details'
 import { FEISHU_PRIMARY_FIELD, type FeishuSyncRow } from '../../shared/feishu'
-import { pickPrimaryResult } from '../publish/draft'
+
+/** Best available result for the aggregate row, preferring one with an album name. */
+function pickPrimaryResult(results: readonly QueryResult[]): QueryResult | undefined {
+  return results.find(result => result.status === 'found' && result.name) ||
+    results.find(result => result.status === 'found') ||
+    results[0]
+}
 
 /**
  * All platform prices for one catalog number, as a JSON string keyed by

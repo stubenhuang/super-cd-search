@@ -3,8 +3,8 @@ import { BrowserWindow } from 'electron'
 /**
  * Send one IPC payload to every live renderer window.
  *
- * Used by all the push channels (query progress, publish progress, enrichment
- * progress, the LAN remote-control channels) so a window that is being torn
+ * Used by all the push channels (query progress, enrichment progress, the LAN
+ * remote-control channels) so a window that is being torn
  * down is skipped in exactly one place instead of in every emitter.
  */
 export function broadcastToWindows(channel: string, payload?: unknown): void {

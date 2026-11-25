@@ -6,12 +6,10 @@ import { registerImageIpc } from './ipc/image'
 import { registerCurrencyIpc } from './ipc/currency'
 import { registerEnrichmentIpc } from './ipc/enrich'
 import { registerLoggingIpc } from './ipc/log'
-import { registerPublishIpc } from './ipc/publish'
 import { registerFeishuIpc } from './ipc/feishu'
 import { registerUpdaterIpc } from './ipc/updater'
 import { initUpdater, disposeUpdater } from './updater'
 import { initLogger, getLogLevel, logger, type LogLevel } from './logger'
-import { closeAllPublishProfiles, initPublishProfiles } from './publish'
 import { browserPool } from './browser'
 import { registerThrottleIpc, destroyProxyAgents } from './throttle'
 import { registerLanIpc } from './ipc/lan'
@@ -99,13 +97,11 @@ app.whenReady().then(async () => {
   logger.info('main', 'application ready', { logLevel: getLogLevel() })
 
   initCachePersistence(app.getPath('userData'))
-  initPublishProfiles(app.getPath('userData'))
   prewarmExchangeRates()
   registerSettingsIpc()
   registerOrchestratorIpc()
   registerEnrichmentIpc()
   registerLoggingIpc()
-  registerPublishIpc()
   registerImageIpc()
   registerThrottleIpc()
   registerLanIpc()
@@ -161,9 +157,6 @@ app.on('window-all-closed', () => {
   logger.debug('main', 'all windows closed, tearing down browser/session resources')
   browserPool.closeAll()
   destroyProxyAgents()
-  // Publish targets own resident Chrome processes; close them so no browser
-  // outlives the app.
-  void closeAllPublishProfiles()
   if (process.platform !== 'darwin') {
     app.quit()
   }
@@ -173,6 +166,5 @@ app.on('before-quit', () => {
   logger.debug('main', 'before-quit: flushing cache and stopping LAN server')
   disposeUpdater()
   flushCacheToDisk()
-  void closeAllPublishProfiles()
   void closeLanServer()
 })
