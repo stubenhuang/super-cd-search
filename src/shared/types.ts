@@ -50,7 +50,7 @@ export interface FeishuSettings {
 export interface ApifySettings {
   /** Apify API token; sent as an Authorization: Bearer header, never logged. */
   token: string
-  /** Actor id for Taobao image search, e.g. `apivault_labs~1688-image-search`. The request input is tailored to this actor. */
+  /** Actor id for Taobao image search, e.g. `dev00~taobao-reverse-image-search`. The request input is tailored to this actor. */
   taobaoActor: string
   /** Actor id for Xianyu image search, e.g. `zen-studio~goofish-xianyu-visual-search-scraper`. */
   xianyuActor: string
@@ -58,7 +58,7 @@ export interface ApifySettings {
   num: number
   /** Max Xianyu listings per run (1-1500). */
   maxItems: number
-  /** Wall-clock ceiling for the whole async Xianyu run, in milliseconds. */
+  /** Wall-clock ceiling for the whole async image-search run, in milliseconds. */
   timeoutMs: number
 }
 

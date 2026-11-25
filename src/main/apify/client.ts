@@ -13,8 +13,6 @@ const NETWORK_RETRY_BACKOFF_MS = 500
 const XIANYU_DETAIL_LEVEL = 'summary'
 /** Rank visual matches by similarity so the first item is the closest match. */
 const XIANYU_SORT_BY = 'relevance'
-/** Keep the actor-side deadline below the client's 180s wall-clock timeout. */
-const TAOBAO_RUN_TIMEOUT_SECONDS = 150
 
 const ACTOR_LABELS = { taobao: '淘宝', xianyu: '闲鱼' } as const
 
@@ -301,10 +299,11 @@ function datasetDiagnostics(raw: unknown): string | null {
     if (!row || typeof row !== 'object') continue
     const obj = row as Record<string, unknown>
     if (obj.title || obj.price !== undefined || obj.priceCny !== undefined || obj.productUrl || obj.url) continue
-    for (const key of ['message', 'error', 'statusMessage', 'errorCode', 'reason']) {
+    for (const key of ['message', 'error', 'statusMessage', 'errorCode', 'code', 'reason']) {
       const value = obj[key]
       if (typeof value === 'string' && value.trim()) parts.push(value.trim())
     }
+    if (obj.success === false) parts.push('success: false')
     const status = obj.status
     if (typeof status === 'string' && /FAILED|INVALID_INPUT|ERROR/i.test(status)) parts.push(status)
   }
@@ -413,9 +412,9 @@ async function runActorImageSearch(
       logger.debug('apify', `${logTag} image search complete`, { runId, status, count: listings.length })
       if (listings.length === 0) {
         const datasetDiag = datasetDiagnostics(raw)
-        // A SUCCEEDED run can still carry a "all photo search failed" SUMMARY;
-        // only then (or on a non-terminal status) do we pull the KV records.
-        const failed = status !== 'SUCCEEDED' || /failed|INVALID_INPUT|fatkun/i.test(datasetDiag ?? '')
+        // Zero products plus any diagnostic row means the actor reported why —
+        // surface it instead of silently showing "not found".
+        const failed = status !== 'SUCCEEDED' || datasetDiag !== null
         const kvDiag = failed ? await keyValueDiagnostics(kvStoreId, token, runSignal) : null
         const diagnostics = [datasetDiag, kvDiag].filter((part): part is string => Boolean(part)).join(' | ') || null
         if (diagnostics) logger.warn('apify', `${logTag} run diagnostics`, { runId, status, diagnostics })
@@ -435,30 +434,18 @@ async function runActorImageSearch(
 }
 
 /**
- * The 1688 actor wants data-URI-encoded images ("encoded JPG/PNG/WebP/GIF").
- * Sniff the real MIME from the payload: downloadImage re-encodes covers as
- * JPEG, but its fallback can hand back the original PNG/WebP/GIF bytes.
+ * Taobao/Tmall photo search via the dedicated actor. It takes a single raw
+ * base64 string plus a 1-50 result count; only image bytes leave the app.
+ * The async run/poll/dataset path below waits for SUCCEEDED (older code used a
+ * 60s synchronous endpoint, which could return an empty dataset).
  */
-function imageDataUri(base64: string): string {
-  const mime = base64.startsWith('/9j/') ? 'image/jpeg'
-    : base64.startsWith('iVBOR') ? 'image/png'
-    : base64.startsWith('UklGR') ? 'image/webp'
-    : base64.startsWith('R0lGOD') ? 'image/gif'
-    : 'image/jpeg'
-  return `data:${mime};base64,${base64}`
-}
-
-/** Taobao and 1688 photo search. Only the image bytes leave the app, never a URL. */
 export async function searchTaobaoByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
   const settings = apifySettings()
   const token = requireToken(settings)
   logger.debug('apify', 'taobao image search start', { actor: settings.taobaoActor })
   return runActorImageSearch(settings, token, settings.taobaoActor, {
-    imagesBase64: [imageDataUri(imageBase64)],
-    marketplace: 'taobao',
-    maxResults: settings.num,
-    sortBy: 'relevance',
-    runTimeout: TAOBAO_RUN_TIMEOUT_SECONDS
+    imageBase64,
+    num: Math.min(50, Math.max(1, settings.num))
   }, 'taobao', signal)
 }
 
