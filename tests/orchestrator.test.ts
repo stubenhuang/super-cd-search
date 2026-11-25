@@ -168,7 +168,7 @@ describe('executeBatchQuery', () => {
     expect(sendMock.mock.calls.some(([, data]) => data.event === 'query:batch-cancelled')).toBe(true)
   })
 
-  it('runs image sources as a second phase using the first text-result cover', async () => {
+  it('runs Taobao as a keyword text source and Xianyu as a second-phase image source', async () => {
     const coverUrl = 'https://cover.example/x.jpg'
     const calls: string[] = []
     mockQueryDiscogs.mockImplementation(async () => {
@@ -181,48 +181,47 @@ describe('executeBatchQuery', () => {
     const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
 
     expect(calls[0]).toBe('discogs')
-    expect(calls).toContain('xianyu')
     expect(calls).toContain('taobao')
+    expect(calls).toContain('xianyu')
+    // Taobao runs in phase one, before the cover download / Xianyu phase.
+    expect(calls.indexOf('taobao')).toBeLessThan(calls.indexOf('xianyu'))
     expect(mockDownloadImage).toHaveBeenCalledTimes(1)
     expect(mockDownloadImage).toHaveBeenCalledWith(coverUrl, 1000)
-    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', 'BASE64', expect.anything())
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', expect.anything())
     expect(mockQueryXianyu).toHaveBeenCalledWith('X-1', 'BASE64', expect.anything())
     expect(results[0].results.map(r => r.platform)).toEqual(['discogs', 'xianyu', 'taobao'])
     expect(sendMock.mock.calls.filter(([, data]) => data.event === 'query:complete')).toHaveLength(1)
   })
 
-  it('skips image sources with a clear not_found when no cover is available', async () => {
+  it('skips only the image source with a clear not_found when no cover is available', async () => {
     const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
 
-    expect(mockQueryTaobao).not.toHaveBeenCalled()
+    // Taobao is keyword-based and must still run without a cover.
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', expect.anything())
     expect(mockQueryXianyu).not.toHaveBeenCalled()
-    for (const platform of ['taobao', 'xianyu']) {
-      const result = results[0].results.find(r => r.platform === platform)
-      expect(result).toMatchObject({ status: 'not_found', error: '无可用封面图，无法执行以图搜物' })
-    }
+    expect(results[0].results.find(r => r.platform === 'xianyu'))
+      .toMatchObject({ status: 'not_found', error: '无可用封面图，无法执行以图搜物' })
   })
 
-  it('skips image sources when the cover download fails', async () => {
+  it('skips only the image source when the cover download fails', async () => {
     mockQueryDiscogs.mockResolvedValue({ ...found('discogs'), coverUrl: 'https://cover.example/x.jpg' })
     mockDownloadImage.mockResolvedValue(null)
 
     const results = await executeBatchQuery(['X-1'], ['discogs', 'taobao', 'xianyu'])
 
-    expect(mockQueryTaobao).not.toHaveBeenCalled()
+    expect(mockQueryTaobao).toHaveBeenCalledWith('X-1', expect.anything())
     expect(mockQueryXianyu).not.toHaveBeenCalled()
-    for (const platform of ['taobao', 'xianyu']) {
-      const result = results[0].results.find(r => r.platform === platform)
-      expect(result).toMatchObject({ status: 'not_found', error: '封面图下载失败，无法执行以图搜物' })
-    }
+    expect(results[0].results.find(r => r.platform === 'xianyu'))
+      .toMatchObject({ status: 'not_found', error: '封面图下载失败，无法执行以图搜物' })
   })
 
-  it('keeps the default platform set free of paid image sources', async () => {
+  it('keeps the default platform set free of paid Apify sources', async () => {
     await executeBatchQuery(['X-1'])
     expect(mockQueryTaobao).not.toHaveBeenCalled()
     expect(mockQueryXianyu).not.toHaveBeenCalled()
   })
 
-  it('contains an image-source failure without breaking the batch', async () => {
+  it('contains an Apify source failure without breaking the batch', async () => {
     mockQueryDiscogs.mockResolvedValue({ ...found('discogs'), coverUrl: 'https://cover.example/x.jpg' })
     mockQueryTaobao.mockRejectedValue(new Error('Apify down'))
 

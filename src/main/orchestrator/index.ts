@@ -9,7 +9,7 @@ import { queryXianyu } from '../queries/xianyu'
 import { queryTaobao } from '../queries/taobao'
 import { notFound } from '../queries/types'
 import { normalizeCatalogNumber } from '../../shared/utils'
-import { PLATFORMS, IMAGE_PLATFORMS, TEXT_PLATFORMS } from '../../shared/platforms'
+import { PLATFORMS, IMAGE_PLATFORMS, DEFAULT_DEEP_PLATFORMS } from '../../shared/platforms'
 import { QueryEvents } from '../../shared/events'
 import { logger } from '../logger'
 import { downloadImage } from '../image'
@@ -94,13 +94,6 @@ function resolveImageSearchCover(results: QueryResult[]): string | null {
   return null
 }
 
-/** Dispatch an enabled image source to its Apify-backed query. */
-function imageQuery(name: Platform, catalogNumber: string, imageBase64: string, signal: AbortSignal): Promise<QueryResult> {
-  return name === 'taobao'
-    ? queryTaobao(catalogNumber, imageBase64, signal)
-    : queryXianyu(catalogNumber, imageBase64, signal)
-}
-
 /** Build the generic "unknown error" placeholder for one platform. */
 function errorResult(platform: Platform, message: string): QueryResult {
   return { platform, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
@@ -124,7 +117,8 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     { name: 'hmv', query: () => queryHmv(catalogNumber, signal) },
     { name: 'yahoo', query: () => queryYahoo(catalogNumber, signal) },
     { name: 'cdjapan', query: () => queryCdjapan(catalogNumber, signal) },
-    { name: 'tower', query: () => queryTower(catalogNumber, signal) }
+    { name: 'tower', query: () => queryTower(catalogNumber, signal) },
+    { name: 'taobao', query: () => queryTaobao(catalogNumber, signal) }
   ]
 
   const enabledText = registry.filter(p => enabledPlatforms.includes(p.name))
@@ -152,9 +146,9 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
     return errorResult(platform.name, message)
   })
 
-  // Phase two: the image sources need a cover image collected above, so they
-  // run afterwards (still concurrently with each other and abort-aware). The
-  // cover is downloaded once and sent to both actors as base64.
+  // Phase two: the remaining image source (Xianyu) needs a cover image
+  // collected above, so it runs afterwards, abort-aware. The cover is
+  // downloaded once and sent as base64.
   let imageResults: QueryResult[] = []
   if (enabledImages.length > 0 && !signal.aborted) {
     const coverUrl = resolveImageSearchCover(textResults)
@@ -172,7 +166,7 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
           const error = coverUrl ? '封面图下载失败，无法执行以图搜物' : '无可用封面图，无法执行以图搜物'
           return Promise.resolve({ ...notFound(name), error })
         }
-        return imageQuery(name, catalogNumber, imageBase64, signal)
+        return queryXianyu(catalogNumber, imageBase64, signal)
       }))
     )
     imageResults = enabledImages.map((name, index) => {
@@ -217,7 +211,9 @@ export function cancelBatchQuery(): void {
   }
 }
 
-export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = TEXT_PLATFORMS): Promise<BatchQueryResult[]> {
+// Default to the free text platforms. Taobao is a paid Apify source and must
+// stay opt-in even though it is now a text/catalog-number platform.
+export async function executeBatchQuery(catalogNumbers: string[], platforms: Platform[] = DEFAULT_DEEP_PLATFORMS): Promise<BatchQueryResult[]> {
   const batchStartedAt = Date.now()
   logger.debug('orchestrator', 'execute batch query start', { requestedCatalogNumbers: catalogNumbers, platforms })
   if (abortController) {

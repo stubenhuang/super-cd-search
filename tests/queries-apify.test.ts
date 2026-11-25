@@ -6,7 +6,7 @@ vi.mock('../src/main/apify/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/main/apify/client')>()
   return {
     ...actual,
-    searchTaobaoByImage: vi.fn(),
+    searchTaobaoByKeyword: vi.fn(),
     searchXianyuByImage: vi.fn()
   }
 })
@@ -16,7 +16,7 @@ vi.mock('../src/main/currency', () => ({
 
 import { queryTaobao } from '../src/main/queries/taobao'
 import { queryXianyu } from '../src/main/queries/xianyu'
-import { searchTaobaoByImage, searchXianyuByImage, ApifyClientError } from '../src/main/apify/client'
+import { searchTaobaoByKeyword, searchXianyuByImage, ApifyClientError } from '../src/main/apify/client'
 import { clearAllCaches } from '../src/main/queries/cache'
 import type { ApifyListing } from '../src/main/apify/client'
 
@@ -34,15 +34,15 @@ function timeoutError(message: string): Error {
 beforeEach(() => {
   vi.clearAllMocks()
   clearAllCaches()
-  vi.mocked(searchTaobaoByImage).mockResolvedValue(listings)
+  vi.mocked(searchTaobaoByKeyword).mockResolvedValue(listings)
   vi.mocked(searchXianyuByImage).mockResolvedValue(listings)
 })
 
 describe('queryTaobao', () => {
   it('returns a found result with a USD price range', async () => {
-    const result = await queryTaobao('X-1', 'BASE64')
+    const result = await queryTaobao('X-1')
 
-    expect(vi.mocked(searchTaobaoByImage).mock.calls[0][0]).toBe('BASE64')
+    expect(vi.mocked(searchTaobaoByKeyword).mock.calls[0][0]).toBe('X-1')
     expect(result).toMatchObject({
       platform: 'taobao',
       status: 'found',
@@ -55,19 +55,19 @@ describe('queryTaobao', () => {
   })
 
   it('maps an ApifyClientError to a friendly error result', async () => {
-    vi.mocked(searchTaobaoByImage).mockRejectedValue(new ApifyClientError('Token 无效或已过期', 'http'))
+    vi.mocked(searchTaobaoByKeyword).mockRejectedValue(new ApifyClientError('Token 无效或已过期', 'http'))
 
-    const result = await queryTaobao('X-1', 'BASE64')
+    const result = await queryTaobao('X-1')
 
     expect(result).toMatchObject({ platform: 'taobao', status: 'error', error: 'Token 无效或已过期' })
   })
 
   it('maps a timeout to a retryable error result', async () => {
-    vi.mocked(searchTaobaoByImage).mockRejectedValue(timeoutError('淘宝图搜超时'))
+    vi.mocked(searchTaobaoByKeyword).mockRejectedValue(timeoutError('淘宝搜索超时'))
 
-    const result = await queryTaobao('X-1', 'BASE64')
+    const result = await queryTaobao('X-1')
 
-    expect(result).toMatchObject({ platform: 'taobao', status: 'error', error: '淘宝图搜超时' })
+    expect(result).toMatchObject({ platform: 'taobao', status: 'error', error: '淘宝搜索超时' })
   })
 })
 
@@ -80,11 +80,11 @@ describe('queryXianyu', () => {
   })
 
   it('maps an ApifyClientError to an error result', async () => {
-    vi.mocked(searchXianyuByImage).mockRejectedValue(new ApifyClientError('闲鱼图搜运行失败', 'run_failed'))
+    vi.mocked(searchXianyuByImage).mockRejectedValue(new ApifyClientError('闲鱼查询运行失败', 'run_failed'))
 
     const result = await queryXianyu('X-1', 'BASE64')
 
-    expect(result).toMatchObject({ platform: 'xianyu', status: 'error', error: '闲鱼图搜运行失败' })
+    expect(result).toMatchObject({ platform: 'xianyu', status: 'error', error: '闲鱼查询运行失败' })
   })
 
   it('falls back to a generic error message', async () => {

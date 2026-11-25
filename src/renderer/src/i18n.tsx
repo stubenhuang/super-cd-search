@@ -90,7 +90,7 @@ const zh = {
   'nav.lan': '局域网连接',
   'nav.barcodeProviders': '条码解析供应商',
   'nav.sources': '搜索源',
-  'nav.apify': '以图搜物 (Apify)',
+  'nav.apify': '淘宝 / 闲鱼 (Apify)',
   'nav.feishu': '飞书多维表格',
   'nav.llm': 'LLM 配置',
   'nav.backup': '备份与恢复',
@@ -211,8 +211,8 @@ const zh = {
   'llm.platformSelection': '智能生成数据源',
   'llm.smartSourcesHint': '智能生成固定排除 Discogs 与 eBay；只会逐个分析能搜索到商品的来源。',
 
-  // Apify reverse-image search
-  'apify.desc': '淘宝与闲鱼「以图搜物」通过 Apify 云端 Actor 运行，按次计费。请先在「搜索源」勾选这两个平台，并填写 Apify API Token；运行中会自动下载文字搜索结果的封面图，以 base64 传给两个 Actor，默认各返回 3 条，并把第一条 item 的图片作为该平台结果卡片的封面。',
+  // Apify search sources
+  'apify.desc': '淘宝按目录号关键词搜索、闲鱼以图搜物，均通过 Apify 云端 Actor 运行，按次计费。请先在「搜索源」勾选对应平台并填写 Apify API Token。淘宝以目录号作为 keyword（该 Actor 最少返回 10 条）；闲鱼会自动下载文字搜索结果的第一张封面图并以 base64 传入。两个源都把第一条 item 的图片作为结果卡片封面。',
   'apify.token': 'Apify API Token',
   'apify.tokenPlaceholder': '在 Apify Console → API & Integrations 获取',
   'apify.tokenHint': '令牌仅保存在本机加密配置中，并通过 Authorization 请求头发送，不会写入日志。',
@@ -222,11 +222,11 @@ const zh = {
   'apify.xianyuActor': '闲鱼 Actor ID',
   'apify.actorHint': '可填 用户名~名称 或 用户名/名称 形式。',
   'apify.num': '淘宝结果数 / 比价条数',
-  'apify.numHint': '每次淘宝图搜返回的商品数（1-50，默认 3），也是计算价格区间时取前 N 条。',
+  'apify.numHint': '每次淘宝关键词搜索返回的商品数（该 Actor 下限 10，默认取 10），也是计算价格区间时取前 N 条。',
   'apify.maxItems': '闲鱼最大条数',
   'apify.maxItemsHint': '每次闲鱼图搜返回的商品上限（1-1500，默认 3）。',
-  'apify.timeoutMs': '闲鱼超时（毫秒）',
-  'apify.timeoutHint': '闲鱼 Actor 运行较慢，整段运行的墙钟上限；取消批次会立即停止轮询。',
+  'apify.timeoutMs': 'Actor 超时（毫秒）',
+  'apify.timeoutHint': '整段 Actor 运行的墙钟上限；取消批次会立即停止轮询。',
 
   // Feishu Bitable archiving
   'feishu.desc': '把每次搜索结果按目录号归档到飞书智能多维表格。以表格首列主字段「编号」作为主键，搜索、深挖、智能生成完成时会自动覆盖同一编号的记录，不会重复。首次同步会自动补建其余所需字段。',

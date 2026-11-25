@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setSetting, deleteSetting } from '../src/main/settings'
 import { DEFAULT_APIFY_SETTINGS, resolveApifySettings } from '../src/shared/apify'
 import {
-  searchTaobaoByImage,
+  searchTaobaoByKeyword,
   searchXianyuByImage,
   normalizeListings,
   parsePriceCNY,
@@ -57,11 +57,13 @@ afterEach(() => {
 })
 
 describe('resolveApifySettings', () => {
-  it('migrates the broken 1688 actor id back to the dedicated Taobao actor', () => {
-    expect(resolveApifySettings({ token: 't', taobaoActor: 'apivault_labs~1688-image-search' }).taobaoActor)
-      .toBe(DEFAULT_APIFY_SETTINGS.taobaoActor)
-    expect(resolveApifySettings({ taobaoActor: 'apivault_labs/1688-image-search' }).taobaoActor)
-      .toBe(DEFAULT_APIFY_SETTINGS.taobaoActor)
+  it('migrates both broken reverse-image actor ids to the keyword actor', () => {
+    for (const id of ['apivault_labs~1688-image-search', 'dev00~taobao-reverse-image-search']) {
+      expect(resolveApifySettings({ token: 't', taobaoActor: id }).taobaoActor)
+        .toBe(DEFAULT_APIFY_SETTINGS.taobaoActor)
+      expect(resolveApifySettings({ taobaoActor: id.replace('~', '/') }).taobaoActor)
+        .toBe(DEFAULT_APIFY_SETTINGS.taobaoActor)
+    }
     expect(resolveApifySettings({ taobaoActor: DEFAULT_APIFY_SETTINGS.taobaoActor }).taobaoActor)
       .toBe(DEFAULT_APIFY_SETTINGS.taobaoActor)
   })
@@ -113,6 +115,15 @@ describe('normalizeListings / parsePriceCNY', () => {
     expect(listings[1].coverUrl).toBe('https://img.alicdn.com/b.jpg')
   })
 
+  it('reads the Taobao keyword actor mainPictureUrl and CNY price string', () => {
+    const listings = normalizeListings([
+      { title: 'CD', price: '88.00', url: 'https://item.taobao.com/1', mainPictureUrl: 'https://img/1.jpg', pictures: ['https://img/gallery.jpg'] }
+    ])
+    expect(listings).toEqual([
+      { title: 'CD', priceCNY: 88, url: 'https://item.taobao.com/1', coverUrl: 'https://img/1.jpg' }
+    ])
+  })
+
   it('reads priceCny and flattens a results wrapper (generic actor output)', () => {
     expect(normalizeListings({ results: [{ title: 'P', priceCny: 39.9, productUrl: 'https://item.taobao.com/p', imageUrl: 'https://img/p.jpg' }] }))
       .toEqual([{ title: 'P', priceCNY: 39.9, url: 'https://item.taobao.com/p', coverUrl: 'https://img/p.jpg' }])
@@ -143,45 +154,52 @@ describe('normalizeListings / parsePriceCNY', () => {
   })
 })
 
-describe('searchTaobaoByImage', () => {
+describe('searchTaobaoByKeyword', () => {
   it('starts an async run, polls until SUCCEEDED, then reads the dataset', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'run1', defaultDatasetId: 'ds1', status: 'RUNNING' } }))
       .mockResolvedValueOnce(jsonResponse({ data: { status: 'SUCCEEDED' } }))
-      .mockResolvedValueOnce(jsonResponse({
-        success: true,
-        totalCount: 1,
-        products: [
-          { title: 'CD', price: 88, productUrl: 'https://item.taobao.com/1', imageUrl: 'https://img/1.jpg' }
-        ]
-      }))
+      .mockResolvedValueOnce(jsonResponse([
+        { title: 'CD', price: '88.00', url: 'https://item.taobao.com/1', mainPictureUrl: 'https://img/1.jpg' }
+      ]))
 
-    const listings = await searchTaobaoByImage('BASE64')
+    const listings = await searchTaobaoByKeyword('UCCG-90530')
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.apify.com/v2/acts/dev00~taobao-reverse-image-search/runs')
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.apify.com/v2/acts/zen-studio~taobao-search-scraper/runs')
     expect(fetchMock.mock.calls[0][0]).not.toContain('token=')
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer test-token')
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body).toEqual({ imageBase64: 'BASE64', num: 3 })
-    expect(body).not.toHaveProperty('imageUrl')
+    expect(body).toEqual({
+      keyword: 'UCCG-90530',
+      maxItems: 10,
+      sort: 'relevance',
+      enrichWithDetails: false,
+      fetchReviews: false
+    })
+    expect(body).not.toHaveProperty('imageBase64')
     expect(body).not.toHaveProperty('imagesBase64')
-    expect(body).not.toHaveProperty('marketplace')
+    expect(body).not.toHaveProperty('imageUrl')
     expect(fetchMock.mock.calls[1][0]).toContain('/actor-runs/run1')
     expect(fetchMock.mock.calls[2][0]).toContain('/datasets/ds1/items')
     expect(listings[0]).toMatchObject({ title: 'CD', priceCNY: 88, coverUrl: 'https://img/1.jpg' })
   })
 
-  it('clamps num into the actor 1-50 range', async () => {
-    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', num: 999 })
+  it('floors maxItems at the actor minimum of 10 and caps at 1000', async () => {
+    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', num: 1 })
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse([]))
+    await searchTaobaoByKeyword('X-1')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).maxItems).toBe(10)
 
-    await searchTaobaoByImage('BASE64')
-
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).num).toBe(50)
+    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', num: 9999 })
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([]))
+    await searchTaobaoByKeyword('X-1')
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).maxItems).toBe(1000)
   })
 
   it('normalizes a slash-form actor id', async () => {
@@ -190,36 +208,36 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse([]))
 
-    await searchTaobaoByImage('BASE64')
+    await searchTaobaoByKeyword('X-1')
 
     expect(fetchMock.mock.calls[0][0]).toContain('/acts/me~my-actor/runs')
   })
 
   it('migrates a saved broken actor id before starting the run', async () => {
-    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', taobaoActor: 'apivault_labs~1688-image-search' })
+    setSetting('apify', { ...DEFAULT_APIFY_SETTINGS, token: 't', taobaoActor: 'dev00~taobao-reverse-image-search' })
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse([]))
 
-    await searchTaobaoByImage('BASE64')
+    await searchTaobaoByKeyword('X-1')
 
-    expect(fetchMock.mock.calls[0][0]).toContain('/acts/dev00~taobao-reverse-image-search/runs')
+    expect(fetchMock.mock.calls[0][0]).toContain('/acts/zen-studio~taobao-search-scraper/runs')
   })
 
   it('refuses to make a paid request without a token', async () => {
     deleteSetting('apify')
 
-    await expect(searchTaobaoByImage('BASE64'))
+    await expect(searchTaobaoByKeyword('BASE64'))
       .rejects.toMatchObject({ name: 'ApifyClientError', code: 'missing_token' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('maps 401 and 429 to friendly errors', async () => {
     fetchMock.mockResolvedValueOnce(new Response('unauthorized', { status: 401 }))
-    await expect(searchTaobaoByImage('x')).rejects.toThrow(/Token 无效/)
+    await expect(searchTaobaoByKeyword('x')).rejects.toThrow(/Token 无效/)
 
     fetchMock.mockResolvedValueOnce(new Response('slow down', { status: 429 }))
-    await expect(searchTaobaoByImage('x')).rejects.toThrow(/过于频繁/)
+    await expect(searchTaobaoByKeyword('x')).rejects.toThrow(/过于频繁/)
   })
 
   it('reports 401 as a bad token but never blames the token for a 403', async () => {
@@ -231,7 +249,7 @@ describe('searchTaobaoByImage', () => {
       }
     }, 403))
 
-    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    const err = await searchTaobaoByKeyword('x').catch(e => e) as ApifyClientError
     expect(err).toBeInstanceOf(ApifyClientError)
     expect(err.code).toBe('http')
     expect(err.message).toContain('完整权限')
@@ -246,7 +264,7 @@ describe('searchTaobaoByImage', () => {
       error: { type: 'full-permission-actor-not-approved', message: 'approve me' }
     }, 403))
 
-    await expect(searchTaobaoByImage('x'))
+    await expect(searchTaobaoByKeyword('x'))
       .rejects.toThrow(/console\.apify\.com\/actors\/\?approvePermissions=true/)
   })
 
@@ -255,7 +273,7 @@ describe('searchTaobaoByImage', () => {
       error: { type: 'insufficient-permissions', message: 'Actor is not rented' }
     }, 403))
 
-    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    const err = await searchTaobaoByKeyword('x').catch(e => e) as ApifyClientError
     expect(err.message).toContain('没有运行权限')
     expect(err.message).toContain('Actor is not rented')
     expect(err.message).not.toContain('Token 无效')
@@ -263,16 +281,16 @@ describe('searchTaobaoByImage', () => {
 
   it('surfaces Apify structured error messages on other non-ok statuses', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
-      error: { type: 'invalid-input', message: 'imageBase64 must decode as an image' }
+      error: { type: 'invalid-input', message: 'keyword is required' }
     }, 400))
 
-    await expect(searchTaobaoByImage('x'))
-      .rejects.toThrow(/imageBase64 must decode as an image/)
+    await expect(searchTaobaoByKeyword('x'))
+      .rejects.toThrow(/keyword is required/)
   })
 
   it('keeps plain-text error bodies as a fallback', async () => {
     fetchMock.mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
-    await expect(searchTaobaoByImage('x')).rejects.toThrow(/Apify API 502: bad gateway/)
+    await expect(searchTaobaoByKeyword('x')).rejects.toThrow(/Apify API 502: bad gateway/)
   })
 
   it('retries a transient fetch failed on the run-status poll', async () => {
@@ -282,7 +300,7 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse([{ title: 'CD', price: 88, productUrl: 'https://item.taobao.com/1', imageUrl: 'https://img/1.jpg' }]))
 
-    const listings = await searchTaobaoByImage('x')
+    const listings = await searchTaobaoByKeyword('x')
 
     expect(fetchMock).toHaveBeenCalledTimes(4)
     expect(listings).toHaveLength(1)
@@ -295,7 +313,7 @@ describe('searchTaobaoByImage', () => {
       .mockRejectedValueOnce(fetchFailedError('UND_ERR_SOCKET'))
       .mockResolvedValueOnce(jsonResponse([{ title: 'CD', price: 50 }]))
 
-    expect(await searchTaobaoByImage('x')).toHaveLength(1)
+    expect(await searchTaobaoByKeyword('x')).toHaveLength(1)
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
@@ -306,14 +324,14 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse([{ title: 'CD', price: 88 }]))
 
-    expect(await searchTaobaoByImage('x')).toHaveLength(1)
+    expect(await searchTaobaoByKeyword('x')).toHaveLength(1)
     expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
   it('never retries the run-start POST and reports the underlying cause', async () => {
     fetchMock.mockRejectedValueOnce(fetchFailedError('ENOTFOUND'))
 
-    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    const err = await searchTaobaoByKeyword('x').catch(e => e) as ApifyClientError
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(err.code).toBe('network')
     expect(err.message).toContain('网络连接失败')
@@ -325,7 +343,7 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'RUNNING' } }))
       .mockRejectedValue(fetchFailedError('ECONNRESET'))
 
-    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    const err = await searchTaobaoByKeyword('x').catch(e => e) as ApifyClientError
     expect(err.code).toBe('network')
     expect(err.message).toContain('ECONNRESET')
     // 1 POST + 3 GET attempts, no more.
@@ -334,19 +352,19 @@ describe('searchTaobaoByImage', () => {
 
   it('reports a non-ok status with its code', async () => {
     fetchMock.mockResolvedValueOnce(new Response('boom', { status: 500 }))
-    await expect(searchTaobaoByImage('x')).rejects.toMatchObject({ code: 'http' })
+    await expect(searchTaobaoByKeyword('x')).rejects.toMatchObject({ code: 'http' })
   })
 
   it('reports invalid JSON responses', async () => {
     fetchMock.mockResolvedValueOnce(new Response('not json', { status: 200 }))
-    await expect(searchTaobaoByImage('x')).rejects.toMatchObject({ code: 'invalid_response' })
+    await expect(searchTaobaoByKeyword('x')).rejects.toMatchObject({ code: 'invalid_response' })
   })
 
   it('returns an empty list for a SUCCEEDED run with an empty dataset', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse([]))
-    expect(await searchTaobaoByImage('x')).toEqual([])
+    expect(await searchTaobaoByKeyword('x')).toEqual([])
   })
 
   it('throws when the run FAILED', async () => {
@@ -354,7 +372,7 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'RUNNING' } }))
       .mockResolvedValueOnce(jsonResponse({ data: { status: 'FAILED', statusMessage: 'captcha' } }))
 
-    await expect(searchTaobaoByImage('x')).rejects.toThrow(/运行失败/)
+    await expect(searchTaobaoByKeyword('x')).rejects.toThrow(/运行失败/)
   })
 
   it('surfaces the actor ERRORS/SUMMARY records on a FAILED run', async () => {
@@ -364,7 +382,7 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse([{ code: 'fatkun_rate_limited', message: 'upstream refused' }]))
       .mockResolvedValueOnce(jsonResponse({ status: 'FAILED' }))
 
-    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    const err = await searchTaobaoByKeyword('x').catch(e => e) as ApifyClientError
     expect(err.code).toBe('run_failed')
     expect(err.message).toContain('All photo search failed')
     expect(err.message).toContain('fatkun_rate_limited')
@@ -378,17 +396,17 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(new Response('not found', { status: 404 }))
       .mockResolvedValueOnce(new Response('not found', { status: 404 }))
 
-    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    const err = await searchTaobaoByKeyword('x').catch(e => e) as ApifyClientError
     expect(err.message).toContain('All photo search failed')
     expect(err.message).toContain('Apify Console')
   })
 
-  it('surfaces the dedicated actor error payload when it emits no products', async () => {
+  it('surfaces an actor error payload when it emits no products', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse({ success: false, error: 'Missing required field: imageUrl', code: 'invalid_parameters' }))
 
-    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    const err = await searchTaobaoByKeyword('x').catch(e => e) as ApifyClientError
     expect(err.code).toBe('run_failed')
     expect(err.message).toContain('Missing required field: imageUrl')
     expect(err.message).toContain('invalid_parameters')
@@ -399,7 +417,7 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
       .mockResolvedValueOnce(jsonResponse([{ status: 'FAILED', message: 'All photo search failed; see ERRORS' }]))
 
-    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    const err = await searchTaobaoByKeyword('x').catch(e => e) as ApifyClientError
     expect(err.code).toBe('run_failed')
     expect(err.message).toContain('All photo search failed')
   })
@@ -410,18 +428,18 @@ describe('searchTaobaoByImage', () => {
       .mockResolvedValueOnce(jsonResponse({ data: { status: 'TIMED-OUT' } }))
       .mockResolvedValueOnce(jsonResponse([]))
 
-    await expect(searchTaobaoByImage('x')).rejects.toMatchObject({ code: 'run_failed' })
+    await expect(searchTaobaoByKeyword('x')).rejects.toMatchObject({ code: 'run_failed' })
   })
 
   it('rejects a run response without an id/dataset', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ data: {} }))
-    await expect(searchTaobaoByImage('x')).rejects.toMatchObject({ code: 'invalid_response' })
+    await expect(searchTaobaoByKeyword('x')).rejects.toMatchObject({ code: 'invalid_response' })
   })
 
   it('does not start a run when the batch is already cancelled', async () => {
     const controller = new AbortController()
     controller.abort()
-    await expect(searchTaobaoByImage('x', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    await expect(searchTaobaoByKeyword('x', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

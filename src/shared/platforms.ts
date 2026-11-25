@@ -19,11 +19,9 @@ export const PLATFORMS: Platform[] = [
 /**
  * Reverse-image-search sources. They need a cover image from the text sources,
  * so the orchestrator runs them in a second phase after the text platforms.
+ * Taobao is now a keyword/catalog-number source, not an image source.
  */
-export const IMAGE_PLATFORMS: Platform[] = ['xianyu', 'taobao']
-
-/** Text/catalog-number platforms (everything except the image-search sources). */
-export const TEXT_PLATFORMS: Platform[] = PLATFORMS.filter(p => !IMAGE_PLATFORMS.includes(p))
+export const IMAGE_PLATFORMS: Platform[] = ['xianyu']
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
   discogs: 'Discogs',
@@ -34,7 +32,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   cdjapan: 'CDJapan',
   tower: 'Tower Records Japan',
   xianyu: '闲鱼',
-  taobao: '淘宝图搜'
+  taobao: '淘宝'
 }
 
 /**
@@ -50,7 +48,7 @@ export function platformLabel(platform: Platform): string {
 /** Default platform set for the standard search mode. */
 export const DEFAULT_STANDARD_PLATFORMS: Platform[] = ['discogs', 'ebay']
 
-/** Default platform set for the deep search mode (every text platform). */
+/** Default platform set for deep search mode (all free text platforms). */
 export const DEFAULT_DEEP_PLATFORMS: Platform[] = [
   'discogs',
   'ebay',

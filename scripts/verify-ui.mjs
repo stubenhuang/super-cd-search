@@ -14,7 +14,7 @@
  *                                    move/grow after opening)
  *   artifacts/ui/shot-6b-settings.png     settings panel (no bottom-left close
  *                                        button, footer save reads 保存)
- *   artifacts/ui/shot-6b-apify.png        Apify 以图搜物设置分区（Token /
+ *   artifacts/ui/shot-6b-apify.png        Apify 搜索源设置分区（Token /
  *                                        Actor / 运行参数）
  *   artifacts/ui/shot-6b-feishu.png       飞书多维表格设置分区（开关 / 凭证）
  *   artifacts/ui/shot-4-publish-settings.png  发布目标面板（头部按钮打开，
@@ -341,17 +341,17 @@ try {
   await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-settings.png') })
   checkScreenshot('设置面板（无左下关闭按钮）', join(ARTIFACTS, 'shot-6b-settings.png'))
 
-  // 6b-2. The Apify image-search section and the two image platforms must be
-  //       reachable from the settings nav and the sources grid respectively.
-  const apifyNav = window.locator('.settings-nav-item', { hasText: '以图搜物 (Apify)' })
-  check('设置导航出现「以图搜物 (Apify)」分区', (await apifyNav.count()) === 1)
+  // 6b-2. The Apify section and the Taobao/Xianyu platforms must be reachable
+  //       from the settings nav and the sources grid respectively.
+  const apifyNav = window.locator('.settings-nav-item', { hasText: '淘宝 / 闲鱼 (Apify)' })
+  check('设置导航出现「淘宝 / 闲鱼 (Apify)」分区', (await apifyNav.count()) === 1)
   await apifyNav.click()
   await window.waitForTimeout(200)
   check('Apify 分区提供 Token 密码输入框', (await window.locator('.st-section-content input[type="password"]').count()) === 1)
   check('Apify 分区提供两个 Actor ID 输入框', (await window.locator('.st-section-content input[type="text"]').count()) === 2)
   check('Apify 分区提供三个运行参数数字输入框', (await window.locator('.st-section-content input[type="number"]').count()) === 3)
   await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-apify.png') })
-  checkScreenshot('Apify 以图搜物设置分区', join(ARTIFACTS, 'shot-6b-apify.png'))
+  checkScreenshot('Apify 搜索源设置分区', join(ARTIFACTS, 'shot-6b-apify.png'))
 
   // 6b-3. The Feishu archiving section must expose the master switch and all
   //       four credential inputs (one of them a password field).
@@ -373,8 +373,8 @@ try {
   await window.locator('.settings-nav-item', { hasText: '搜索源' }).click()
   await window.waitForTimeout(200)
   const sourceLabels = await window.locator('.st-platform-grid .st-check-name').allInnerTexts()
-  check('搜索源勾选框包含闲鱼与淘宝图搜',
-    sourceLabels.includes('闲鱼') && sourceLabels.includes('淘宝图搜'),
+  check('搜索源勾选框包含闲鱼与淘宝',
+    sourceLabels.includes('闲鱼') && sourceLabels.includes('淘宝'),
     JSON.stringify(sourceLabels))
 
   await settingsSave.click()

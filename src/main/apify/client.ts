@@ -276,8 +276,10 @@ export function normalizeListings(raw: unknown): ApifyListing[] {
   for (const row of toRows(raw)) {
     if (!row || typeof row !== 'object') continue
     const obj = row as Record<string, unknown>
-    const images = Array.isArray(obj.images) ? obj.images : Array.isArray(obj.imageGallery) ? obj.imageGallery : []
-    const coverCandidate = obj.imageUrl ?? obj.coverUrl ?? obj.pictureUrl ?? firstImageUrl(images)
+    const images = Array.isArray(obj.images) ? obj.images
+      : Array.isArray(obj.imageGallery) ? obj.imageGallery
+      : Array.isArray(obj.pictures) ? obj.pictures : []
+    const coverCandidate = obj.imageUrl ?? obj.coverUrl ?? obj.pictureUrl ?? obj.mainPictureUrl ?? obj.picUrlFull ?? firstImageUrl(images)
     const title = readString(obj.title)
     const priceCNY = parsePriceCNY(obj.price ?? obj.priceText ?? obj.priceCny)
     const url = normalizeHttpUrl(obj.productUrl ?? obj.itemUrl ?? obj.url ?? obj.link)
@@ -350,12 +352,12 @@ interface ActorRun {
 }
 
 /**
- * Both image-search actors run longer than the synchronous endpoint allows:
- * start a run, poll its status, then read the default dataset. The whole chain
- * is bounded by one wall-clock timeout and stays abortable so cancelling a
- * batch stops both polling and billing.
+ * Both Apify sources (Taobao keyword search, Xianyu image search) run longer
+ * than the synchronous endpoint allows: start a run, poll its status, then read
+ * the default dataset. The whole chain is bounded by one wall-clock timeout and
+ * stays abortable so cancelling a batch stops both polling and billing.
  */
-async function runActorImageSearch(
+async function runActorQuery(
   settings: ApifySettings,
   token: string,
   actorId: string,
@@ -377,7 +379,7 @@ async function runActorImageSearch(
       const runId = started.data?.id
       const datasetId = started.data?.defaultDatasetId
       if (!runId || !datasetId) {
-        throw new ApifyClientError(`${label}图搜未返回有效的运行 ID`, 'invalid_response')
+        throw new ApifyClientError(`${label}查询未返回有效的运行 ID`, 'invalid_response')
       }
 
       logger.debug('apify', `${logTag} run started`, { actor: actorId, runId })
@@ -402,14 +404,14 @@ async function runActorImageSearch(
         const diagnostics = await keyValueDiagnostics(kvStoreId, token, runSignal)
         if (diagnostics) logger.warn('apify', `${logTag} run diagnostics`, { runId, status, diagnostics })
         throw new ApifyClientError(
-          appendDiagnostics(`${label}图搜运行失败：${statusMessage || 'FAILED'}`, diagnostics),
+          appendDiagnostics(`${label}查询运行失败：${statusMessage || 'FAILED'}`, diagnostics),
           'run_failed'
         )
       }
       // TIMED-OUT / ABORTED runs can still hold partial rows; surface them.
       const raw = await apifyFetch<unknown>(itemsPath, token, { method: 'GET', signal: runSignal })
       const listings = normalizeListings(raw)
-      logger.debug('apify', `${logTag} image search complete`, { runId, status, count: listings.length })
+      logger.debug('apify', `${logTag} run complete`, { runId, status, count: listings.length })
       if (listings.length === 0) {
         const datasetDiag = datasetDiagnostics(raw)
         // Zero products plus any diagnostic row means the actor reported why —
@@ -420,7 +422,7 @@ async function runActorImageSearch(
         if (diagnostics) logger.warn('apify', `${logTag} run diagnostics`, { runId, status, diagnostics })
         if (failed) {
           throw new ApifyClientError(
-            appendDiagnostics(`${label}图搜运行${status}，未返回可用结果`, diagnostics),
+            appendDiagnostics(`${label}查询运行${status}，未返回可用结果`, diagnostics),
             'run_failed'
           )
         }
@@ -428,24 +430,27 @@ async function runActorImageSearch(
       return listings
     },
     settings.timeoutMs,
-    `${label}图搜超过 ${Math.round(settings.timeoutMs / 1000)} 秒未完成，请稍后重试`,
+    `${label}查询超过 ${Math.round(settings.timeoutMs / 1000)} 秒未完成，请稍后重试`,
     signal
   )
 }
 
 /**
- * Taobao/Tmall photo search via the dedicated actor. It takes a single raw
- * base64 string plus a 1-50 result count; only image bytes leave the app.
- * The async run/poll/dataset path below waits for SUCCEEDED (older code used a
- * 60s synchronous endpoint, which could return an empty dataset).
+ * Taobao/Tmall keyword search via zen-studio~taobao-search-scraper. The
+ * catalog number is the keyword; maxItems is floored at 10 because the actor
+ * rejects smaller values. Detail enrichment and reviews stay off to keep the
+ * run cheap.
  */
-export async function searchTaobaoByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
+export async function searchTaobaoByKeyword(keyword: string, signal?: AbortSignal): Promise<ApifyListing[]> {
   const settings = apifySettings()
   const token = requireToken(settings)
-  logger.debug('apify', 'taobao image search start', { actor: settings.taobaoActor })
-  return runActorImageSearch(settings, token, settings.taobaoActor, {
-    imageBase64,
-    num: Math.min(50, Math.max(1, settings.num))
+  logger.debug('apify', 'taobao keyword search start', { actor: settings.taobaoActor, keyword })
+  return runActorQuery(settings, token, settings.taobaoActor, {
+    keyword,
+    maxItems: Math.max(10, Math.min(1000, settings.num)),
+    sort: 'relevance',
+    enrichWithDetails: false,
+    fetchReviews: false
   }, 'taobao', signal)
 }
 
@@ -453,7 +458,7 @@ export async function searchTaobaoByImage(imageBase64: string, signal?: AbortSig
 export async function searchXianyuByImage(imageBase64: string, signal?: AbortSignal): Promise<ApifyListing[]> {
   const settings = apifySettings()
   const token = requireToken(settings)
-  return runActorImageSearch(settings, token, settings.xianyuActor, {
+  return runActorQuery(settings, token, settings.xianyuActor, {
     imageBase64,
     maxItems: settings.maxItems,
     detailLevel: XIANYU_DETAIL_LEVEL,
