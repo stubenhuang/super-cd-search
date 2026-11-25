@@ -1,6 +1,15 @@
 ## 思维方式
 > 不清楚的地方要主动提问, 不要猜测, 确定好需求
 
+## 分支与 worktree 约定
+
+- 专用 worktree 容器目录：`../super-cd-search_wt/`（与主仓库同级，已创建）。每个新需求在此目录下单独开一个 worktree 子目录，主仓库工作区始终停留在 `main`。
+- **当当前分支为 `main`（本仓库主干分支，无 `master` 分支）且需要开发新需求时，优先使用 `git worktree` 开发，不要在主仓库里直接切分支。**
+  - 新建：`git worktree add ../super-cd-search_wt/<feature> -b <feature>`（`<feature>` 用简短需求名/分支名）。
+  - 在该 worktree 内完成开发、提交与验证（`npm run typecheck` / `npm test` 等），再合并回 `main`。
+- 收尾移除：`git worktree remove ../super-cd-search_wt/<feature>`；用 `git worktree list` 查看现有 worktree。
+- 主仓库中未提交的改动会原样保留，不受新建 worktree 影响。
+
 ## 项目定位
 
 Super CD Search 面向 **CD 卖家**：按目录号批量查询多平台 CD 信息，聚合详情、比价、LLM 补全，并支持把结果发布到闲鱼 / Discogs。

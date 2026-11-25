@@ -14,7 +14,7 @@ vi.mock('../src/main/settings', () => ({
   getSetting: mockGetSetting
 }))
 
-import { downloadImage, clearImageCache } from '../src/main/image'
+import { downloadImage, clearImageCache, shouldSkipCertificateVerification } from '../src/main/image'
 
 let server: http.Server
 let baseUrl: string
@@ -252,5 +252,21 @@ describe('downloadImage', () => {
     await downloadImage(`${baseUrl}/shared.png`, 240)
 
     expect(hits).toBe(1) // same URL downloaded once; second size resized from disk
+  })
+})
+
+describe('shouldSkipCertificateVerification', () => {
+  it('skips verification only for alicdn image hosts', () => {
+    expect(shouldSkipCertificateVerification('g.earch.alicdn.com')).toBe(true)
+    expect(shouldSkipCertificateVerification('img.alicdn.com')).toBe(true)
+    expect(shouldSkipCertificateVerification('alicdn.com')).toBe(true)
+    expect(shouldSkipCertificateVerification('G.EARCH.ALICDN.COM')).toBe(true)
+  })
+
+  it('keeps full TLS verification for every other host', () => {
+    expect(shouldSkipCertificateVerification('example.com')).toBe(false)
+    expect(shouldSkipCertificateVerification('discogs.com')).toBe(false)
+    expect(shouldSkipCertificateVerification('g.earch.alicdn.com.evil.com')).toBe(false)
+    expect(shouldSkipCertificateVerification('fakesalicdn.com')).toBe(false)
   })
 })

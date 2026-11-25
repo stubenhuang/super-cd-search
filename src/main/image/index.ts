@@ -39,6 +39,18 @@ let diskPruneRunning = false
 let diskWriteCount = 0
 
 /**
+ * Taobao/Xianyu product images are served from alicdn.com subdomains. Some of
+ * them (e.g. g.earch.alicdn.com) present a TLS chain Node rejects, so cover
+ * images silently fail to load. Skip certificate verification for those image
+ * hosts ONLY — never set NODE_TLS_REJECT_UNAUTHORIZED globally, because this
+ * same process also sends the Apify token and LLM API keys over TLS.
+ */
+export function shouldSkipCertificateVerification(hostname: string): boolean {
+  const host = hostname.toLowerCase()
+  return host === 'alicdn.com' || host.endsWith('.alicdn.com')
+}
+
+/**
  * Get referer header based on image URL domain
  */
 function getReferer(url: string): string {
@@ -252,6 +264,12 @@ function fetchBuffer(url: string, redirectCount = 0, allowPrivateNetwork = true)
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         ...(referer ? { Referer: referer } : {})
       }
+    }
+
+    if (isHttps && shouldSkipCertificateVerification(parsedUrl.hostname)) {
+      // Only public product images travel over this connection.
+      options.rejectUnauthorized = false
+      logger.debug('image', 'skipping TLS verification for alicdn image host', { hostname: parsedUrl.hostname })
     }
 
     if (proxyEnabled && proxyHost && proxyPort) {
