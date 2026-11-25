@@ -1,7 +1,7 @@
 import type { QueryResult } from '../../shared/types'
-import { queryError } from './types'
+import { queryError, withRawItems } from './types'
 import { runPlatformQuery } from './runner'
-import { listingsToQueryResult } from './apify-results'
+import { apifyListingsToRawItems, listingsToQueryResult } from './apify-results'
 import { searchXianyuByImage, ApifyClientError } from '../apify/client'
 import { getSetting } from '../settings'
 import { DEFAULT_APIFY_SETTINGS } from '../../shared/apify'
@@ -32,7 +32,8 @@ export function queryXianyu(
       const listings = await searchXianyuByImage(imageBase64, runSignal)
       logger.debug('queries.xianyu', 'actor listings', { catalogNumber, count: listings.length })
       const settings = { ...DEFAULT_APIFY_SETTINGS, ...getSetting('apify') }
-      return listingsToQueryResult('xianyu', listings, settings.maxItems)
+      const result = await listingsToQueryResult('xianyu', listings, settings.maxItems)
+      return withRawItems(result, apifyListingsToRawItems(listings))
     }
   })
 }

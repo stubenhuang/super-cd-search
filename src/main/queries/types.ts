@@ -1,7 +1,12 @@
-import type { QueryResult, QueryStatus, Platform, CDDetails } from '../../shared/types'
+import type { QueryResult, QueryStatus, Platform, CDDetails, RawItem } from '../../shared/types'
 import { convertToUSDWithFallback } from '../currency'
 
 export type { QueryResult, QueryStatus, Platform, CDDetails }
+
+/** Attach the raw scraper items that back this result for the per-platform Feishu tables. */
+export function withRawItems(result: QueryResult, items: RawItem[]): QueryResult {
+  return items.length > 0 ? { ...result, rawItems: items } : result
+}
 
 export function notFound(platform: Platform): QueryResult {
   return {

@@ -4,7 +4,7 @@ import { BrowserWindow } from 'electron'
 const {
   mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQueryYahoo,
   mockQueryCdjapan, mockQueryTower, mockQueryXianyu, mockQueryTaobao,
-  mockDownloadImage
+  mockDownloadImage, mockFlushPlatformTables
 } = vi.hoisted(() => ({
   mockQueryDiscogs: vi.fn(),
   mockQueryEbay: vi.fn(),
@@ -15,7 +15,8 @@ const {
   mockQueryTower: vi.fn(),
   mockQueryXianyu: vi.fn(),
   mockQueryTaobao: vi.fn(),
-  mockDownloadImage: vi.fn()
+  mockDownloadImage: vi.fn(),
+  mockFlushPlatformTables: vi.fn()
 }))
 
 vi.mock('../src/main/queries/discogs', () => ({ queryDiscogs: mockQueryDiscogs }))
@@ -28,6 +29,7 @@ vi.mock('../src/main/queries/tower', () => ({ queryTower: mockQueryTower }))
 vi.mock('../src/main/queries/xianyu', () => ({ queryXianyu: mockQueryXianyu }))
 vi.mock('../src/main/queries/taobao', () => ({ queryTaobao: mockQueryTaobao }))
 vi.mock('../src/main/image', () => ({ downloadImage: mockDownloadImage }))
+vi.mock('../src/main/feishu/platform-tables', () => ({ flushPlatformTables: mockFlushPlatformTables }))
 
 import {
   executeBatchQuery,
@@ -99,6 +101,10 @@ describe('executeBatchQuery', () => {
     const events = sendMock.mock.calls.map(([channel, data]) => ({ channel, event: data.event }))
     expect(events.filter(e => e.channel === 'query:progress' && e.event === 'query:start')).toHaveLength(2)
     expect(events.filter(e => e.event === 'query:complete')).toHaveLength(2)
+
+    // The per-platform Feishu flush sees the finished batch once.
+    expect(mockFlushPlatformTables).toHaveBeenCalledTimes(1)
+    expect(mockFlushPlatformTables).toHaveBeenCalledWith(results)
   })
 
   it('only queries the platforms passed in', async () => {
@@ -177,6 +183,8 @@ describe('executeBatchQuery', () => {
     const results: BatchQueryResult[] = await promise
     expect(results).toEqual([])
     expect(sendMock.mock.calls.some(([, data]) => data.event === 'query:batch-cancelled')).toBe(true)
+    // A cancelled batch must not archive anything.
+    expect(mockFlushPlatformTables).not.toHaveBeenCalled()
   })
 
   it('runs Taobao as a second-phase keyword source and Xianyu as a second-phase image source', async () => {

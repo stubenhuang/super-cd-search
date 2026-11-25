@@ -5,7 +5,7 @@ import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, parseJPYPrice } from './types'
+import { notFound, parseJPYPrice, withRawItems } from './types'
 import { runPlatformQuery } from './runner'
 import { getCachedProductData, cacheProductData } from './cache'
 import { waitForResultOrNoResult } from './wait'
@@ -155,7 +155,7 @@ async function queryYahooWeb(catalogNumber: string, signal?: AbortSignal): Promi
       details = detailsOrUndefined(await getYahooProductDetails(page, link, signal))
     }
 
-    return {
+    return withRawItems({
       platform: 'yahoo',
       name,
       artist: storeName,
@@ -165,7 +165,7 @@ async function queryYahooWeb(catalogNumber: string, signal?: AbortSignal): Promi
       link,
       status: 'found',
       details
-    }
+    }, [{ name, link, coverUrl, priceText, storeName }])
   } finally {
     await browserPool.release(browser, page)
   }

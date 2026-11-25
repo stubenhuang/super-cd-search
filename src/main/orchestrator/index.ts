@@ -14,6 +14,7 @@ import { QueryEvents } from '../../shared/events'
 import { logger } from '../logger'
 import { downloadImage } from '../image'
 import { broadcastToWindows } from '../window-broadcast'
+import { flushPlatformTables } from '../feishu/platform-tables'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult, Platform } from '../../shared/types'
 
 const MAX_CONCURRENT_CATALOGS = 3
@@ -310,6 +311,9 @@ export async function executeBatchQuery(catalogNumbers: string[], platforms: Pla
       durationMs: Date.now() - batchStartedAt,
       cancelled: signal.aborted
     })
+    // A cancelled batch writes nothing; the flush is fire-and-forget and never
+    // blocks this return. Only raw items from completed catalogs are archived.
+    if (!signal.aborted) flushPlatformTables(completed)
     return completed
   } finally {
     batchQueryRunning = false

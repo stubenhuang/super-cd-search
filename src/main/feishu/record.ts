@@ -1,6 +1,6 @@
-import type { CDDetails, QueryResult } from '../../shared/types'
+import type { CDDetails, QueryResult, RawItemValue } from '../../shared/types'
 import { DETAIL_KEYS, aggregateDetails, fillMissingDetails } from '../../shared/details'
-import { FEISHU_PRIMARY_FIELD, type FeishuFieldName, type FeishuSyncRow } from '../../shared/feishu'
+import { FEISHU_PRIMARY_FIELD, type FeishuSyncRow } from '../../shared/feishu'
 import { pickPrimaryResult } from '../publish/draft'
 
 /**
@@ -26,11 +26,16 @@ function finiteOrNull(value: number | null): number | null {
 /**
  * Empty values are omitted entirely rather than written as ''. Feishu treats
  * an explicitly empty field as "clear the old value", which would wipe details
- * that a later LLM enrichment run did not touch.
+ * that a later LLM enrichment run did not touch. Scalars are stringified so
+ * per-platform raw records (numbers/booleans) can reuse the same helper.
  */
-function putField(fields: Record<string, string>, name: FeishuFieldName, value: string | null | undefined): void {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    fields[name] = value
+export function putField(fields: Record<string, string>, name: string, value: RawItemValue | undefined): void {
+  if (typeof value === 'string') {
+    if (value.trim().length > 0) fields[name] = value
+  } else if (typeof value === 'number' && Number.isFinite(value)) {
+    fields[name] = String(value)
+  } else if (typeof value === 'boolean') {
+    fields[name] = String(value)
   }
 }
 

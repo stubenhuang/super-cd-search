@@ -6,7 +6,7 @@ import { browserPool } from '../browser'
 import { abortableDelay, gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, queryError } from './types'
+import { notFound, queryError, withRawItems } from './types'
 import { runPlatformQuery } from './runner'
 import { type Page, type ElementHandle } from 'puppeteer'
 import { logger } from '../logger'
@@ -125,7 +125,7 @@ async function queryEbayApi(catalogNumber: string, signal?: AbortSignal): Promis
     first.itemWebUrl ? getEbayItemDetails(first.itemWebUrl, token, signal) : Promise.resolve(undefined)
   ])
 
-  return {
+  return withRawItems({
     platform: 'ebay',
     name: first.title,
     artist: null,
@@ -135,7 +135,13 @@ async function queryEbayApi(catalogNumber: string, signal?: AbortSignal): Promis
     link: first.itemWebUrl || null,
     status: 'found',
     details
-  }
+  }, items.map(item => ({
+    title: item.title,
+    imageUrl: item.image?.imageUrl ?? null,
+    itemWebUrl: item.itemWebUrl ?? null,
+    priceValue: item.price?.value ?? null,
+    priceCurrency: item.price?.currency ?? null
+  })))
 }
 
 async function getEbayItemDetails(itemWebUrl: string, token: string, signal?: AbortSignal): Promise<CDDetails> {
@@ -323,7 +329,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
 
     return {
       success: true,
-      result: {
+      result: withRawItems({
         platform: 'ebay',
         name,
         artist: null,
@@ -333,7 +339,7 @@ async function queryEbayDomain(page: Page, domain: string, catalogNumber: string
         link,
         status: 'found'
         // eBay doesn't provide detailed metadata like label/format/country
-      }
+      }, [{ title: name, imageUrl: coverUrl, itemWebUrl: link, priceText }])
     }
   } catch (err) {
     throwIfAborted(signal)

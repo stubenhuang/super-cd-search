@@ -744,7 +744,21 @@ export function SettingsPanel({ isOpen, onClose, section }: SettingsPanelProps) 
                   placeholder={t('feishu.tableIdPlaceholder')}
                 />
               </div>
+              <div className="st-field">
+                <label className="st-label">
+                  <span className="st-label-icon">◈</span> {t('feishu.mappingTableId')}
+                </label>
+                <input
+                  type="text"
+                  className="st-input"
+                  data-field="feishu-mappingTableId"
+                  value={feishu.mappingTableId}
+                  onChange={e => setFeishu(prev => ({ ...prev, mappingTableId: e.target.value }))}
+                  placeholder={t('feishu.mappingTableIdPlaceholder')}
+                />
+              </div>
               <div className="st-field-hint">{t('feishu.hint')}</div>
+              <div className="st-field-hint">{t('feishu.mappingHint')}</div>
             </div>
             <div className="st-cf-actions">
               <button

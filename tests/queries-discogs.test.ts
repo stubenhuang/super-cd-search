@@ -117,6 +117,10 @@ describe('queryDiscogs', () => {
         }
       })
       expect(mockBrowserPool.acquire).not.toHaveBeenCalled()
+      // Full ranked hit list (not just the selected one) is kept for the platform table.
+      expect(result.rawItems).toHaveLength(2)
+      expect(result.rawItems?.[0]).toMatchObject({ id: 2, title: 'Wrong - Album', catno: 'OTHER-1', uri: '/release/2' })
+      expect(result.rawItems?.[1]).toMatchObject({ id: 1, title: 'Artist - UCCG-90530 Album', catno: 'UCCG-90530', cover_image: 'https://cdn/cover.jpg' })
     })
 
     it('appends the format free-text field across entries and skips blank ones', async () => {

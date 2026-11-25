@@ -5,7 +5,7 @@ import { errorMessage } from '../../shared/utils'
 import { browserPool } from '../browser'
 import { gotoWithAbort } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, parseJPYPrice } from './types'
+import { notFound, parseJPYPrice, withRawItems } from './types'
 import { runPlatformQuery } from './runner'
 import { waitForResultOrNoResult } from './wait'
 import { logger } from '../logger'
@@ -108,7 +108,7 @@ async function queryTowerWeb(catalogNumber: string, signal?: AbortSignal): Promi
       genre: null
     }
 
-    return {
+    return withRawItems({
       platform: 'tower',
       name: extracted.name,
       artist: extracted.artist,
@@ -118,7 +118,17 @@ async function queryTowerWeb(catalogNumber: string, signal?: AbortSignal): Promi
       link,
       status: 'found',
       details: detailsOrUndefined(details)
-    }
+    }, [{
+      name: extracted.name,
+      artist: extracted.artist,
+      coverUrl,
+      link,
+      priceText: extracted.priceText,
+      format: extracted.format,
+      released: extracted.released,
+      label: extracted.label,
+      country: extracted.country
+    }])
   } finally {
     await browserPool.release(browser, page)
   }

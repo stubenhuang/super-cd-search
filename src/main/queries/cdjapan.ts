@@ -3,7 +3,7 @@ import { browserPool } from '../browser'
 import { gotoWithAbort } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult, CDDetails } from './types'
-import { notFound } from './types'
+import { notFound, withRawItems } from './types'
 import { runPlatformQuery } from './runner'
 import { logger } from '../logger'
 import { detailsOrUndefined } from '../../shared/details'
@@ -92,7 +92,7 @@ async function queryCdjapanWeb(catalogNumber: string, signal?: AbortSignal): Pro
       genre: null
     }
 
-    return {
+    return withRawItems({
       platform: 'cdjapan',
       name: extracted.name,
       artist: extracted.artist,
@@ -102,7 +102,15 @@ async function queryCdjapanWeb(catalogNumber: string, signal?: AbortSignal): Pro
       link: productUrl,
       status: 'found',
       details: detailsOrUndefined(details)
-    }
+    }, [{
+      name: extracted.name,
+      artist: extracted.artist,
+      coverUrl,
+      releaseDate: extracted.released,
+      priceText: extracted.priceText,
+      priceCurrency: extracted.priceCurrency,
+      format: extracted.format
+    }])
   } finally {
     await browserPool.release(browser, page)
   }

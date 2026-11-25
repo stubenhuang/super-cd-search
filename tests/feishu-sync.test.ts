@@ -36,7 +36,8 @@ const CONFIG: FeishuSettings = {
   appId: 'cli_a1',
   appSecret: 'secret',
   appToken: 'appTOKEN',
-  tableId: 'tblXYZ'
+  tableId: 'tblXYZ',
+  mappingTableId: 'tblMAP'
 }
 
 function found(name: string): QueryResult {

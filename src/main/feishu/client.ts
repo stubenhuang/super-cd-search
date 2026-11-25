@@ -41,12 +41,13 @@ interface TokenCache {
 }
 
 let tokenCache: TokenCache | null = null
-let fieldsEnsuredKey: string | null = null
+/** Field sets already ensured, keyed by app_token:table_id. Each table has one fixed schema. */
+const fieldsEnsured = new Set<string>()
 
 /** Test hook: drop the in-memory token and field caches between cases. */
 export function resetFeishuClientState(): void {
   tokenCache = null
-  fieldsEnsuredKey = null
+  fieldsEnsured.clear()
 }
 
 /** Read the stored config, filling in defaults for keys never saved. */
@@ -59,14 +60,15 @@ export function isFeishuConfigured(settings: FeishuSettings): boolean {
     .every(value => typeof value === 'string' && value.trim().length > 0)
 }
 
-/** Trim the four credentials so stray whitespace never produces a bad request. */
+/** Trim the credentials so stray whitespace never produces a bad request. */
 export function normalizeFeishuSettings(settings: FeishuSettings): FeishuSettings {
   return {
     enabled: settings.enabled,
     appId: settings.appId.trim(),
     appSecret: settings.appSecret.trim(),
     appToken: settings.appToken.trim(),
-    tableId: settings.tableId.trim()
+    tableId: settings.tableId.trim(),
+    mappingTableId: (settings.mappingTableId ?? '').trim()
   }
 }
 
@@ -100,6 +102,24 @@ interface RecordsResponse extends ApiEnvelope {
 
 interface BatchResponse extends ApiEnvelope {
   data?: { records?: unknown[] }
+}
+
+interface CreateTableResponse extends ApiEnvelope {
+  data?: { table_id?: string }
+}
+
+interface TablesResponse extends ApiEnvelope {
+  data?: {
+    items?: Array<{ table_id?: string; name?: string }>
+    has_more?: boolean
+    page_token?: string
+  }
+}
+
+/** One record as returned by GET /records, with its raw (unflattened) field values. */
+export interface FeishuRecord {
+  record_id: string
+  fields: Record<string, unknown>
 }
 
 interface FetchOptions {
@@ -233,13 +253,78 @@ function tablePath(settings: FeishuSettings, suffix: string): string {
   return `/bitable/v1/apps/${encodeURIComponent(settings.appToken)}/tables/${encodeURIComponent(settings.tableId)}/${suffix}`
 }
 
-interface FieldInfo {
+/** App-scoped path (no table id) — used for creating/listing data tables. */
+export function appPath(settings: FeishuSettings, suffix: string): string {
+  return `/bitable/v1/apps/${encodeURIComponent(settings.appToken)}/${suffix}`
+}
+
+/**
+ * Create a data table with the given columns. Feishu makes the FIRST field the
+ * primary/index field, so callers must put 编号 first. Returns the new table_id.
+ */
+export async function createTable(
+  settings: FeishuSettings,
+  name: string,
+  fieldNames: readonly string[],
+  signal?: AbortSignal
+): Promise<string> {
+  const body = await callApi<CreateTableResponse>(settings, appPath(settings, 'tables'), {
+    method: 'POST',
+    body: {
+      table: {
+        name,
+        fields: fieldNames.map(fieldName => ({ field_name: fieldName, type: FEISHU_FIELD_TYPE_TEXT }))
+      }
+    },
+    signal
+  })
+  const tableId = body.data?.table_id
+  if (!tableId) throw new Error('飞书新建数据表成功但未返回 table_id')
+  return tableId
+}
+
+/** List the tables of one Bitable app (paged), used to recover from 1254013. */
+export async function listTables(
+  settings: FeishuSettings,
+  signal?: AbortSignal
+): Promise<Array<{ tableId: string; name: string }>> {
+  const tables: Array<{ tableId: string; name: string }> = []
+  let pageToken: string | undefined
+  do {
+    const params = new URLSearchParams({ page_size: '100' })
+    if (pageToken) params.set('page_token', pageToken)
+    const body = await callApi<TablesResponse>(settings, `${appPath(settings, 'tables')}?${params}`, { method: 'GET', signal })
+    for (const item of body.data?.items ?? []) {
+      if (item.table_id && item.name) tables.push({ tableId: item.table_id, name: item.name })
+    }
+    pageToken = body.data?.has_more ? body.data?.page_token : undefined
+  } while (pageToken)
+  return tables
+}
+
+/** List all records of a table (paged). Paging is a URL query param, not a body field. */
+export async function listRecords(settings: FeishuSettings, signal?: AbortSignal): Promise<FeishuRecord[]> {
+  const records: FeishuRecord[] = []
+  let pageToken: string | undefined
+  do {
+    const params = new URLSearchParams({ page_size: '100' })
+    if (pageToken) params.set('page_token', pageToken)
+    const body = await callApi<RecordsResponse>(settings, `${tablePath(settings, 'records')}?${params}`, { method: 'GET', signal })
+    for (const item of body.data?.items ?? []) {
+      if (item.record_id) records.push({ record_id: item.record_id, fields: item.fields ?? {} })
+    }
+    pageToken = body.data?.has_more ? body.data?.page_token : undefined
+  } while (pageToken)
+  return records
+}
+
+export interface FieldInfo {
   field_name: string
   is_primary: boolean
 }
 
 /** Read every field (paged) with its primary/index flag. */
-async function listFields(settings: FeishuSettings, signal?: AbortSignal): Promise<FieldInfo[]> {
+export async function listFields(settings: FeishuSettings, signal?: AbortSignal): Promise<FieldInfo[]> {
   const fields: FieldInfo[] = []
   let pageToken: string | undefined
   do {
@@ -258,7 +343,7 @@ async function listFields(settings: FeishuSettings, signal?: AbortSignal): Promi
  * Feishu always returns exactly one primary field. Fall back to the first
  * column for responses that omit the flag — the primary field is always first.
  */
-function primaryFieldName(fields: FieldInfo[]): string {
+export function primaryFieldName(fields: FieldInfo[]): string {
   return (fields.find(field => field.is_primary) ?? fields[0])?.field_name ?? ''
 }
 
@@ -276,7 +361,7 @@ function assertPrimaryField(fields: FieldInfo[]): void {
   }
 }
 
-async function createField(settings: FeishuSettings, fieldName: string, signal?: AbortSignal): Promise<void> {
+export async function createField(settings: FeishuSettings, fieldName: string, signal?: AbortSignal): Promise<void> {
   await callApi<ApiEnvelope>(settings, tablePath(settings, 'fields'), {
     method: 'POST',
     body: { field_name: fieldName, type: FEISHU_FIELD_TYPE_TEXT },
@@ -285,25 +370,30 @@ async function createField(settings: FeishuSettings, fieldName: string, signal?:
 }
 
 /**
- * Create the eleven non-primary columns that are missing; 编号 must already be
- * the table's primary (first) column. Cached per app_token/table_id pair; a
- * failed run leaves the cache unset so the next sync retries.
+ * Create the non-primary columns that are missing; 编号 must already be the
+ * table's primary (first) column. Cached per app_token/table_id pair; a failed
+ * run leaves the cache unset so the next sync retries. A custom field list is
+ * used by the per-platform data tables (each has its own schema).
  */
-export async function ensureFields(settings: FeishuSettings, signal?: AbortSignal): Promise<void> {
+export async function ensureFields(
+  settings: FeishuSettings,
+  fieldNames: readonly string[] = FEISHU_AUTO_FIELDS,
+  signal?: AbortSignal
+): Promise<void> {
   const key = `${settings.appToken}:${settings.tableId}`
-  if (fieldsEnsuredKey === key) return
+  if (fieldsEnsured.has(key)) return
 
   const fields = await listFields(settings, signal)
   assertPrimaryField(fields)
   const existing = new Set(fields.map(field => field.field_name))
   let created = 0
-  for (const name of FEISHU_AUTO_FIELDS) {
+  for (const name of fieldNames) {
     if (!existing.has(name)) {
       await createField(settings, name, signal)
       created++
     }
   }
-  fieldsEnsuredKey = key
+  fieldsEnsured.add(key)
   logger.debug('feishu', 'fields ensured', { created })
 }
 

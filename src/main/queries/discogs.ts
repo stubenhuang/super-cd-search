@@ -4,8 +4,8 @@ import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { convertToUSDWithFallback, type Currency } from '../currency'
 import type { QueryResult } from './types'
-import type { CDDetails } from '../../shared/types'
-import { notFound } from './types'
+import type { CDDetails, RawItem } from '../../shared/types'
+import { notFound, withRawItems } from './types'
 import { runPlatformQuery } from './runner'
 import { cacheQueryResult } from './cache'
 import { waitForResultOrNoResult } from './wait'
@@ -63,6 +63,21 @@ export interface DiscogsSearchHit {
   cover_image?: string
   uri?: string
   community?: { have: number; want: number }
+}
+
+/** Flatten one database-search hit into the discogs platform table's columns. */
+function discogsHitToRawItem(hit: DiscogsSearchHit): RawItem {
+  return {
+    id: hit.id,
+    title: hit.title,
+    catno: hit.catno ?? null,
+    year: hit.year ?? null,
+    format: hit.format?.join(', ') ?? null,
+    cover_image: hit.cover_image ?? null,
+    uri: hit.uri ?? null,
+    communityHave: hit.community?.have ?? null,
+    communityWant: hit.community?.want ?? null
+  }
 }
 
 export type DiscogsBarcodeLookupStatus = 'found' | 'not_found' | 'no_token' | 'error'
@@ -254,7 +269,7 @@ async function buildDiscogsResultFromHit(hit: DiscogsSearchHit, token: string, s
     }
   }
 
-  return {
+  return withRawItems({
     platform: 'discogs',
     name,
     artist,
@@ -264,7 +279,7 @@ async function buildDiscogsResultFromHit(hit: DiscogsSearchHit, token: string, s
     link: hit.uri ? `${DISCOGS_WEB_URL}${hit.uri}` : null,
     status: 'found',
     details
-  }
+  }, [discogsHitToRawItem(hit)])
 }
 
 async function queryDiscogsApi(catalogNumber: string, token: string, signal?: AbortSignal): Promise<QueryResult> {
@@ -303,7 +318,9 @@ async function queryDiscogsApi(catalogNumber: string, token: string, signal?: Ab
     title: first.title,
     exactCatalogMatch: !!exactMatch
   })
-  return buildDiscogsResultFromHit(first, token, signal)
+  const result = await buildDiscogsResultFromHit(first, token, signal)
+  // Replace the single-item default with the full ranked list of search hits.
+  return withRawItems(result, results.map(discogsHitToRawItem))
 }
 
 /**
@@ -411,7 +428,7 @@ async function queryDiscogsWeb(catalogNumber: string, signal?: AbortSignal): Pro
       return notFound('discogs')
     }
 
-    return {
+    return withRawItems({
       platform: 'discogs',
       name,
       artist,
@@ -420,7 +437,7 @@ async function queryDiscogsWeb(catalogNumber: string, signal?: AbortSignal): Pro
       coverUrl,
       link: link ? `${DISCOGS_WEB_URL}${link}` : null,
       status: 'found'
-    }
+    }, [{ title: name, cover_image: coverUrl, uri: link }])
   } finally {
     await browserPool.release(browser, page)
   }

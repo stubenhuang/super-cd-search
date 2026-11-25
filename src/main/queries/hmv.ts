@@ -5,7 +5,7 @@ import { getSetting } from '../settings'
 import { browserPool } from '../browser'
 import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, parseJPYPrice } from './types'
+import { notFound, parseJPYPrice, withRawItems } from './types'
 import { getCachedProductData, cacheProductData } from './cache'
 import { runPlatformQuery } from './runner'
 import { waitForResultOrNoResult } from './wait'
@@ -220,7 +220,7 @@ async function queryHmvWeb(catalogNumber: string, signal?: AbortSignal): Promise
       details = detailsOrUndefined(productData.details)
     }
 
-    return {
+    return withRawItems({
       platform: 'hmv',
       name,
       artist,
@@ -230,7 +230,7 @@ async function queryHmvWeb(catalogNumber: string, signal?: AbortSignal): Promise
       link,
       status: 'found',
       details
-    }
+    }, [{ name, artist, coverUrl, link, priceText: searchPriceText }])
   } finally {
     await browserPool.release(browser, page)
   }

@@ -1,7 +1,7 @@
 import type { QueryResult } from '../../shared/types'
-import { queryError } from './types'
+import { queryError, withRawItems } from './types'
 import { runPlatformQuery } from './runner'
-import { listingsToQueryResult } from './apify-results'
+import { apifyListingsToRawItems, listingsToQueryResult } from './apify-results'
 import { searchTaobaoByKeyword, ApifyClientError } from '../apify/client'
 import { getSetting } from '../settings'
 import { resolveApifySettings } from '../../shared/apify'
@@ -33,7 +33,8 @@ export function queryTaobao(
       const listings = await searchTaobaoByKeyword(keyword, runSignal)
       logger.debug('queries.taobao', 'actor listings', { catalogNumber, keyword, count: listings.length })
       const settings = resolveApifySettings(getSetting('apify'))
-      return listingsToQueryResult('taobao', listings, settings.num)
+      const result = await listingsToQueryResult('taobao', listings, settings.num)
+      return withRawItems(result, apifyListingsToRawItems(listings))
     }
   })
 }

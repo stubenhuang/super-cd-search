@@ -353,8 +353,9 @@ try {
   await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-apify.png') })
   checkScreenshot('Apify 搜索源设置分区', join(ARTIFACTS, 'shot-6b-apify.png'))
 
-  // 6b-3. The Feishu archiving section must expose the master switch and all
-  //       four credential inputs (one of them a password field).
+  // 6b-3. The Feishu archiving section must expose the master switch, all
+  //       four credential inputs (one of them a password field) and the
+  //       mapping-table id input.
   const feishuNav = window.locator('.settings-nav-item', { hasText: '飞书多维表格' })
   check('设置导航出现「飞书多维表格」分区', (await feishuNav.count()) === 1)
   await feishuNav.click()
@@ -365,10 +366,17 @@ try {
   check('飞书分区提供四个凭证输入框', feishuCounts.every(count => count === 1), JSON.stringify(feishuCounts))
   check('飞书分区把 App Secret 作为密码输入框',
     (await window.locator('[data-field="feishu-appSecret"][type="password"]').count()) === 1)
+  check('飞书分区提供映射表 Table ID 输入框',
+    (await window.locator('[data-field="feishu-mappingTableId"]').count()) === 1)
   check('飞书分区提供测试连接按钮',
     (await window.locator('.st-section-content .st-btn-cancel', { hasText: '测试连接' }).count()) === 1)
   await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-feishu.png') })
   checkScreenshot('飞书多维表格设置分区', join(ARTIFACTS, 'shot-6b-feishu.png'))
+  // The mapping-table input sits below the fold; scroll to it for a visual check.
+  await window.locator('[data-field="feishu-mappingTableId"]').scrollIntoViewIfNeeded()
+  await window.waitForTimeout(200)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-6b-feishu-mapping.png') })
+  checkScreenshot('飞书映射表 Table ID 输入框', join(ARTIFACTS, 'shot-6b-feishu-mapping.png'))
 
   await window.locator('.settings-nav-item', { hasText: '搜索源' }).click()
   await window.waitForTimeout(200)

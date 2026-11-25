@@ -22,11 +22,11 @@ import {
 import { buildFeishuFields } from './record'
 
 /**
- * Search, deep dig and smart generation finish within seconds of each other.
- * Serializing syncs means the second run always sees the record ids created by
- * the first, so the same catalog number is updated instead of inserted twice.
+ * Aggregate-table syncs, deep dig and per-platform flushes all funnel through
+ * this queue. Serializing means the second run sees the record ids created by
+ * the first, and two writes never hit the same Feishu table concurrently.
  */
-let queue: Promise<FeishuSyncResult> = Promise.resolve(emptySyncResult('skipped'))
+let queue: Promise<unknown> = Promise.resolve(undefined)
 
 /**
  * records/search can lag behind a just-finished batch_create, so remember the
@@ -44,14 +44,14 @@ const createdIds = new Map<string, CachedRecordId>()
 /** Test hook: drop the id cache and the serialization queue between cases. */
 export function resetFeishuSyncState(): void {
   createdIds.clear()
-  queue = Promise.resolve(emptySyncResult('skipped'))
+  queue = Promise.resolve(undefined)
 }
 
-function cacheKey(settings: FeishuSettings, catalogNumber: string): string {
-  return `${settings.appToken}:${settings.tableId}:${catalogNumber}`
+function cacheKey(settings: FeishuSettings, key: string): string {
+  return `${settings.appToken}:${settings.tableId}:${key}`
 }
 
-function purgeCreatedIds(now: number): void {
+export function purgeCreatedIds(now: number): void {
   for (const [key, entry] of createdIds) {
     if (now - entry.at > CREATED_ID_TTL_MS) createdIds.delete(key)
   }
@@ -61,10 +61,33 @@ function purgeCreatedIds(now: number): void {
   }
 }
 
+/**
+ * Run one Feishu task on the shared serialization queue. A failed task never
+ * poisons the queue for the next one. Used by both the aggregate sync and the
+ * per-platform flush.
+ */
+export function enqueueFeishu<T>(task: () => Promise<T>): Promise<T> {
+  const result = queue.then(task)
+  queue = result.then(() => undefined, () => undefined)
+  return result
+}
+
+/** Look up a record id created moments ago (records/search can lag behind). */
+export function getCachedCreatedId(settings: FeishuSettings, key: string): string | undefined {
+  return createdIds.get(cacheKey(settings, key))?.id
+}
+
+/** Remember freshly created record ids, positional by key. */
+export function rememberCreatedIds(settings: FeishuSettings, keys: string[], ids: string[], now: number): void {
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]
+    const key = keys[i]
+    if (id && key) createdIds.set(cacheKey(settings, key), { id, at: now })
+  }
+}
+
 export function syncToFeishu(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
-  const task = queue.then(() => doSync(payload), () => doSync(payload))
-  queue = task
-  return task
+  return enqueueFeishu(() => doSync(payload))
 }
 
 async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {

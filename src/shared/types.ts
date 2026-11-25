@@ -21,6 +21,12 @@ export interface CDDetails {
   genre: string | null
 }
 
+/** Scalar value for one raw scraper item; kept flat so it is JSON/cache-safe. */
+export type RawItemValue = string | number | boolean | null
+
+/** One raw parsed listing, flattened to Feishu-writable scalars (no nested objects/arrays). */
+export type RawItem = Record<string, RawItemValue>
+
 export interface QueryResult {
   platform: Platform
   name: string | null
@@ -32,6 +38,8 @@ export interface QueryResult {
   status: QueryStatus
   error?: string
   details?: CDDetails
+  /** Raw scraper items for the per-platform Feishu tables; absent on not_found/error. */
+  rawItems?: RawItem[]
 }
 
 /** Settings for syncing search results into a Feishu Bitable table. */
@@ -44,6 +52,8 @@ export interface FeishuSettings {
   /** Bitable app token and table id taken from the table URL. */
   appToken: string
   tableId: string
+  /** Table id of the mapping table (platform id -> per-platform table id). */
+  mappingTableId: string
 }
 
 /** Settings for the Apify-powered reverse-image-search sources. */

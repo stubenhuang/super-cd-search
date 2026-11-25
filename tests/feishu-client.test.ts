@@ -9,6 +9,7 @@ import {
   ensureFields,
   findRecordIds,
   isFeishuConfigured,
+  normalizeFeishuSettings,
   parsePrimaryFieldText,
   readFeishuSettings,
   resetFeishuClientState,
@@ -21,7 +22,8 @@ const CONFIG: FeishuSettings = {
   appId: 'cli_a1',
   appSecret: 'secret-xyz',
   appToken: 'appTOKEN',
-  tableId: 'tblXYZ'
+  tableId: 'tblXYZ',
+  mappingTableId: 'tblMAP'
 }
 
 function json(body: unknown, status = 200): Response {
@@ -87,6 +89,14 @@ describe('settings helpers', () => {
     expect(readFeishuSettings()).toEqual({ ...DEFAULT_FEISHU_SETTINGS, appId: 'id' })
     expect(isFeishuConfigured(readFeishuSettings())).toBe(false)
     expect(isFeishuConfigured(CONFIG)).toBe(true)
+  })
+
+  it('normalizeFeishuSettings keeps and trims mappingTableId', () => {
+    expect(normalizeFeishuSettings({ ...CONFIG, mappingTableId: '  tblMAP  ' }))
+      .toEqual({ ...CONFIG, mappingTableId: 'tblMAP' })
+    // Old persisted configs may predate the field; do not drop or crash.
+    expect(normalizeFeishuSettings({ ...CONFIG, mappingTableId: undefined as unknown as string }))
+      .toEqual({ ...CONFIG, mappingTableId: '' })
   })
 })
 

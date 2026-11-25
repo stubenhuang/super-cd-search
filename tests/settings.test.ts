@@ -132,9 +132,9 @@ describe('settings', () => {
     expect(DEFAULT_FEISHU_SETTINGS.enabled).toBe(false)
     expect(PUBLIC_SETTING_KEYS.has('feishu')).toBe(true)
 
-    setSetting('feishu', { ...DEFAULT_FEISHU_SETTINGS, enabled: true, appId: 'cli', appSecret: 'sec', appToken: 'app', tableId: 'tbl' })
+    setSetting('feishu', { ...DEFAULT_FEISHU_SETTINGS, enabled: true, appId: 'cli', appSecret: 'sec', appToken: 'app', tableId: 'tbl', mappingTableId: 'tblMAP' })
     expect(getSettings().feishu).toEqual({
-      ...DEFAULT_FEISHU_SETTINGS, enabled: true, appId: 'cli', appSecret: 'sec', appToken: 'app', tableId: 'tbl'
+      ...DEFAULT_FEISHU_SETTINGS, enabled: true, appId: 'cli', appSecret: 'sec', appToken: 'app', tableId: 'tbl', mappingTableId: 'tblMAP'
     })
 
     setSetting('feishu', { appId: 'only-id' } as typeof DEFAULT_FEISHU_SETTINGS)

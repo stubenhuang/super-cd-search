@@ -6,7 +6,7 @@ import { gotoWithAbort, throwIfAborted } from '../browser/abort'
 import { throttledFetch } from '../throttle'
 import { convertToUSDWithFallback } from '../currency'
 import type { QueryResult, CDDetails } from './types'
-import { notFound, parseJPYPrice } from './types'
+import { notFound, parseJPYPrice, withRawItems } from './types'
 import { getCachedProductData, cacheProductData } from './cache'
 import { runPlatformQuery } from './runner'
 import { waitForResultOrNoResult } from './wait'
@@ -290,7 +290,7 @@ async function queryKojimaWeb(catalogNumber: string, signal?: AbortSignal): Prom
       }
     }
 
-    return {
+    return withRawItems({
       platform: 'kojima',
       name,
       artist: null,
@@ -300,7 +300,7 @@ async function queryKojimaWeb(catalogNumber: string, signal?: AbortSignal): Prom
       link,
       status: 'found',
       details
-    }
+    }, [{ name, coverUrl, link, price: priceMin }])
   } finally {
     await browserPool.release(browser, page)
   }

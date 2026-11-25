@@ -1,7 +1,17 @@
-import type { Platform, QueryResult } from '../../shared/types'
+import type { Platform, QueryResult, RawItem } from '../../shared/types'
 import { convertToUSDWithFallback } from '../currency'
 import { notFound } from './types'
 import type { ApifyListing } from '../apify/client'
+
+/** Keep the raw Apify rows for the per-platform Feishu tables, before collapsing. */
+export function apifyListingsToRawItems(listings: readonly ApifyListing[]): RawItem[] {
+  return listings.map(listing => ({
+    title: listing.title,
+    priceCNY: listing.priceCNY,
+    url: listing.url,
+    coverUrl: listing.coverUrl
+  }))
+}
 
 /**
  * Turn the actor's ranked listings into one QueryResult. The best (first) match

@@ -1,15 +1,16 @@
-import type { CDDetails, FeishuSettings, QueryResult } from './types'
+import type { CDDetails, FeishuSettings, Platform, QueryResult } from './types'
 
 /**
  * Defaults for the Feishu Bitable sink. Syncing stays off until the user opts
- * in and fills in all five values, so a fresh install never makes a request.
+ * in and fills in the credentials, so a fresh install never makes a request.
  */
 export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
   enabled: false,
   appId: '',
   appSecret: '',
   appToken: '',
-  tableId: ''
+  tableId: '',
+  mappingTableId: ''
 }
 
 /**
@@ -49,6 +50,43 @@ export const FEISHU_AUTO_FIELDS: readonly string[] = FEISHU_FIELDS.filter(
 
 /** Feishu Bitable field type 1 = multi-line text. */
 export const FEISHU_FIELD_TYPE_TEXT = 1
+
+/** Column in the mapping table holding the per-platform data table id. */
+export const MAPPING_TARGET_FIELD = 'tableId'
+
+/**
+ * Columns shared by every per-platform data table, besides the primary field.
+ * 目录号 is the catalog number and 序号 is the item's 1-based rank within that
+ * catalog's list; together with 编号 they form a stable upsert key.
+ */
+export const PLATFORM_TABLE_COMMON_FIELDS = ['目录号', '序号'] as const
+
+/**
+ * Per-platform raw columns, curated from what each scraper actually parses.
+ * Values are kept as-is (no USD normalization): the aggregate 汇总表 already
+ * carries USD prices in `priceAll`. Field names must avoid 编号/目录号/序号.
+ */
+export const PLATFORM_TABLE_FIELDS: Record<Platform, readonly string[]> = {
+  discogs: ['id', 'title', 'catno', 'year', 'format', 'cover_image', 'uri', 'communityHave', 'communityWant'],
+  ebay: ['title', 'imageUrl', 'itemWebUrl', 'priceValue', 'priceCurrency', 'priceText'],
+  kojima: ['name', 'coverUrl', 'link', 'price'],
+  hmv: ['name', 'artist', 'coverUrl', 'link', 'priceText'],
+  yahoo: ['name', 'link', 'coverUrl', 'priceText', 'storeName'],
+  cdjapan: ['name', 'artist', 'coverUrl', 'releaseDate', 'priceText', 'priceCurrency', 'format'],
+  tower: ['name', 'artist', 'coverUrl', 'link', 'priceText', 'format', 'released', 'label', 'country'],
+  xianyu: ['title', 'priceCNY', 'url', 'coverUrl'],
+  taobao: ['title', 'priceCNY', 'url', 'coverUrl']
+}
+
+/** Full column list for create-table: the first field becomes the primary/index field. */
+export function platformTableColumns(platform: Platform): string[] {
+  return [FEISHU_PRIMARY_FIELD, ...PLATFORM_TABLE_COMMON_FIELDS, ...PLATFORM_TABLE_FIELDS[platform]]
+}
+
+/** Columns ensureFields adds to an existing per-platform table (primary already exists). */
+export function platformTableAutoColumns(platform: Platform): string[] {
+  return [...PLATFORM_TABLE_COMMON_FIELDS, ...PLATFORM_TABLE_FIELDS[platform]]
+}
 
 /** One catalog number's worth of search data, sent from the renderer. */
 export interface FeishuSyncRow {

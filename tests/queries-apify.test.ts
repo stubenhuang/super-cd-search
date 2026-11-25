@@ -52,6 +52,11 @@ describe('queryTaobao', () => {
       link: 'https://example.com/best',
       coverUrl: 'https://example.com/best.jpg'
     })
+    // The raw listings must survive for the per-platform Feishu tables.
+    expect(result.rawItems).toEqual([
+      { title: 'Best', priceCNY: 70, url: 'https://example.com/best', coverUrl: 'https://example.com/best.jpg' },
+      { title: 'Second', priceCNY: 140, url: 'https://example.com/2', coverUrl: null }
+    ])
   })
 
   it('maps an ApifyClientError to a friendly error result', async () => {
@@ -77,6 +82,10 @@ describe('queryXianyu', () => {
 
     expect(vi.mocked(searchXianyuByImage).mock.calls[0][0]).toBe('BASE64')
     expect(result).toMatchObject({ platform: 'xianyu', status: 'found', priceMin: 10, priceMax: 20 })
+    expect(result.rawItems).toHaveLength(2)
+    expect(result.rawItems?.[0]).toEqual({
+      title: 'Best', priceCNY: 70, url: 'https://example.com/best', coverUrl: 'https://example.com/best.jpg'
+    })
   })
 
   it('maps an ApifyClientError to an error result', async () => {
