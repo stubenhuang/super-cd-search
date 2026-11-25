@@ -7,6 +7,9 @@ import { logger } from '../logger'
 const APIFY_API_BASE = 'https://api.apify.com/v2'
 const REQUEST_TIMEOUT_MS = 60_000
 const POLL_INTERVAL_MS = 2_000
+/** Idempotent reads may be retried; a POST /runs must never be (paid duplicate run). */
+const MAX_NETWORK_ATTEMPTS = 3
+const NETWORK_RETRY_BACKOFF_MS = 500
 const XIANYU_DETAIL_LEVEL = 'summary'
 /** Rank visual matches by similarity so the first item is the closest match. */
 const XIANYU_SORT_BY = 'relevance'
@@ -24,7 +27,7 @@ export interface ApifyListing {
   coverUrl: string | null
 }
 
-export type ApifyErrorCode = 'missing_token' | 'http' | 'run_failed' | 'invalid_response'
+export type ApifyErrorCode = 'missing_token' | 'http' | 'run_failed' | 'invalid_response' | 'network'
 
 export class ApifyClientError extends Error {
   readonly code: ApifyErrorCode
@@ -75,11 +78,32 @@ function parseApifyError(text: string): { type: string | null; message: string |
 }
 
 /**
- * One call to the Apify REST API. The token travels only in the Authorization
- * header — never in the URL — so it cannot leak into logs. A private controller
- * combines the per-request deadline with the caller's (batch) signal.
+ * undici reports transport-level failures as `TypeError: fetch failed`, with
+ * the real reason (ECONNRESET / UND_ERR_SOCKET / ENOTFOUND / ...) in `cause`.
+ * Returning null means "not a retryable transport error".
  */
-async function apifyFetch<T>(path: string, token: string, options: ApifyFetchOptions): Promise<T> {
+function networkCause(err: unknown): string | null {
+  if (!(err instanceof TypeError) || !/fetch failed/i.test(err.message)) return null
+  const cause = (err as Error & { cause?: unknown }).cause as
+    | (Error & { code?: string; errors?: unknown[] })
+    | undefined
+  if (!cause) return 'fetch failed'
+  if (cause.code) return `${cause.code}: ${cause.message}`
+  if (Array.isArray(cause.errors)) {
+    const codes = cause.errors
+      .map(item => (item as NodeJS.ErrnoException | undefined)?.code)
+      .filter((code): code is string => Boolean(code))
+    if (codes.length) return codes.join(', ')
+  }
+  return (cause.message || String(cause)).slice(0, 120)
+}
+
+/**
+ * A single HTTP attempt. The token travels only in the Authorization header —
+ * never in the URL — so it cannot leak into logs. A private controller combines
+ * the per-request deadline with the caller's (batch) signal.
+ */
+async function apifyFetchOnce<T>(path: string, token: string, options: ApifyFetchOptions): Promise<T> {
   const { method, body, signal, timeoutMs = REQUEST_TIMEOUT_MS } = options
   const startedAt = Date.now()
   const controller = new AbortController()
@@ -102,7 +126,14 @@ async function apifyFetch<T>(path: string, token: string, options: ApifyFetchOpt
     logger.debug('apify', 'request response', { path, method, status: response.status, durationMs: Date.now() - startedAt })
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
+      let errorText = ''
+      try {
+        errorText = await response.text()
+      } catch (err) {
+        // A dropped connection (or a cancelled read) while reading the error
+        // body is not a plain status code — let the caller retry / classify it.
+        if (networkCause(err) || (err instanceof Error && err.name === 'AbortError')) throw err
+      }
       const apiError = parseApifyError(errorText)
       const detail = (apiError.message ?? errorText).trim().slice(0, 200)
       logger.debug('apify', 'request failed', { path, method, status: response.status, errorType: apiError.type })
@@ -134,18 +165,48 @@ async function apifyFetch<T>(path: string, token: string, options: ApifyFetchOpt
 
     try {
       return await response.json() as T
-    } catch {
+    } catch (err) {
+      // A connection reset (or cancellation) mid-body is not malformed JSON.
+      if (networkCause(err) || (err instanceof Error && err.name === 'AbortError')) throw err
       throw new ApifyClientError('Apify 返回了无效的 JSON 响应', 'invalid_response')
     }
-  } catch (err) {
-    if (signal?.aborted) throw createAbortError()
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new ApifyClientError('Apify 请求超时，请稍后重试', 'http')
-    }
-    throw err
   } finally {
     clearTimeout(timeoutId)
     signal?.removeEventListener('abort', onExternalAbort)
+  }
+}
+
+/**
+ * Reads (run-status polls, dataset items) are idempotent, so a transient
+ * `fetch failed` is retried a few times — one dropped poll would otherwise
+ * abort an entire paid actor run. The run-start POST is never retried: a lost
+ * response could already have started a run and a retry would start a second.
+ */
+async function apifyFetch<T>(path: string, token: string, options: ApifyFetchOptions): Promise<T> {
+  const { method, signal } = options
+  const maxAttempts = method === 'GET' ? MAX_NETWORK_ATTEMPTS : 1
+
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await apifyFetchOnce<T>(path, token, options)
+    } catch (err) {
+      const cause = networkCause(err)
+      if (signal?.aborted) throw createAbortError()
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new ApifyClientError('Apify 请求超时，请稍后重试', 'http')
+      }
+      if (cause) {
+        if (attempt < maxAttempts) {
+          logger.warn('apify', 'network error, retrying', { path, method, attempt, cause })
+          await abortableDelay(NETWORK_RETRY_BACKOFF_MS * attempt, signal)
+          throwIfAborted(signal)
+          continue
+        }
+        logger.warn('apify', 'network request failed', { path, method, cause })
+        throw new ApifyClientError(`Apify 网络连接失败（${cause}），请检查网络或代理后重试`, 'network')
+      }
+      throw err
+    }
   }
 }
 

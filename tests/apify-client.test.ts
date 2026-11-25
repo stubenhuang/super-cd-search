@@ -27,6 +27,24 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
+/** undici's `TypeError: fetch failed` carries the real reason in `cause`. */
+function fetchFailedError(code: string): TypeError {
+  const cause = Object.assign(new Error(`socket error (${code})`), { code })
+  const err = new TypeError('fetch failed')
+  Object.assign(err, { cause })
+  return err
+}
+
+/** A 200 whose body stream dies mid-read. */
+function brokenBodyResponse(): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: () => Promise.reject(fetchFailedError('UND_ERR_SOCKET')),
+    text: () => Promise.resolve('')
+  } as unknown as Response
+}
+
 beforeEach(() => {
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
@@ -243,6 +261,63 @@ describe('searchTaobaoByImage', () => {
   it('keeps plain-text error bodies as a fallback', async () => {
     fetchMock.mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
     await expect(searchTaobaoByImage('x')).rejects.toThrow(/Apify API 502: bad gateway/)
+  })
+
+  it('retries a transient fetch failed on the run-status poll', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'RUNNING' } }))
+      .mockRejectedValueOnce(fetchFailedError('ECONNRESET'))
+      .mockResolvedValueOnce(jsonResponse({ data: { status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([{ title: 'CD', price: 88, productUrl: 'https://item.taobao.com/1', imageUrl: 'https://img/1.jpg' }]))
+
+    const listings = await searchTaobaoByImage('x')
+
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(listings).toHaveLength(1)
+    expect(listings[0].title).toBe('CD')
+  })
+
+  it('retries a transient fetch failed while reading dataset items', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'SUCCEEDED' } }))
+      .mockRejectedValueOnce(fetchFailedError('UND_ERR_SOCKET'))
+      .mockResolvedValueOnce(jsonResponse([{ title: 'CD', price: 50 }]))
+
+    expect(await searchTaobaoByImage('x')).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('retries a dropped connection mid-body instead of calling it invalid JSON', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'RUNNING' } }))
+      .mockResolvedValueOnce(brokenBodyResponse())
+      .mockResolvedValueOnce(jsonResponse({ data: { status: 'SUCCEEDED' } }))
+      .mockResolvedValueOnce(jsonResponse([{ title: 'CD', price: 88 }]))
+
+    expect(await searchTaobaoByImage('x')).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('never retries the run-start POST and reports the underlying cause', async () => {
+    fetchMock.mockRejectedValueOnce(fetchFailedError('ENOTFOUND'))
+
+    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(err.code).toBe('network')
+    expect(err.message).toContain('网络连接失败')
+    expect(err.message).toContain('ENOTFOUND')
+  })
+
+  it('gives up after the bounded GET retries with a readable cause', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'r', defaultDatasetId: 'd', status: 'RUNNING' } }))
+      .mockRejectedValue(fetchFailedError('ECONNRESET'))
+
+    const err = await searchTaobaoByImage('x').catch(e => e) as ApifyClientError
+    expect(err.code).toBe('network')
+    expect(err.message).toContain('ECONNRESET')
+    // 1 POST + 3 GET attempts, no more.
+    expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
   it('reports a non-ok status with its code', async () => {
