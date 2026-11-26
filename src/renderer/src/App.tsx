@@ -5,6 +5,7 @@ import type { SectionKey } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
 import { PlatformDetailPanel } from './PlatformDetailPanel'
+import { SummaryTable } from './SummaryTable'
 import { FlowDialog, type AutoFlowState } from './FlowDialog'
 import { aggregateDetails, missingDetailKeys } from '../../shared/details'
 import { isLlmConfigured } from '../../shared/llm'
@@ -12,7 +13,6 @@ import { errorMessage, normalizeCatalogNumber } from '../../shared/utils'
 import { platformLabel, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, resolveDeepDigPlatforms } from '../../shared/platforms'
 import { makeProgressKey, buildProgressByCatalog, clearProgressEntries, countCompletedCatalogs } from '../../shared/progress'
 import { QueryEvents } from '../../shared/events'
-import { useCoverImage } from './hooks/useCoverImage'
 import { useUpdateState } from './hooks/useUpdateState'
 import { UpdateBanner } from './UpdateBanner'
 import { useI18n } from './i18n'
@@ -57,145 +57,22 @@ function hasCompleteDetails(results: QueryResult[], enrichedDetails?: CDDetails)
   return missingDetailKeys(merged).length === 0
 }
 
-interface PlatformResultRowProps {
-  result: QueryResult
-  isLowestPrice: boolean
-  isHighestPrice: boolean
-  displayCurrency: DisplayCurrency
-  usdToCnyRate: number | null
-}
-
-const PlatformResultRow = React.memo(function PlatformResultRow({ result, isLowestPrice, isHighestPrice, displayCurrency, usdToCnyRate }: PlatformResultRowProps) {
-  const { t } = useI18n()
-  const {
-    containerRef: imageContainerRef,
-    imageData,
-    error: imageError,
-    loaded: imageLoaded,
-    onLoad,
-    onError
-  } = useCoverImage(result.coverUrl, { size: 160, lazy: true })
-
-  const formatPrice = (min: number | null, max: number | null): string => {
-    if (min === null && max === null) return '-'
-
-    const formatSingle = (usd: number): string => {
-      if (displayCurrency === 'CNY' && usdToCnyRate !== null) {
-        return `¥${(usd * usdToCnyRate).toFixed(2)}`
-      }
-      return `$${usd.toFixed(2)}`
-    }
-
-    if (min === null || max === null) {
-      const price = min ?? max
-      return price !== null ? formatSingle(price) : '-'
-    }
-    if (min === max) return formatSingle(min)
-    return `${formatSingle(min)} - ${formatSingle(max)}`
-  }
-
-  const getPriceLabel = (min: number | null, max: number | null): string => {
-    if (min === null && max === null) return ''
-    if (min === null || max === null) return t('result.fixedPrice')
-    if (min === max) return t('result.fixedPrice')
-    return t('result.priceRange')
-  }
-
-  const handleViewClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
-    e.preventDefault()
-    window.electronAPI.openExternal(url).catch(err => {
-      window.electronAPI.log('warn', 'result.externalLink', 'failed to open external link', {
-        error: errorMessage(err)
-      })
-    })
-  }
-
-  const cardClass = `platform-card ${result.status}`
-
-  return (
-    <div className={cardClass} data-platform={result.platform}>
-      <div className="brand-bar" />
-      {isLowestPrice && <span className="price-badge lowest">{t('result.lowest')}</span>}
-      {isHighestPrice && <span className="price-badge highest">{t('result.highest')}</span>}
-      <div className="platform-card-content">
-        <div className="platform-card-name">{platformLabel(result.platform)}</div>
-        <div className="platform-card-body">
-          <div className="platform-card-image" ref={imageContainerRef}>
-            {result.coverUrl && !imageError ? (
-              <>
-                {!imageLoaded && <div className="image-placeholder" />}
-                <img
-                  src={imageData || ''}
-                  alt={result.name || 'Cover'}
-                  className={`cover-thumbnail ${imageLoaded ? 'loaded' : ''}`}
-                  onLoad={onLoad}
-                  onError={onError}
-                  style={{ display: imageData ? 'block' : 'none' }}
-                />
-              </>
-            ) : (
-              <div className="image-placeholder">{t('result.noImage')}</div>
-            )}
-          </div>
-          <div className="platform-card-details">
-            {result.status === 'found' ? (
-              <>
-                <div className="price">{formatPrice(result.priceMin, result.priceMax)}</div>
-                <div className="price-label">{getPriceLabel(result.priceMin, result.priceMax)}</div>
-                {result.link && (
-                  <a className="link" href={result.link} onClick={(e) => handleViewClick(e, result.link!)}>
-                    {t('result.viewDetails')}
-                  </a>
-                )}
-              </>
-            ) : result.status === 'challenge' ? (
-              <>
-                <div className="status-text">{t('result.statusChallenge')}</div>
-                <div className="error-hint" title={result.error || t('result.statusChallengeTitle')}>⚠ {result.error || t('result.statusChallengeHint')}</div>
-              </>
-            ) : result.status === 'error' ? (
-              <>
-                <div className="status-text">{t('result.statusError')}</div>
-                <div className="error-hint" title={result.error || t('result.statusErrorDefault')}>⚠ {result.error || t('result.statusErrorDefault')}</div>
-              </>
-            ) : (
-              <div className="status-text">{t('result.statusNotFound')}</div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-})
-
 interface ResultCardProps {
   catalogNumber: string
   results: QueryResult[]
   onTitleClick: (catalogNumber: string) => void
   displayCurrency: DisplayCurrency
   usdToCnyRate: number | null
+  enrichedDetails?: CDDetails | null
 }
 
-const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate }: ResultCardProps) {
+const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate, enrichedDetails }: ResultCardProps) {
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const detailId = useId()
   const foundResult = results.find(r => r.status === 'found' && r.name)
   const displayName = foundResult?.name || catalogNumber
   const displayArtist = foundResult?.artist
-
-  const priceBounds = useMemo(() => {
-    const candidates = results
-      .filter(r => r.status === 'found' && (r.priceMin !== null || r.priceMax !== null))
-      .map(r => ({
-        min: r.priceMin ?? r.priceMax as number,
-        max: r.priceMax ?? r.priceMin as number
-      }))
-    return {
-      lowestPrice: candidates.length > 0 ? Math.min(...candidates.map(c => c.min)) : null,
-      highestPrice: candidates.length > 0 ? Math.max(...candidates.map(c => c.max)) : null
-    }
-  }, [results])
 
   return (
     <div className="result-card">
@@ -235,22 +112,13 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
           </svg>
         </button>
       </div>
-      <div className="platform-results">
-        {results.map(r => {
-          const effectiveMin = r.priceMin ?? r.priceMax
-          const effectiveMax = r.priceMax ?? r.priceMin
-          return (
-            <PlatformResultRow
-              key={r.platform}
-              result={r}
-              isLowestPrice={r.status === 'found' && effectiveMin !== null && effectiveMin === priceBounds.lowestPrice}
-              isHighestPrice={priceBounds.lowestPrice !== priceBounds.highestPrice && r.status === 'found' && effectiveMax !== null && effectiveMax === priceBounds.highestPrice}
-              displayCurrency={displayCurrency}
-              usdToCnyRate={usdToCnyRate}
-            />
-          )
-        })}
-      </div>
+      <SummaryTable
+        catalogNumber={catalogNumber}
+        results={results}
+        enrichedDetails={enrichedDetails}
+        displayCurrency={displayCurrency}
+        usdToCnyRate={usdToCnyRate}
+      />
       {expanded && (
         <PlatformDetailPanel id={detailId} catalogNumber={catalogNumber} results={results} />
       )}
@@ -1103,6 +971,7 @@ function App() {
                       onTitleClick={handleTitleClick}
                       displayCurrency={displayCurrency}
                       usdToCnyRate={usdToCnyRate}
+                      enrichedDetails={enrichedDetails.get(catalogNumber)}
                     />
                   )
                 })}

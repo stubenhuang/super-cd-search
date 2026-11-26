@@ -18,6 +18,8 @@
  *                                        Actor / 运行参数）
  *   artifacts/ui/shot-6b-feishu.png       飞书多维表格设置分区（开关 / 凭证）
  *   artifacts/ui/shot-5-result-card.png        result card from the seeded cache
+ *   artifacts/ui/shot-8-summary-table.png      Feishu-aligned summary row (2
+ *                                               platforms, still one row)
  *   artifacts/ui/shot-7-platform-detail.png    expanded per-platform detail panel
  *   artifacts/ui/console.log         main-process + renderer console output
  *
@@ -83,8 +85,12 @@ mkdirSync(ARTIFACTS, { recursive: true })
 function seedQueryCache() {
   const cacheSource = readFileSync(join(REPO_ROOT, 'src', 'main', 'queries', 'cache.ts'), 'utf8')
   const version = /QUERY_CACHE_VERSION\s*=\s*(\d+)/.exec(cacheSource)?.[1] ?? '5'
-  // Without a Discogs token the app uses the 'web' cache context.
+  // Without Discogs/eBay credentials both sources use the 'web' cache context.
   const key = `v${version}:discogs:web:${SEEDED_CATALOG}`
+  // A second, network-free platform proves the aligned summary stays ONE row
+  // even with more than one platform. No rawItems => the existing per-platform
+  // detail panel assertions keep seeing only Discogs.
+  const ebayKey = `v${version}:ebay:web:${SEEDED_CATALOG}`
   writeFileSync(
     CACHE_FILE,
     JSON.stringify({
@@ -128,6 +134,19 @@ function seedQueryCache() {
             ]
           },
           fetchedAt: Date.now()
+        },
+        [ebayKey]: {
+          value: {
+            platform: 'ebay',
+            name: 'Animals (2018 Remix)',
+            artist: 'Pink Floyd',
+            priceMin: 175.00,
+            priceMax: 175.00,
+            coverUrl: '',
+            link: '',
+            status: 'found'
+          },
+          fetchedAt: Date.now()
         }
       },
       productDetails: {},
@@ -135,7 +154,7 @@ function seedQueryCache() {
     }),
     'utf8'
   )
-  console.log(`${TAG} seeded query cache entry ${key}`)
+  console.log(`${TAG} seeded query cache entries ${key}, ${ebayKey}`)
 }
 
 seedQueryCache()
@@ -402,10 +421,10 @@ try {
   check('点击保存后设置弹窗自动关闭', (await window.locator('.settings-overlay').count()) === 0)
   check('关闭设置后回到搜索页', await window.locator('.left-panel .catalog-input').isVisible())
 
-  // 7. Only Discogs is searched: its result comes from the seeded cache, so
-  //    the result card renders without any network traffic.
+  // 7. Two platforms are searched, both served from the seeded cache, so the
+  //    aligned summary row renders with >1 platform and no network traffic.
   await window.evaluate(async () => {
-    await window.electronAPI.updateSettings({ standardPlatforms: ['discogs'] })
+    await window.electronAPI.updateSettings({ standardPlatforms: ['discogs', 'ebay'] })
   })
 
   // 8. A real result card from the seeded cache must render correctly.
@@ -421,6 +440,43 @@ try {
   check('搜索结果卡片渲染（标题来自缓存结果）', cardText.includes('Animals (2018 Remix)'), cardText.slice(0, 80))
   await window.screenshot({ path: join(ARTIFACTS, 'shot-5-result-card.png') })
   checkScreenshot('搜索结果卡片', join(ARTIFACTS, 'shot-5-result-card.png'))
+
+  // 8a. The Feishu-aligned summary table: fixed columns, exactly one row per
+  //     catalog, and all platform prices folded into the single priceAll cell.
+  check('平台卡片已移除', (await window.locator('.platform-card').count()) === 0)
+  const summaryHeaders = await window.locator('.summary-table thead th').allInnerTexts()
+  check('汇总表 13 列表头', summaryHeaders.length === 13, JSON.stringify(summaryHeaders))
+  check('列头与飞书汇总表中文字段对齐',
+    summaryHeaders.join('|') === '目录号|专辑|艺术家|封面|状态|错误|厂牌|格式|国家|发行|类型|全部价格|结果数',
+    summaryHeaders.join('|'))
+  check('每个目录号仅 1 行数据（多平台不增行）',
+    (await window.locator('.summary-table tbody tr').count()) === 1)
+  const priceCellText = await window.locator('.summary-table .summary-price-list').innerText()
+  check('priceAll 紧凑折叠各平台价格',
+    priceCellText.includes('Discogs') && priceCellText.includes('eBay') &&
+      /\d/.test(priceCellText) && !priceCellText.includes('{'),
+    priceCellText.slice(0, 120))
+  check('状态列显示「已找到」',
+    (await window.locator('.summary-table .summary-cell-status').innerText()).includes('已找到'))
+  const resultsCellText = await window.locator('.summary-table .summary-cell-results').innerText()
+  check('resultsJson 为紧凑摘要而非原始 JSON',
+    !resultsCellText.includes('rawItems') && !resultsCellText.includes('{') && /\d/.test(resultsCellText),
+    resultsCellText)
+  const summaryScroll = await window.locator('.summary-table-scroll').evaluate(el => {
+    const style = getComputedStyle(el)
+    const scrollWidth = el.scrollWidth
+    const clientWidth = el.clientWidth
+    el.scrollLeft = scrollWidth
+    const after = el.scrollLeft
+    el.scrollLeft = 0
+    return { overflowX: style.overflowX, scrollWidth, clientWidth, after }
+  })
+  check('汇总表可横向滚动查看全部列',
+    summaryScroll.overflowX === 'auto' &&
+      (summaryScroll.scrollWidth <= summaryScroll.clientWidth || summaryScroll.after > 0),
+    JSON.stringify(summaryScroll))
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-8-summary-table.png') })
+  checkScreenshot('搜索结果汇总表', join(ARTIFACTS, 'shot-8-summary-table.png'))
 
   // 8b. The per-platform detail panel: toggle, tabs, table and collapse.
   const detailToggle = window.locator('.result-detail-toggle')
