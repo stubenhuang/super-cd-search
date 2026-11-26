@@ -74,7 +74,7 @@ const zh = {
   'result.statusErrorDefault': 'Error',
   'result.statusNotFound': '未找到',
 
-  // Summary table (mirrors the Feishu 汇总表 columns)
+  // Summary card (mirrors the Feishu 汇总表 columns)
   'result.statusFound': '已找到',
   'result.resultsSummary': '共 {total} 条结果（{found} 条已找到）',
   'summary.cover': '封面',
@@ -82,6 +82,10 @@ const zh = {
   'summary.error': '错误',
   'summary.priceAll': '全部价格',
   'summary.results': '结果数',
+  'summary.group.identity': '标识',
+  'summary.group.details': '详情',
+  'summary.group.pricing': '价格',
+  'summary.group.results': '结果',
 
   // Settings — navigation & chrome
   'settings.title': '设置',

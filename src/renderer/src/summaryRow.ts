@@ -6,8 +6,8 @@ import type { TranslationKey } from './i18n'
 import { isSafeLink } from './platformDetail'
 
 /**
- * Column set and order are literally the Feishu 汇总表 definition, so the
- * in-app summary row always matches what gets archived (one row per 编号).
+ * Field set and order are literally the Feishu 汇总表 definition, so the
+ * in-app summary card always shows every column that gets archived.
  */
 export const SUMMARY_COLUMNS: readonly FeishuFieldName[] = FEISHU_FIELDS
 
@@ -35,6 +35,36 @@ export const STATUS_LABEL_KEYS: Record<QueryStatus, TranslationKey> = {
   error: 'result.statusError',
   challenge: 'result.statusChallenge'
 }
+
+/**
+ * Presentation grouping for the summary card. Flattened `columns` is exactly
+ * FEISHU_FIELDS in order, so every archived column stays visible (tests assert
+ * exhaustiveness — adding a Feishu column forces a group update).
+ */
+export type SummaryGroupId = 'identity' | 'details' | 'pricing' | 'results'
+
+export interface SummaryFieldGroup {
+  id: SummaryGroupId
+  columns: readonly FeishuFieldName[]
+}
+
+export const SUMMARY_FIELD_GROUPS: readonly SummaryFieldGroup[] = [
+  { id: 'identity', columns: ['编号', 'name', 'artist', 'coverUrl', 'status', 'error'] },
+  { id: 'details', columns: ['label', 'format', 'country', 'released', 'genre'] },
+  { id: 'pricing', columns: ['priceAll'] },
+  { id: 'results', columns: ['resultsJson'] }
+]
+
+/** Exhaustive group-title labels for the card's field sections. */
+export const SUMMARY_GROUP_LABEL_KEYS: Record<SummaryGroupId, TranslationKey> = {
+  identity: 'summary.group.identity',
+  details: 'summary.group.details',
+  pricing: 'summary.group.pricing',
+  results: 'summary.group.results'
+}
+
+/** Fields whose content needs a full grid row (price pills / result count). */
+export const WIDE_COLUMNS: ReadonlySet<FeishuFieldName> = new Set(['priceAll', 'resultsJson'])
 
 /** Moved verbatim from the old per-platform card (App.tsx formatPrice). */
 export function formatPrice(
@@ -157,7 +187,7 @@ export interface SummaryCells {
 }
 
 /**
- * All values for one summary-table row. Mirrors buildFeishuFields: the five
+ * All values for one summary card. Mirrors buildFeishuFields: the five
  * human-readable columns come from pickPrimaryResult, the detail columns from
  * aggregateDetails + LLM fill-only enrichment (no sorting, no overwrite).
  */

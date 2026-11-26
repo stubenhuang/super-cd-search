@@ -5,7 +5,7 @@ import type { SectionKey } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
 import { PlatformDetailPanel } from './PlatformDetailPanel'
-import { SummaryTable } from './SummaryTable'
+import { SummaryCard } from './SummaryCard'
 import { FlowDialog, type AutoFlowState } from './FlowDialog'
 import { aggregateDetails, missingDetailKeys } from '../../shared/details'
 import { isLlmConfigured } from '../../shared/llm'
@@ -112,7 +112,7 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
           </svg>
         </button>
       </div>
-      <SummaryTable
+      <SummaryCard
         catalogNumber={catalogNumber}
         results={results}
         enrichedDetails={enrichedDetails}

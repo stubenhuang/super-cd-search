@@ -18,8 +18,10 @@
  *                                        Actor / 运行参数）
  *   artifacts/ui/shot-6b-feishu.png       飞书多维表格设置分区（开关 / 凭证）
  *   artifacts/ui/shot-5-result-card.png        result card from the seeded cache
- *   artifacts/ui/shot-8-summary-table.png      Feishu-aligned summary row (2
- *                                               platforms, still one row)
+ *   artifacts/ui/shot-8-summary-table.png      responsive summary card grid (2
+ *                                               platforms, no horizontal scroll)
+ *   artifacts/ui/shot-8-summary-narrow.png     the same card at the 900px min
+ *                                               window (reflows to one column)
  *   artifacts/ui/shot-7-platform-detail.png    expanded per-platform detail panel
  *   artifacts/ui/console.log         main-process + renderer console output
  *
@@ -441,42 +443,106 @@ try {
   await window.screenshot({ path: join(ARTIFACTS, 'shot-5-result-card.png') })
   checkScreenshot('搜索结果卡片', join(ARTIFACTS, 'shot-5-result-card.png'))
 
-  // 8a. The Feishu-aligned summary table: fixed columns, exactly one row per
-  //     catalog, and all platform prices folded into the single priceAll cell.
+  // 8a. The redesigned summary card: all 13 汇总表 fields, wrapping price
+  //     pills, and NO horizontal scrollbar at any window width.
   check('平台卡片已移除', (await window.locator('.platform-card').count()) === 0)
-  const summaryHeaders = await window.locator('.summary-table thead th').allInnerTexts()
-  check('汇总表 13 列表头', summaryHeaders.length === 13, JSON.stringify(summaryHeaders))
-  check('列头与飞书汇总表中文字段对齐',
-    summaryHeaders.join('|') === '目录号|专辑|艺术家|封面|状态|错误|厂牌|格式|国家|发行|类型|全部价格|结果数',
-    summaryHeaders.join('|'))
-  check('每个目录号仅 1 行数据（多平台不增行）',
-    (await window.locator('.summary-table tbody tr').count()) === 1)
-  const priceCellText = await window.locator('.summary-table .summary-price-list').innerText()
-  check('priceAll 紧凑折叠各平台价格',
-    priceCellText.includes('Discogs') && priceCellText.includes('eBay') &&
-      /\d/.test(priceCellText) && !priceCellText.includes('{'),
-    priceCellText.slice(0, 120))
-  check('状态列显示「已找到」',
-    (await window.locator('.summary-table .summary-cell-status').innerText()).includes('已找到'))
-  const resultsCellText = await window.locator('.summary-table .summary-cell-results').innerText()
+  const fieldLabels = await window.locator('.summary-card .summary-field-label').allInnerTexts()
+  check('汇总卡含全部 13 个字段标签', fieldLabels.length === 13, JSON.stringify(fieldLabels))
+  check('字段标签与飞书汇总表中文字段对齐',
+    fieldLabels.join('|') === '目录号|专辑|艺术家|封面|状态|错误|厂牌|格式|国家|发行|类型|全部价格|结果数',
+    fieldLabels.join('|'))
+  check('每个目录号仅 1 张汇总卡（多平台不增卡）',
+    (await window.locator('.results-area .result-card').count()) === 1 &&
+      (await window.locator('.results-area .summary-card').count()) === 1)
+
+  const pillTexts = await window.locator('.summary-card .summary-price-pill').allInnerTexts()
+  const pillText = pillTexts.join(' ')
+  check('priceAll 为可换行的各平台价格胶囊',
+    pillTexts.length === 2 && pillText.includes('Discogs') && pillText.includes('eBay') &&
+      /\d/.test(pillText) && !pillText.includes('{'),
+    pillText.slice(0, 120))
+  const pillsWrap = await window.locator('.summary-card .summary-price-pills').evaluate(el => getComputedStyle(el).flexWrap)
+  check('价格胶囊 flex-wrap:wrap（不撑出横向滚动）', pillsWrap === 'wrap', pillsWrap)
+  check('最低/最高价徽标存在',
+    (await window.locator('.summary-card .summary-price-badge.lowest').count()) === 1 &&
+      (await window.locator('.summary-card .summary-price-badge.highest').count()) === 1)
+  check('HERO 状态胶囊显示「已找到」',
+    (await window.locator('.summary-card .summary-status-pill').innerText()).includes('已找到'))
+  const heroPrice = await window.locator('.summary-card .summary-hero-price-value').innerText()
+  check('HERO 突出显示最低价', /\d/.test(heroPrice) && !heroPrice.includes('{'), heroPrice)
+  const resultsText = await window.locator('.summary-card .summary-results-count').innerText()
   check('resultsJson 为紧凑摘要而非原始 JSON',
-    !resultsCellText.includes('rawItems') && !resultsCellText.includes('{') && /\d/.test(resultsCellText),
-    resultsCellText)
-  const summaryScroll = await window.locator('.summary-table-scroll').evaluate(el => {
-    const style = getComputedStyle(el)
-    const scrollWidth = el.scrollWidth
-    const clientWidth = el.clientWidth
-    el.scrollLeft = scrollWidth
-    const after = el.scrollLeft
-    el.scrollLeft = 0
-    return { overflowX: style.overflowX, scrollWidth, clientWidth, after }
+    !resultsText.includes('rawItems') && !resultsText.includes('{') && /\d/.test(resultsText),
+    resultsText)
+  const emptyCount = await window.locator('.summary-card .summary-field-value.is-empty').count()
+  check('空值以「—」静默展示',
+    emptyCount >= 4 && (await window.locator('.summary-card').innerText()).includes('—'),
+    `empty=${emptyCount}`)
+
+  const defaultOverflow = await window.locator('.summary-card').evaluate(card => {
+    const read = el => ({ delta: el.scrollWidth - el.clientWidth, overflowX: getComputedStyle(el).overflowX })
+    const fields = card.querySelector('.summary-fields')
+    const hero = card.querySelector('.summary-hero')
+    return { card: read(card), fields: fields ? read(fields) : null, hero: hero ? read(hero) : null }
   })
-  check('汇总表可横向滚动查看全部列',
-    summaryScroll.overflowX === 'auto' &&
-      (summaryScroll.scrollWidth <= summaryScroll.clientWidth || summaryScroll.after > 0),
-    JSON.stringify(summaryScroll))
+  const noScroll = el => el && el.overflowX !== 'auto' && el.overflowX !== 'scroll' && el.delta <= 1
+  check('汇总卡默认宽度无横向滚动条 / 无溢出裁切',
+    noScroll(defaultOverflow.card) && noScroll(defaultOverflow.fields) && noScroll(defaultOverflow.hero),
+    JSON.stringify(defaultOverflow))
+
+  const areaStyle = await window.locator('.results-area').evaluate(el => ({
+    display: getComputedStyle(el).display,
+    cols: getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/).length,
+    delta: el.scrollWidth - el.clientWidth
+  }))
+  check('宽窗口结果区为响应式多列网格（≥2 列且无溢出）',
+    areaStyle.display === 'grid' && areaStyle.cols >= 2 && areaStyle.delta <= 1,
+    JSON.stringify(areaStyle))
   await window.screenshot({ path: join(ARTIFACTS, 'shot-8-summary-table.png') })
-  checkScreenshot('搜索结果汇总表', join(ARTIFACTS, 'shot-8-summary-table.png'))
+  checkScreenshot('搜索结果汇总卡', join(ARTIFACTS, 'shot-8-summary-table.png'))
+
+  // 8a-narrow. Shrink to the app's minWidth (900) and assert the card reflows
+  // to one column with no horizontal overflow, then restore before step 8b.
+  const originalBounds = await app.evaluate(({ BrowserWindow }) => {
+    const win = (() => {
+      const wins = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed())
+      return wins.find(w => {
+        try { return w.webContents && w.webContents.getURL().includes('/out/renderer/index.html') } catch { return false }
+      }) || wins[0]
+    })()
+    const b = win.getBounds()
+    win.setBounds({ x: b.x, y: b.y, width: 900, height: b.height })
+    return b
+  })
+  await window.waitForTimeout(500)
+  const narrow = await window.evaluate(() => {
+    const root = document.documentElement
+    const area = document.querySelector('.results-area')
+    const card = document.querySelector('.summary-card')
+    return {
+      page: root.scrollWidth - root.clientWidth,
+      area: area ? area.scrollWidth - area.clientWidth : 0,
+      card: card ? card.scrollWidth - card.clientWidth : 0,
+      cardOverflowX: card ? getComputedStyle(card).overflowX : '',
+      cols: area ? getComputedStyle(area).gridTemplateColumns.trim().split(/\s+/).length : 0
+    }
+  })
+  check('900px 窄窗：页面无横向溢出', narrow.page <= 1, JSON.stringify(narrow))
+  check('900px 窄窗：汇总卡无横向滚动条 / 无溢出',
+    narrow.cardOverflowX !== 'auto' && narrow.cardOverflowX !== 'scroll' &&
+      narrow.area <= 1 && narrow.card <= 1,
+    JSON.stringify(narrow))
+  check('900px 窄窗：结果区收敛为单列', narrow.cols === 1, JSON.stringify(narrow))
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-8-summary-narrow.png') })
+  checkScreenshot('900px 窄窗汇总卡', join(ARTIFACTS, 'shot-8-summary-narrow.png'))
+  await app.evaluate(({ BrowserWindow }, bounds) => {
+    const wins = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed())
+    const win = wins.find(w => {
+      try { return w.webContents && w.webContents.getURL().includes('/out/renderer/index.html') } catch { return false }
+    }) || wins[0]
+    win.setBounds(bounds)
+  }, originalBounds)
+  await window.waitForTimeout(300)
 
   // 8b. The per-platform detail panel: toggle, tabs, table and collapse.
   const detailToggle = window.locator('.result-detail-toggle')

@@ -873,10 +873,17 @@ html[data-platform='win32'] .app-header {
 
 /* === Results Grid === */
 .results-area {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 16px;
   padding: 4px;
+  align-items: start;
+}
+
+/* A single catalog should not leave an empty second track: let it span the
+   full width. With 2+ cards the auto-fill tracks still sit side by side. */
+.results-area > .result-card:only-child {
+  grid-column: 1 / -1;
 }
 
 /* === Result Card === */
@@ -948,81 +955,254 @@ html[data-platform='win32'] .app-header {
   display: block;
 }
 
-/* === Summary Table (mirrors the Feishu 汇总表, one row per catalog) === */
-.summary-table-scroll {
-  overflow-x: auto;
+/* === Summary Card (responsive, no horizontal scroll) === */
+.summary-card {
   padding: 16px;
+  min-width: 0;
 }
 
-/* Keep the horizontal scroll affordance visible on macOS overlay scrollbars,
-   so the columns beyond the card's right edge are discoverable. */
-.summary-table-scroll::-webkit-scrollbar {
-  height: 8px;
+.summary-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 4px 16px;
+  margin-bottom: 14px;
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, transparent 100%);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
 }
 
-.summary-table-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
-  border-radius: 4px;
+.summary-hero-body {
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
-.summary-table-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-primary);
+.summary-hero-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
-.summary-table-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.summary-table {
-  width: 100%;
-  border-collapse: collapse;
+.summary-hero-artist {
   font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 4px 0 10px;
+  overflow-wrap: anywhere;
+}
+
+.summary-status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border-medium);
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+}
+
+.summary-status-pill.status-found {
+  color: var(--success);
+  background: var(--status-success-bg);
+}
+
+.summary-status-pill.status-not_found,
+.summary-status-pill.status-none {
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+}
+
+.summary-status-pill.status-error {
+  color: var(--error);
+  background: var(--status-error-bg);
+}
+
+.summary-status-pill.status-challenge {
+  color: var(--warning);
+  background: var(--status-loading-bg);
+}
+
+.summary-hero-price {
+  margin-left: auto;
+  text-align: right;
+  min-width: 0;
+}
+
+.summary-hero-price-caption {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.summary-hero-price-value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  overflow-wrap: anywhere;
+}
+
+.summary-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 12px 16px;
+}
+
+.summary-group-title {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-primary);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-light);
+  margin-top: 4px;
+}
+
+.summary-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.summary-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.summary-field-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.summary-field-value {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.summary-field-value.is-empty,
+.summary-price-empty {
+  color: var(--text-muted);
+}
+
+.summary-field-value.is-error {
+  color: var(--error);
+}
+
+.summary-field-value.is-mono {
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
-.summary-table th,
-.summary-table td {
-  border: 1px solid var(--border-light);
+.summary-price-pills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.summary-price-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   padding: 6px 10px;
-  text-align: left;
-  white-space: nowrap;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: top;
+  border: 1px solid var(--border-medium);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  font-size: 12px;
 }
 
-.summary-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--bg-tertiary);
+.summary-price-link {
+  color: var(--accent-primary);
+  text-decoration: none;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.summary-price-link:hover {
+  text-decoration: underline;
+}
+
+.summary-price-pill-value {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.summary-price-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.summary-price-badge.lowest {
+  background: var(--success);
+}
+
+.summary-price-badge.highest {
+  background: var(--warning);
+}
+
+.summary-results-count {
+  font-family: var(--font-body);
+  font-size: 13px;
   color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.summary-cell-status,
-.summary-cell-results {
-  color: var(--text-secondary);
-}
-
-.summary-cell-error {
-  color: var(--error);
 }
 
 .summary-cover-cell {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  padding: 0;
+  flex-shrink: 0;
+}
+
+.summary-cover-cell.is-hero {
+  width: 112px;
+  height: 112px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-md);
+}
+
+.summary-cover-cell.is-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
 }
 
 .summary-cover-thumb,
 .summary-cover-placeholder {
-  width: 48px;
-  height: 48px;
-  border-radius: 4px;
+  width: 100%;
+  height: 100%;
 }
 
 .summary-cover-thumb {
@@ -1038,49 +1218,6 @@ html[data-platform='win32'] .app-header {
   font-size: 11px;
 }
 
-.summary-price-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.summary-price-entry {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.summary-price-link {
-  color: var(--accent-primary);
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.summary-price-link:hover {
-  text-decoration: underline;
-}
-
-.summary-price-badge {
-  padding: 1px 6px;
-  border-radius: 999px;
-  color: white;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.summary-price-badge.lowest {
-  background: var(--success);
-}
-
-.summary-price-badge.highest {
-  background: var(--warning);
-}
-
 /* === Animation Delays for Staggered Entrance === */
 .result-card:nth-child(1) { animation-delay: 0s; }
 .result-card:nth-child(2) { animation-delay: 0.1s; }
@@ -1088,6 +1225,15 @@ html[data-platform='win32'] .app-header {
 .result-card:nth-child(4) { animation-delay: 0.3s; }
 .result-card:nth-child(5) { animation-delay: 0.4s; }
 .result-card:nth-child(6) { animation-delay: 0.5s; }
+
+/* Narrow windows: tighten the hero and field grid (reflow, never scroll). */
+@media (max-width: 1100px) {
+  .summary-hero { gap: 12px; padding: 4px 4px 12px; }
+  .summary-hero-title { font-size: 22px; }
+  .summary-hero-price-value { font-size: 24px; }
+  .summary-cover-cell.is-hero { width: 96px; height: 96px; }
+  .summary-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr)); gap: 10px 12px; }
+}
 
 /* ============================================
    DETAIL MODAL - 复古唱片详情卡

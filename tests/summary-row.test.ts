@@ -6,7 +6,10 @@ import { DETAIL_KEYS } from '../src/shared/details'
 import {
   SUMMARY_COLUMNS,
   SUMMARY_COLUMN_LABEL_KEYS,
+  SUMMARY_FIELD_GROUPS,
+  SUMMARY_GROUP_LABEL_KEYS,
   STATUS_LABEL_KEYS,
+  WIDE_COLUMNS,
   buildPriceAllEntries,
   buildResultsSummary,
   buildSummaryCells,
@@ -44,6 +47,28 @@ describe('column set and label maps', () => {
     expect(Object.keys(SUMMARY_COLUMN_LABEL_KEYS).sort()).toEqual([...FEISHU_FIELDS].sort())
     const statuses: QueryStatus[] = ['found', 'not_found', 'error', 'challenge']
     expect(Object.keys(STATUS_LABEL_KEYS).sort()).toEqual([...statuses].sort())
+  })
+})
+
+describe('summary field groups', () => {
+  it('covers all 13 Feishu columns exactly once, in order', () => {
+    const flattened = SUMMARY_FIELD_GROUPS.flatMap(group => group.columns)
+    expect(flattened).toEqual([...SUMMARY_COLUMNS])
+    expect(flattened).toEqual([...FEISHU_FIELDS])
+    expect(flattened).toHaveLength(13)
+    expect(new Set(flattened).size).toBe(13)
+  })
+
+  it('labels every group', () => {
+    expect(Object.keys(SUMMARY_GROUP_LABEL_KEYS).sort()).toEqual(
+      SUMMARY_FIELD_GROUPS.map(group => group.id).sort()
+    )
+    expect(SUMMARY_FIELD_GROUPS.every(group => (group.columns as readonly string[]).length > 0)).toBe(true)
+  })
+
+  it('marks only priceAll and resultsJson as full-width fields', () => {
+    expect([...WIDE_COLUMNS].sort()).toEqual(['priceAll', 'resultsJson'])
+    expect(SUMMARY_FIELD_GROUPS.flatMap(group => group.columns).some(col => WIDE_COLUMNS.has(col))).toBe(true)
   })
 })
 
