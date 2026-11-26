@@ -269,6 +269,12 @@ const zh = {
   'detail.copied': '已复制',
   'detail.close': '关闭',
   'detail.smartMissing': '缺失: {fields}',
+
+  // Platform detail panel (per-platform Feishu detail table mirror)
+  'platformDetail.toggle': '平台详情',
+  'platformDetail.catalog': '目录号：{catalog}',
+  'platformDetail.empty': '暂无平台详情数据（该结果没有可显示的原始明细，或来自旧缓存）',
+  'platformDetail.moreRows': '仅显示前 {max} 条，还有 {count} 条未显示',
 }
 
 export type TranslationKey = keyof typeof zh

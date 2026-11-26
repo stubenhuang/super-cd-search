@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useId, useMemo, useRef } from 'react'
 import type { BatchQueryProgressEvent, QueryResult, Platform, Settings, DisplayCurrency, CDDetails, BatchQueryResult, LanCatalogAddedEvent, LanSearchState, LanSearchPhase, DetailEnrichProgress } from './electron-api'
 import { SettingsPanel } from './Settings'
 import type { SectionKey } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
+import { PlatformDetailPanel } from './PlatformDetailPanel'
 import { FlowDialog, type AutoFlowState } from './FlowDialog'
 import { aggregateDetails, missingDetailKeys } from '../../shared/details'
 import { isLlmConfigured } from '../../shared/llm'
@@ -177,6 +178,8 @@ interface ResultCardProps {
 
 const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTitleClick, displayCurrency, usdToCnyRate }: ResultCardProps) {
   const { t } = useI18n()
+  const [expanded, setExpanded] = useState(false)
+  const detailId = useId()
   const foundResult = results.find(r => r.status === 'found' && r.name)
   const displayName = foundResult?.name || catalogNumber
   const displayArtist = foundResult?.artist
@@ -216,6 +219,21 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
           </span>
           {displayArtist && <span className="result-artist">— {displayArtist}</span>}
         </div>
+        <button
+          type="button"
+          className={`result-detail-toggle ${expanded ? 'open' : ''}`}
+          aria-expanded={expanded}
+          aria-controls={detailId}
+          aria-label={t('platformDetail.toggle')}
+          title={t('platformDetail.toggle')}
+          onClick={() => setExpanded(prev => !prev)}
+        >
+          <span>{t('platformDetail.toggle')}</span>
+          <svg className="result-detail-chevron" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
       </div>
       <div className="platform-results">
         {results.map(r => {
@@ -233,6 +251,9 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
           )
         })}
       </div>
+      {expanded && (
+        <PlatformDetailPanel id={detailId} catalogNumber={catalogNumber} results={results} />
+      )}
     </div>
   )
 })

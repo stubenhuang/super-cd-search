@@ -907,9 +907,18 @@ html[data-platform='win32'] .app-header {
 }
 
 .result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 20px;
   border-bottom: 1px solid var(--border-light);
   background: linear-gradient(180deg, var(--bg-secondary) 0%, transparent 100%);
+}
+
+.result-header-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .result-catalog {
@@ -1665,6 +1674,209 @@ html[data-platform='win32'] .app-header {
   color: var(--text-muted);
 }
 
+
+/* === Result row: platform detail toggle + panel === */
+.result-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.result-detail-toggle:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.result-detail-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.result-detail-chevron {
+  transition: transform var(--transition-fast);
+}
+
+.result-detail-toggle.open .result-detail-chevron {
+  transform: rotate(180deg);
+}
+
+.platform-detail-panel {
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  padding: 12px 16px 16px;
+  animation: card-enter 0.35s ease backwards;
+}
+
+.platform-detail-header {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.platform-detail-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 12px;
+}
+
+.platform-detail-tab {
+  position: relative;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.platform-detail-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+
+.platform-detail-tab.active {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.platform-detail-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent-primary);
+  border-radius: 2px 2px 0 0;
+}
+
+.platform-detail-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.platform-detail-empty {
+  margin: 0;
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.platform-detail-table-scroll {
+  overflow-x: auto;
+}
+
+/* Keep the horizontal scroll affordance visible on macOS overlay scrollbars,
+   so the columns beyond the card's right edge are discoverable. */
+.platform-detail-table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.platform-detail-table-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 4px;
+}
+
+.platform-detail-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}
+
+.platform-detail-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.platform-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+
+.platform-detail-table th,
+.platform-detail-table td {
+  border: 1px solid var(--border-light);
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.platform-detail-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.platform-detail-table .col-rank {
+  width: 48px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.detail-link {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.detail-cover-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+}
+
+.detail-cover-thumb,
+.detail-cover-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+}
+
+.detail-cover-thumb {
+  object-fit: cover;
+}
+
+.detail-cover-placeholder {
+  background: var(--bg-tertiary);
+}
+
+.detail-cover-fallback {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.detail-more-hint {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

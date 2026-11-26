@@ -18,6 +18,7 @@
  *                                        Actor / 运行参数）
  *   artifacts/ui/shot-6b-feishu.png       飞书多维表格设置分区（开关 / 凭证）
  *   artifacts/ui/shot-5-result-card.png        result card from the seeded cache
+ *   artifacts/ui/shot-7-platform-detail.png    expanded per-platform detail panel
  *   artifacts/ui/console.log         main-process + renderer console output
  *
  * Everything runs against a throwaway profile inside `artifacts/`, so the
@@ -97,7 +98,34 @@ function seedQueryCache() {
             priceMax: 159.19,
             coverUrl: '',
             link: 'https://www.discogs.com/release/24580325',
-            status: 'found'
+            status: 'found',
+            // Raw rows that also feed the per-platform Feishu detail table.
+            // Empty cover_image and a relative uri deliberately exercise the
+            // placeholder / non-link paths in PlatformDetailPanel.
+            rawItems: [
+              {
+                id: 24580325,
+                title: 'Animals (2018 Remix)',
+                catno: 'SICP-6480',
+                year: '2018',
+                format: 'CD, Album',
+                cover_image: '',
+                uri: '/release/24580325',
+                communityHave: 120,
+                communityWant: 45
+              },
+              {
+                id: 24580326,
+                title: 'Animals (2018 Remix) [Limited]',
+                catno: 'SICP-6480',
+                year: '2018',
+                format: 'CD',
+                cover_image: '',
+                uri: '/release/24580326',
+                communityHave: 10,
+                communityWant: 3
+              }
+            ]
           },
           fetchedAt: Date.now()
         }
@@ -394,7 +422,38 @@ try {
   await window.screenshot({ path: join(ARTIFACTS, 'shot-5-result-card.png') })
   checkScreenshot('搜索结果卡片', join(ARTIFACTS, 'shot-5-result-card.png'))
 
-
+  // 8b. The per-platform detail panel: toggle, tabs, table and collapse.
+  const detailToggle = window.locator('.result-detail-toggle')
+  check('结果行含平台详情展开按钮', (await detailToggle.count()) === 1)
+  check('展开按钮初始 aria-expanded=false', (await detailToggle.getAttribute('aria-expanded')) === 'false')
+  await detailToggle.click()
+  await window.waitForSelector('.platform-detail-panel', { timeout: 5000 })
+  check('展开后 aria-expanded=true', (await detailToggle.getAttribute('aria-expanded')) === 'true')
+  const tabTexts = await window.locator('.platform-detail-tab').allInnerTexts()
+  check('出现 Discogs 平台标签', tabTexts.includes('Discogs'), JSON.stringify(tabTexts))
+  const tableText = await window.locator('.platform-detail-table').innerText()
+  check('明细表格含缓存原始行与列名',
+    tableText.includes('Animals (2018 Remix)') && tableText.includes('title'), tableText.slice(0, 80))
+  check('明细表格按原始条数渲染',
+    (await window.locator('.platform-detail-table tbody tr').count()) === 2)
+  check('相对路径 uri 与空封面不渲染为链接',
+    (await window.locator('.platform-detail-table a').count()) === 0)
+  const scrollState = await window.locator('.platform-detail-table-scroll').evaluate(el => {
+    const scrollWidth = el.scrollWidth
+    const clientWidth = el.clientWidth
+    el.scrollLeft = scrollWidth
+    const after = el.scrollLeft
+    el.scrollLeft = 0
+    return { scrollWidth, clientWidth, after }
+  })
+  check('明细表格可横向滚动查看全部列',
+    scrollState.scrollWidth > scrollState.clientWidth && scrollState.after > 0,
+    JSON.stringify(scrollState))
+  await window.waitForTimeout(500)
+  await window.screenshot({ path: join(ARTIFACTS, 'shot-7-platform-detail.png') })
+  checkScreenshot('平台详情展开面板', join(ARTIFACTS, 'shot-7-platform-detail.png'))
+  await detailToggle.click()
+  check('再次点击收起面板', (await window.locator('.platform-detail-panel').count()) === 0)
 
   // 9. No renderer-side errors across every step above.
   check('渲染进程无 console.error', consoleErrors.length === 0, consoleErrors.join(' | '))
