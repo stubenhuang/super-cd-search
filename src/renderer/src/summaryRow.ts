@@ -5,11 +5,17 @@ import { PLATFORMS, platformLabel } from '../../shared/platforms'
 import type { TranslationKey } from './i18n'
 import { isSafeLink } from './platformDetail'
 
-/**
- * Field set and order are literally the Feishu 汇总表 definition, so the
- * in-app summary card always shows every column that gets archived.
- */
+/** Canonical Feishu 汇总表 column set/order (kept for tests and label maps). */
 export const SUMMARY_COLUMNS: readonly FeishuFieldName[] = FEISHU_FIELDS
+
+/**
+ * Core columns the compact one-line row shows. The 5 detail fields and `error`
+ * live in DetailModal; adding a Feishu column does not implicitly add a row
+ * column (the row has fixed geometry).
+ */
+export const SUMMARY_ROW_COLUMNS: readonly FeishuFieldName[] = [
+  '编号', 'name', 'artist', 'coverUrl', 'status', 'priceAll', 'resultsJson'
+]
 
 /** Exhaustive so adding a Feishu column without a label fails typecheck. */
 export const SUMMARY_COLUMN_LABEL_KEYS: Record<FeishuFieldName, TranslationKey> = {
@@ -35,36 +41,6 @@ export const STATUS_LABEL_KEYS: Record<QueryStatus, TranslationKey> = {
   error: 'result.statusError',
   challenge: 'result.statusChallenge'
 }
-
-/**
- * Presentation grouping for the summary card. Flattened `columns` is exactly
- * FEISHU_FIELDS in order, so every archived column stays visible (tests assert
- * exhaustiveness — adding a Feishu column forces a group update).
- */
-export type SummaryGroupId = 'identity' | 'details' | 'pricing' | 'results'
-
-export interface SummaryFieldGroup {
-  id: SummaryGroupId
-  columns: readonly FeishuFieldName[]
-}
-
-export const SUMMARY_FIELD_GROUPS: readonly SummaryFieldGroup[] = [
-  { id: 'identity', columns: ['编号', 'name', 'artist', 'coverUrl', 'status', 'error'] },
-  { id: 'details', columns: ['label', 'format', 'country', 'released', 'genre'] },
-  { id: 'pricing', columns: ['priceAll'] },
-  { id: 'results', columns: ['resultsJson'] }
-]
-
-/** Exhaustive group-title labels for the card's field sections. */
-export const SUMMARY_GROUP_LABEL_KEYS: Record<SummaryGroupId, TranslationKey> = {
-  identity: 'summary.group.identity',
-  details: 'summary.group.details',
-  pricing: 'summary.group.pricing',
-  results: 'summary.group.results'
-}
-
-/** Fields whose content needs a full grid row (price pills / result count). */
-export const WIDE_COLUMNS: ReadonlySet<FeishuFieldName> = new Set(['priceAll', 'resultsJson'])
 
 /** Moved verbatim from the old per-platform card (App.tsx formatPrice). */
 export function formatPrice(

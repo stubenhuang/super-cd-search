@@ -5,7 +5,7 @@ import type { SectionKey } from './Settings'
 import { LanPanel } from './LanPanel'
 import { DetailModal } from './DetailModal'
 import { PlatformDetailPanel } from './PlatformDetailPanel'
-import { SummaryCard } from './SummaryCard'
+import { ResultsHead, SummaryRow } from './ResultsTable'
 import { FlowDialog, type AutoFlowState } from './FlowDialog'
 import { aggregateDetails, missingDetailKeys } from '../../shared/details'
 import { isLlmConfigured } from '../../shared/llm'
@@ -70,55 +70,36 @@ const ResultCard = React.memo(function ResultCard({ catalogNumber, results, onTi
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const detailId = useId()
-  const foundResult = results.find(r => r.status === 'found' && r.name)
-  const displayName = foundResult?.name || catalogNumber
-  const displayArtist = foundResult?.artist
 
   return (
     <div className="result-card">
-      <div className="result-header">
-        <div className="result-header-text">
-          <span className="result-catalog">{catalogNumber}</span>
-          <span
-            className="result-title"
-            role="button"
-            tabIndex={0}
-            onClick={() => onTitleClick(catalogNumber)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                onTitleClick(catalogNumber)
-              }
-            }}
-            title={t('result.titleClick')}
+      <div className="summary-row">
+        <SummaryRow
+          catalogNumber={catalogNumber}
+          results={results}
+          enrichedDetails={enrichedDetails}
+          displayCurrency={displayCurrency}
+          usdToCnyRate={usdToCnyRate}
+          onTitleClick={onTitleClick}
+        />
+        <div className="summary-col summary-col-toggle">
+          <button
+            type="button"
+            className={`result-detail-toggle ${expanded ? 'open' : ''}`}
+            aria-expanded={expanded}
+            aria-controls={detailId}
+            aria-label={t('platformDetail.toggle')}
+            title={t('platformDetail.toggle')}
+            onClick={() => setExpanded(prev => !prev)}
           >
-            {displayName}
-          </span>
-          {displayArtist && <span className="result-artist">— {displayArtist}</span>}
+            <span>{t('platformDetail.toggle')}</span>
+            <svg className="result-detail-chevron" width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
         </div>
-        <button
-          type="button"
-          className={`result-detail-toggle ${expanded ? 'open' : ''}`}
-          aria-expanded={expanded}
-          aria-controls={detailId}
-          aria-label={t('platformDetail.toggle')}
-          title={t('platformDetail.toggle')}
-          onClick={() => setExpanded(prev => !prev)}
-        >
-          <span>{t('platformDetail.toggle')}</span>
-          <svg className="result-detail-chevron" width="16" height="16" viewBox="0 0 24 24"
-            fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
       </div>
-      <SummaryCard
-        catalogNumber={catalogNumber}
-        results={results}
-        enrichedDetails={enrichedDetails}
-        displayCurrency={displayCurrency}
-        usdToCnyRate={usdToCnyRate}
-      />
       {expanded && (
         <PlatformDetailPanel id={detailId} catalogNumber={catalogNumber} results={results} />
       )}
@@ -960,6 +941,7 @@ function App() {
             )}
             {results.size > 0 && (
               <div className="results-area">
+                <ResultsHead />
                 {catalogOrder.map((catalogNumber) => {
                   const resultData = results.get(catalogNumber)
                   if (!resultData) return null

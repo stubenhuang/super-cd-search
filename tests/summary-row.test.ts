@@ -6,10 +6,8 @@ import { DETAIL_KEYS } from '../src/shared/details'
 import {
   SUMMARY_COLUMNS,
   SUMMARY_COLUMN_LABEL_KEYS,
-  SUMMARY_FIELD_GROUPS,
-  SUMMARY_GROUP_LABEL_KEYS,
+  SUMMARY_ROW_COLUMNS,
   STATUS_LABEL_KEYS,
-  WIDE_COLUMNS,
   buildPriceAllEntries,
   buildResultsSummary,
   buildSummaryCells,
@@ -50,25 +48,22 @@ describe('column set and label maps', () => {
   })
 })
 
-describe('summary field groups', () => {
-  it('covers all 13 Feishu columns exactly once, in order', () => {
-    const flattened = SUMMARY_FIELD_GROUPS.flatMap(group => group.columns)
-    expect(flattened).toEqual([...SUMMARY_COLUMNS])
-    expect(flattened).toEqual([...FEISHU_FIELDS])
-    expect(flattened).toHaveLength(13)
-    expect(new Set(flattened).size).toBe(13)
+describe('summary row core columns', () => {
+  it('is a strict, duplicate-free subset of the 13 canonical columns', () => {
+    expect(SUMMARY_COLUMNS).toEqual(FEISHU_FIELDS)
+    expect(SUMMARY_ROW_COLUMNS.every(col => (FEISHU_FIELDS as readonly string[]).includes(col))).toBe(true)
+    expect(new Set(SUMMARY_ROW_COLUMNS).size).toBe(SUMMARY_ROW_COLUMNS.length)
+    expect(SUMMARY_ROW_COLUMNS.length).toBeLessThan(FEISHU_FIELDS.length)
   })
 
-  it('labels every group', () => {
-    expect(Object.keys(SUMMARY_GROUP_LABEL_KEYS).sort()).toEqual(
-      SUMMARY_FIELD_GROUPS.map(group => group.id).sort()
-    )
-    expect(SUMMARY_FIELD_GROUPS.every(group => (group.columns as readonly string[]).length > 0)).toBe(true)
+  it('excludes the 5 detail fields and error (they live in DetailModal)', () => {
+    for (const field of ['label', 'format', 'country', 'released', 'genre', 'error']) {
+      expect(SUMMARY_ROW_COLUMNS).not.toContain(field)
+    }
   })
 
-  it('marks only priceAll and resultsJson as full-width fields', () => {
-    expect([...WIDE_COLUMNS].sort()).toEqual(['priceAll', 'resultsJson'])
-    expect(SUMMARY_FIELD_GROUPS.flatMap(group => group.columns).some(col => WIDE_COLUMNS.has(col))).toBe(true)
+  it('every row column has a label key', () => {
+    expect(SUMMARY_ROW_COLUMNS.every(col => SUMMARY_COLUMN_LABEL_KEYS[col] !== undefined)).toBe(true)
   })
 })
 

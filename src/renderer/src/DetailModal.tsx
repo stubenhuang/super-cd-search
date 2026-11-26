@@ -82,6 +82,10 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
 
   const missingFields = useMemo(() => missingDetailKeys(mergedDetails), [mergedDetails])
   const hasDetails = DETAIL_KEYS.some(key => mergedDetails[key] !== null)
+  const errorLines = useMemo(
+    () => sortedResults.filter(r => r.error).map(r => `${platformLabel(r.platform)}: ${r.error}`),
+    [sortedResults]
+  )
 
   const displayName = primaryResult?.name || catalogNumber
   const displayArtist = primaryResult?.artist
@@ -173,6 +177,17 @@ export function DetailModal({ isOpen, onClose, catalogNumber, results, enrichedD
               )
             })}
           </div>
+
+          {errorLines.length > 0 && (
+            <div className="detail-modal-errors">
+              {errorLines.map((line, index) => (
+                <div key={index} className="detail-modal-field">
+                  <span className="detail-modal-field-label">{t('summary.error')}</span>
+                  <span className="detail-modal-field-value is-error">{line}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {missingFields.length > 0 && (
             <div className="detail-modal-smart">
