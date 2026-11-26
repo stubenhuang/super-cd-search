@@ -6,6 +6,7 @@ import { deleteSetting, setSetting } from '../src/main/settings'
 const {
   mockEnsureFields,
   mockFindRecordIds,
+  mockFindArchivedResults,
   mockBatchCreate,
   mockBatchUpdate,
   mockTestConnection,
@@ -14,6 +15,7 @@ const {
 } = vi.hoisted(() => ({
   mockEnsureFields: vi.fn(),
   mockFindRecordIds: vi.fn(),
+  mockFindArchivedResults: vi.fn(),
   mockBatchCreate: vi.fn(),
   mockBatchUpdate: vi.fn(),
   mockTestConnection: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock('../src/main/feishu/client', async (importOriginal) => {
     ...actual,
     ensureFields: mockEnsureFields,
     findRecordIds: mockFindRecordIds,
+    findArchivedResults: mockFindArchivedResults,
     batchCreate: mockBatchCreate,
     batchUpdate: mockBatchUpdate,
     testFeishuConnection: mockTestConnection
@@ -67,6 +70,7 @@ beforeEach(() => {
   resetFeishuSyncState()
   mockEnsureFields.mockResolvedValue(new Map<string, number>())
   mockFindRecordIds.mockResolvedValue(new Map())
+  mockFindArchivedResults.mockResolvedValue(new Map())
   mockBatchCreate.mockImplementation(async (_settings, records: unknown[]) =>
     (records as unknown[]).map((_, index) => `rec-new-${index}`))
   mockBatchUpdate.mockImplementation(async (_settings, updates: unknown[]) => (updates as unknown[]).length)
@@ -120,6 +124,37 @@ describe('syncToFeishu', () => {
     expect(JSON.parse(created[0].priceAll)).toEqual({ discogs: { priceMin: 10, priceMax: 20 } })
     const updated = mockBatchUpdate.mock.calls[0][1] as Array<{ record_id: string; fields: Record<string, string> }>
     expect(updated[0].record_id).toBe('rec-2')
+  })
+
+  it('reads back the archive and merges it into resultsJson by platform', async () => {
+    setSetting('feishu', CONFIG)
+    const archived: QueryResult = {
+      platform: 'hmv', name: 'Archived', artist: 'A', priceMin: 30, priceMax: 40,
+      coverUrl: 'https://img/hmv.jpg', link: 'https://hmv/a', status: 'found'
+    }
+    mockFindArchivedResults.mockResolvedValue(new Map([['X-1', JSON.stringify([archived])]]))
+
+    const result = await syncToFeishu({ rows: [oneRow('Fresh')] })
+
+    expect(result.status).toBe('ok')
+    expect(mockFindArchivedResults).toHaveBeenCalledWith(
+      expect.objectContaining({ tableId: 'tblXYZ' }), ['X-1']
+    )
+    const created = mockBatchCreate.mock.calls[0][1] as Array<Record<string, string>>
+    const parsed = JSON.parse(created[0].resultsJson) as QueryResult[]
+    expect(parsed.map(r => r.platform)).toEqual(['discogs', 'hmv'])
+  })
+
+  it('still archives the batch when the archive read fails', async () => {
+    setSetting('feishu', CONFIG)
+    mockFindArchivedResults.mockRejectedValueOnce(new Error('search timeout'))
+
+    const result = await syncToFeishu({ rows: [oneRow('Fresh')] })
+
+    expect(result.status).toBe('ok')
+    expect(result.created).toBe(1)
+    const created = mockBatchCreate.mock.calls[0][1] as Array<Record<string, string>>
+    expect((JSON.parse(created[0].resultsJson) as QueryResult[]).map(r => r.platform)).toEqual(['discogs'])
   })
 
   it('deduplicates catalog numbers within one batch (last row wins)', async () => {

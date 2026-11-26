@@ -1,6 +1,7 @@
 import type { CDDetails, QueryResult, RawItemValue } from '../../shared/types'
 import { DETAIL_KEYS, aggregateDetails, fillMissingDetails } from '../../shared/details'
-import { FEISHU_PRIMARY_FIELD, type FeishuSyncRow } from '../../shared/feishu'
+import { FEISHU_PRIMARY_FIELD, FEISHU_RESULTS_FIELD, type FeishuSyncRow } from '../../shared/feishu'
+import { mergeResults, serializeResults } from './archived'
 
 /** Best available result for the aggregate row, preferring one with an album name. */
 function pickPrimaryResult(results: readonly QueryResult[]): QueryResult | undefined {
@@ -45,8 +46,15 @@ export function putField(fields: Record<string, string>, name: string, value: Ra
   }
 }
 
-/** Turn one catalog number's search data into the twelve Bitable columns. */
-export function buildFeishuFields(row: FeishuSyncRow): Record<string, string> {
+/**
+ * Turn one catalog number's search data into the Bitable columns. `archived`
+ * is the previously stored resultsJson values for this catalog; they are merged
+ * by platform so a narrower search never erases channels already found.
+ */
+export function buildFeishuFields(
+  row: FeishuSyncRow,
+  archived: readonly QueryResult[] = []
+): Record<string, string> {
   const fields: Record<string, string> = {}
   const primary = pickPrimaryResult(row.results)
 
@@ -68,5 +76,8 @@ export function buildFeishuFields(row: FeishuSyncRow): Record<string, string> {
   }
 
   fields.priceAll = buildPriceAll(row.results)
+  // Omitting the key (serializeResults returned null) leaves the existing cell
+  // untouched on update rather than overwriting it with a truncated value.
+  putField(fields, FEISHU_RESULTS_FIELD, serializeResults(mergeResults(row.results, archived)) ?? undefined)
   return fields
 }

@@ -4,7 +4,7 @@ import { BrowserWindow } from 'electron'
 const {
   mockQueryDiscogs, mockQueryEbay, mockQueryKojima, mockQueryHmv, mockQueryYahoo,
   mockQueryCdjapan, mockQueryTower, mockQueryXianyu, mockQueryTaobao,
-  mockDownloadImage, mockFlushPlatformTables
+  mockDownloadImage, mockFlushPlatformTables, mockLoadArchivedFoundResults
 } = vi.hoisted(() => ({
   mockQueryDiscogs: vi.fn(),
   mockQueryEbay: vi.fn(),
@@ -16,7 +16,8 @@ const {
   mockQueryXianyu: vi.fn(),
   mockQueryTaobao: vi.fn(),
   mockDownloadImage: vi.fn(),
-  mockFlushPlatformTables: vi.fn()
+  mockFlushPlatformTables: vi.fn(),
+  mockLoadArchivedFoundResults: vi.fn()
 }))
 
 vi.mock('../src/main/queries/discogs', () => ({ queryDiscogs: mockQueryDiscogs }))
@@ -30,6 +31,7 @@ vi.mock('../src/main/queries/xianyu', () => ({ queryXianyu: mockQueryXianyu }))
 vi.mock('../src/main/queries/taobao', () => ({ queryTaobao: mockQueryTaobao }))
 vi.mock('../src/main/image', () => ({ downloadImage: mockDownloadImage }))
 vi.mock('../src/main/feishu/platform-tables', () => ({ flushPlatformTables: mockFlushPlatformTables }))
+vi.mock('../src/main/feishu/archived', () => ({ loadArchivedFoundResults: mockLoadArchivedFoundResults }))
 
 import {
   executeBatchQuery,
@@ -77,6 +79,7 @@ beforeEach(() => {
   mockQueryXianyu.mockResolvedValue(found('xianyu'))
   mockQueryTaobao.mockResolvedValue(found('taobao'))
   mockDownloadImage.mockResolvedValue({ base64: 'BASE64', mimeType: 'image/jpeg' })
+  mockLoadArchivedFoundResults.mockResolvedValue(new Map())
 })
 
 afterEach(() => {
@@ -312,5 +315,61 @@ describe('executeBatchQuery', () => {
     resolveDiscogs(found('discogs'))
     await promise
     expect(isBatchQueryRunning()).toBe(false)
+  })
+
+  describe('Feishu archive reuse', () => {
+    it('skips the live query for a channel already found, but keeps the others', async () => {
+      mockLoadArchivedFoundResults.mockResolvedValue(new Map([
+        ['UCCG-90530', new Map([['discogs', { ...found('discogs'), name: 'Archived Album' }]])]
+      ]))
+
+      const results = await executeBatchQuery(['uccg90530'], ['discogs', 'ebay'])
+
+      expect(mockLoadArchivedFoundResults).toHaveBeenCalledWith(['UCCG-90530'], expect.anything())
+      expect(mockQueryDiscogs).not.toHaveBeenCalled()
+      expect(mockQueryEbay).toHaveBeenCalledTimes(1)
+      expect(results[0].results.find(r => r.platform === 'discogs')?.name).toBe('Archived Album')
+
+      // A skipped channel still emits the usual progress/result events.
+      const payloads = sendMock.mock.calls.map(([, payload]) => payload as Record<string, unknown>)
+      expect(payloads.some(p => p.platform === 'discogs' && p.status === 'complete')).toBe(true)
+      expect(payloads.some(p => p.platform === 'discogs' && p.event === 'query:result')).toBe(true)
+    })
+
+    it('skips cover download and both paid Apify calls when phase two is archived', async () => {
+      mockLoadArchivedFoundResults.mockResolvedValue(new Map([
+        ['X-1', new Map([['xianyu', found('xianyu')], ['taobao', found('taobao')]])]
+      ]))
+
+      const results = await executeBatchQuery(['X-1'], ['discogs', 'xianyu', 'taobao'])
+
+      expect(mockDownloadImage).not.toHaveBeenCalled()
+      expect(mockQueryXianyu).not.toHaveBeenCalled()
+      expect(mockQueryTaobao).not.toHaveBeenCalled()
+      expect(results[0].results.filter(r => r.platform === 'xianyu' || r.platform === 'taobao'))
+        .toHaveLength(2)
+    })
+
+    it('still resolves prerequisites for phase-two channels that are not archived', async () => {
+      mockLoadArchivedFoundResults.mockResolvedValue(new Map([
+        ['X-1', new Map([['taobao', found('taobao')]])]
+      ]))
+      mockQueryDiscogs.mockResolvedValue({ ...found('discogs'), coverUrl: 'https://cover.example/x.jpg' })
+
+      await executeBatchQuery(['X-1'], ['discogs', 'xianyu', 'taobao'])
+
+      expect(mockQueryTaobao).not.toHaveBeenCalled()
+      expect(mockDownloadImage).toHaveBeenCalledTimes(1)
+      expect(mockQueryXianyu).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to live queries when the archive lookup returns nothing', async () => {
+      mockLoadArchivedFoundResults.mockResolvedValue(new Map())
+
+      await executeBatchQuery(['X-1'], ['discogs', 'ebay'])
+
+      expect(mockQueryDiscogs).toHaveBeenCalledTimes(1)
+      expect(mockQueryEbay).toHaveBeenCalledTimes(1)
+    })
   })
 })

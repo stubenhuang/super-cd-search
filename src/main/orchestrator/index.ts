@@ -15,6 +15,7 @@ import { logger } from '../logger'
 import { downloadImage } from '../image'
 import { broadcastToWindows } from '../window-broadcast'
 import { flushPlatformTables } from '../feishu/platform-tables'
+import { loadArchivedFoundResults } from '../feishu/archived'
 import type { QueryResult, BatchQueryProgress, BatchQueryResult, Platform } from '../../shared/types'
 
 const MAX_CONCURRENT_CATALOGS = 3
@@ -117,7 +118,30 @@ function errorResult(platform: Platform, message: string): QueryResult {
   return { platform, name: null, artist: null, priceMin: null, priceMax: null, coverUrl: null, link: null, status: 'error', error: message }
 }
 
-async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, enabledPlatforms: Platform[]): Promise<QueryResult[]> {
+/**
+ * When Feishu already has a `found` result for this (catalog, platform), return
+ * it instead of running the live query. The orchestrator's runPlatformQuery
+ * wrapper still emits the usual progress/result events, so a skipped channel is
+ * indistinguishable from a freshly completed one in the UI.
+ */
+function queryOrArchived(
+  catalogNumber: string,
+  platform: Platform,
+  archived: Map<Platform, QueryResult>,
+  query: () => Promise<QueryResult>
+): () => Promise<QueryResult> {
+  const hit = archived.get(platform)
+  if (!hit) return query
+  logger.debug('orchestrator', 'reusing archived result', { catalogNumber, platform })
+  return () => Promise.resolve(hit)
+}
+
+async function queryAllPlatforms(
+  catalogNumber: string,
+  signal: AbortSignal,
+  enabledPlatforms: Platform[],
+  archived: Map<Platform, QueryResult> = new Map()
+): Promise<QueryResult[]> {
   const catalogStartedAt = Date.now()
   if (signal.aborted) {
     logger.debug('orchestrator', 'query aborted before start', { catalogNumber })
@@ -146,7 +170,9 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
   // Phase one: run every text platform concurrently; the browser pool and
   // per-domain throttles act as natural concurrency limits.
   const settled = await Promise.allSettled(
-    enabledText.map(({ name, query }) => runPlatformQuery(catalogNumber, signal, name, query))
+    enabledText.map(({ name, query }) =>
+      runPlatformQuery(catalogNumber, signal, name, queryOrArchived(catalogNumber, name, archived, query))
+    )
   )
 
   if (signal.aborted) {
@@ -166,35 +192,50 @@ async function queryAllPlatforms(catalogNumber: string, signal: AbortSignal, ena
   })
 
   // Phase two: Xianyu needs a cover image and Taobao needs the album/artist,
-  // both collected from the phase-one results above. They run concurrently and
-  // abort-aware. A missing prerequisite produces an uncached not_found result
-  // (so a transient download/metadata gap never sticks for the rest of the day).
+  // both collected from the phase-one results above (which may themselves be
+  // archived results). They run concurrently and abort-aware. A channel already
+  // found in Feishu skips its prerequisite entirely; a missing prerequisite
+  // produces an uncached not_found result so a transient gap never sticks.
   let phaseTwoResults: QueryResult[] = []
   if ((enabledImages.length > 0 || enabledTaobao) && !signal.aborted) {
-    // Only download a cover when an image source actually needs it.
-    const coverUrl = enabledImages.length > 0 ? resolveImageSearchCover(textResults) : null
+    // Only download a cover / resolve a keyword for channels we must query.
+    const needCover = enabledImages.some(name => !archived.has(name))
+    const coverUrl = needCover ? resolveImageSearchCover(textResults) : null
     const downloaded = coverUrl ? await downloadImage(coverUrl, 1000) : null
     if (signal.aborted) {
       logger.debug('orchestrator', 'query aborted while downloading cover', { catalogNumber, durationMs: Date.now() - catalogStartedAt })
       throw new Error('Aborted')
     }
     const imageBase64 = downloaded?.base64 ?? null
-    const keyword = enabledTaobao ? resolveTaobaoKeyword(textResults) : null
+    const keyword = enabledTaobao && !archived.has('taobao')
+      ? resolveTaobaoKeyword(textResults)
+      : null
 
     const entries: Array<{ name: Platform; query: () => Promise<QueryResult> }> = []
     for (const name of enabledImages) {
+      const hit = archived.get(name)
+      if (hit) {
+        // Still routed through runPlatformQuery so the UI gets progress events.
+        entries.push({ name, query: () => Promise.resolve(hit) })
+        continue
+      }
       if (!imageBase64) {
         const error = coverUrl ? '封面图下载失败，无法执行以图搜物' : '无可用封面图，无法执行以图搜物'
         phaseTwoResults.push({ ...notFound(name), error })
         continue
       }
-      entries.push({ name, query: () => queryXianyu(catalogNumber, imageBase64, signal) })
+      const base64 = imageBase64
+      entries.push({ name, query: () => queryXianyu(catalogNumber, base64, signal) })
     }
     if (enabledTaobao) {
-      if (!keyword) {
+      const hit = archived.get('taobao')
+      if (hit) {
+        entries.push({ name: 'taobao', query: () => Promise.resolve(hit) })
+      } else if (!keyword) {
         phaseTwoResults.push({ ...notFound('taobao'), error: '无可用专辑信息，无法执行淘宝搜索' })
       } else {
-        entries.push({ name: 'taobao', query: () => queryTaobao(catalogNumber, keyword, signal) })
+        const kw = keyword
+        entries.push({ name: 'taobao', query: () => queryTaobao(catalogNumber, kw, signal) })
       }
     }
 
@@ -271,6 +312,15 @@ export async function executeBatchQuery(catalogNumbers: string[], platforms: Pla
       throw new Error('No platforms selected')
     }
 
+    // One batch-level Feishu read before any network query starts. Only `found`
+    // channels come back; a disabled/failed/offline Feishu returns an empty map
+    // and the batch falls back to the ordinary live-query path.
+    const archivedFound = await loadArchivedFoundResults(trimmed, signal)
+    logger.debug('orchestrator', 'archived lookup done', {
+      catalogsWithArchive: archivedFound.size,
+      durationMs: Date.now() - batchStartedAt
+    })
+
     const results: BatchQueryResult[] = new Array(trimmed.length)
     let currentIndex = 0
 
@@ -282,7 +332,12 @@ export async function executeBatchQuery(catalogNumbers: string[], platforms: Pla
         const idx = currentIndex++
         const catalogNumber = trimmed[idx]!
         try {
-          const queryResults = await queryAllPlatforms(catalogNumber, signal, platforms)
+          const queryResults = await queryAllPlatforms(
+            catalogNumber,
+            signal,
+            platforms,
+            archivedFound.get(catalogNumber)
+          )
           results[idx] = { catalogNumber, results: queryResults }
         } catch {
           // Continue processing next catalog even if this one failed

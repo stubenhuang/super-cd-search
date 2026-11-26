@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { FeishuSettings } from '../src/shared/types'
-import { DEFAULT_FEISHU_SETTINGS, FEISHU_FIELD_TYPE_ATTACHMENT } from '../src/shared/feishu'
+import { DEFAULT_FEISHU_SETTINGS, FEISHU_AUTO_FIELDS, FEISHU_FIELD_TYPE_ATTACHMENT } from '../src/shared/feishu'
 import { deleteSetting, setSetting } from '../src/main/settings'
 import {
   FeishuClientError,
@@ -8,6 +8,7 @@ import {
   batchUpdate,
   createTable,
   ensureFields,
+  findArchivedResults,
   findRecordIds,
   isFeishuConfigured,
   normalizeFeishuSettings,
@@ -114,11 +115,12 @@ describe('ensureFields', () => {
 
     const types = await ensureFields(CONFIG)
     const created = calls('POST', '/fields')
-    expect(created).toHaveLength(10)
+    expect(created).toHaveLength(FEISHU_AUTO_FIELDS.length - 1)
     const names = created.map(([, options]) => JSON.parse((options as { body: string }).body).field_name)
     expect(names).not.toContain('编号')
     expect(names).not.toContain('name')
     expect(names).toContain('priceAll')
+    expect(names).toContain('resultsJson')
     for (const [, options] of created) {
       expect(JSON.parse((options as { body: string }).body).type).toBe(1)
     }
@@ -155,7 +157,7 @@ describe('ensureFields', () => {
     const names = calls('POST', '/fields').map(([, options]) => JSON.parse((options as { body: string }).body).field_name)
     expect(names).not.toContain('编号')
     expect(names).toContain('artist')
-    expect(names).toHaveLength(10)
+    expect(names).toHaveLength(FEISHU_AUTO_FIELDS.length - 1)
   })
 
   it('treats the first column as primary when is_primary is omitted', async () => {
@@ -434,6 +436,65 @@ describe('record upsert endpoints', () => {
     expect(createBody.records).toEqual([{ fields: { '编号': 'A' } }, { fields: { '编号': 'B' } }])
     const updateBody = JSON.parse((calls('POST', '/records/batch_update')[0][1] as { body: string }).body)
     expect(updateBody.records).toEqual([{ record_id: 'r1', fields: { '编号': 'C' } }])
+  })
+})
+
+describe('findArchivedResults', () => {
+  const archived = JSON.stringify([{ platform: 'discogs', status: 'found' }])
+
+  it('short-circuits an empty catalog list without a request', async () => {
+    expect(await findArchivedResults(CONFIG, [])).toEqual(new Map())
+    expect(calls('POST', '/records/search')).toHaveLength(0)
+  })
+
+  it('flattens the resultsJson text, uppercases keys and omits field_names', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'POST /records/search': () => json({
+        code: 0,
+        data: {
+          items: [{
+            record_id: 'rec-1',
+            fields: {
+              '编号': [{ text: 'sicp-6480', type: 'text' }],
+              resultsJson: [{ text: archived, type: 'text' }]
+            }
+          }],
+          has_more: false
+        }
+      })
+    })
+
+    const map = await findArchivedResults(CONFIG, ['SICP-6480'])
+    expect(map.get('SICP-6480')).toBe(archived)
+
+    const body = JSON.parse((calls('POST', '/records/search')[0][1] as { body: string }).body)
+    expect(body.filter.conjunction).toBe('or')
+    expect(body).not.toHaveProperty('field_names')
+    expect(body.automatic_fields).toBe(false)
+  })
+
+  it('skips records without the (not-yet-created) resultsJson column', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'POST /records/search': () => json({
+        code: 0,
+        data: { items: [{ record_id: 'rec-1', fields: { '编号': [{ text: 'X-1', type: 'text' }] } }], has_more: false }
+      })
+    })
+    expect(await findArchivedResults(CONFIG, ['X-1'])).toEqual(new Map())
+  })
+
+  it('pages through matches', async () => {
+    setupRoutes({
+      'POST /auth/v3/tenant_access_token/internal': okToken,
+      'POST /records/search': [
+        () => json({ code: 0, data: { items: [{ record_id: 'r1', fields: { '编号': 'X-1', resultsJson: 'A' } }], has_more: true, page_token: 'p2' } }),
+        () => json({ code: 0, data: { items: [{ record_id: 'r2', fields: { '编号': 'X-2', resultsJson: 'B' } }], has_more: false } })
+      ]
+    })
+    expect(await findArchivedResults(CONFIG, ['X-1', 'X-2'])).toEqual(new Map([['X-1', 'A'], ['X-2', 'B']]))
+    expect(calls('POST', '/records/search')).toHaveLength(2)
   })
 })
 

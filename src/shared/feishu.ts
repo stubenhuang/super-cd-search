@@ -23,9 +23,11 @@ export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
 export const FEISHU_PRIMARY_FIELD = '编号'
 
 /**
- * The twelve columns written for each catalog number. `coverUrl` holds an
- * image attachment when the user enabled image sync; the rest stay multi-line
- * text so JSON and empty values never hit numeric/URL write validation.
+ * The columns written for each catalog number. `coverUrl` holds an image
+ * attachment when the user enabled image sync; the rest stay multi-line text so
+ * JSON and empty values never hit numeric/URL write validation. `resultsJson`
+ * is the machine-readable archive: the full QueryResult[] for that catalog,
+ * read back before the next search to skip channels already found.
  */
 export const FEISHU_FIELDS = [
   '编号',
@@ -39,8 +41,12 @@ export const FEISHU_FIELDS = [
   'country',
   'released',
   'genre',
-  'priceAll'
+  'priceAll',
+  'resultsJson'
 ] as const
+
+/** Aggregate-table column holding the full archived QueryResult[] as JSON. */
+export const FEISHU_RESULTS_FIELD = 'resultsJson'
 
 export type FeishuFieldName = (typeof FEISHU_FIELDS)[number]
 

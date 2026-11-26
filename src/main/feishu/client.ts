@@ -4,6 +4,7 @@ import {
   FEISHU_AUTO_FIELDS,
   FEISHU_FIELD_TYPE_TEXT,
   FEISHU_PRIMARY_FIELD,
+  FEISHU_RESULTS_FIELD,
   type FeishuRecordFields,
   type FeishuTestResult
 } from '../../shared/feishu'
@@ -14,6 +15,8 @@ import { getSetting } from '../settings'
 
 const FEISHU_API_BASE = 'https://open.feishu.cn/open-apis'
 const REQUEST_TIMEOUT_MS = 30_000
+/** Archival read-back happens before a search starts, so keep it short. */
+const ARCHIVED_LOOKUP_TIMEOUT_MS = 10_000
 /** Refresh a cached token this long before its advertised expiry. */
 const TOKEN_REFRESH_MARGIN_MS = 300_000
 const INVALID_TOKEN_CODES = new Set([99991661, 99991663])
@@ -231,6 +234,8 @@ interface ApiOptions {
   body?: Record<string, unknown>
   form?: () => FormData
   signal?: AbortSignal
+  /** Per-call deadline; defaults to REQUEST_TIMEOUT_MS in rawFetch. */
+  timeoutMs?: number
 }
 
 /**
@@ -251,7 +256,8 @@ async function callApi<T extends ApiEnvelope>(
       body: options.body,
       form: options.form,
       token,
-      signal: options.signal
+      signal: options.signal,
+      timeoutMs: options.timeoutMs
     })
   } catch (err) {
     if (!forceRefresh && err instanceof FeishuClientError && err.code === 'auth' && err.status === 401) {
@@ -502,6 +508,52 @@ export async function findRecordIds(
     for (const item of body.data?.items ?? []) {
       const value = parsePrimaryFieldText(item.fields?.[FEISHU_PRIMARY_FIELD])
       if (item.record_id && value) result.set(value, item.record_id)
+    }
+    pageToken = body.data?.has_more ? body.data?.page_token : undefined
+  } while (pageToken)
+  return result
+}
+
+/**
+ * Read the resultsJson archive column for a batch of catalog numbers.
+ *
+ * `field_names` is deliberately omitted so this works even before
+ * ensureFields has created the new column: asking records/search for a field
+ * that does not exist yet would fail the whole request. The caller flattens the
+ * type-1 text value; the JSON parsing itself lives in feishu/archived.ts so
+ * this module stays transport-only (and free of an import cycle).
+ *
+ * Keys are uppercased to match normalizeCatalogNumber(). A short deadline keeps
+ * a slow/offline Feishu from delaying the start of a search.
+ */
+export async function findArchivedResults(
+  settings: FeishuSettings,
+  catalogNumbers: string[],
+  signal?: AbortSignal
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
+  if (catalogNumbers.length === 0) return result
+
+  const conditions = catalogNumbers.map(catalogNumber => ({
+    field_name: FEISHU_PRIMARY_FIELD,
+    operator: 'is',
+    value: [catalogNumber]
+  }))
+  let pageToken: string | undefined
+  do {
+    const params = new URLSearchParams({ page_size: '100' })
+    if (pageToken) params.set('page_token', pageToken)
+    const body = await callApi<RecordsResponse>(settings, `${tablePath(settings, 'records/search')}?${params}`, {
+      method: 'POST',
+      body: { filter: { conjunction: 'or', conditions }, automatic_fields: false },
+      signal,
+      timeoutMs: ARCHIVED_LOOKUP_TIMEOUT_MS
+    })
+    for (const item of body.data?.items ?? []) {
+      const catalogNumber = parsePrimaryFieldText(item.fields?.[FEISHU_PRIMARY_FIELD])
+      if (!catalogNumber) continue
+      const text = parsePrimaryFieldText(item.fields?.[FEISHU_RESULTS_FIELD])
+      if (text) result.set(catalogNumber.toUpperCase(), text)
     }
     pageToken = body.data?.has_more ? body.data?.page_token : undefined
   } while (pageToken)

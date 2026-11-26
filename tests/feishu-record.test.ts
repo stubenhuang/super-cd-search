@@ -118,12 +118,49 @@ describe('buildFeishuFields', () => {
     expect(fields).not.toHaveProperty('label')
   })
 
-  it('never emits a column outside the twelve configured fields', () => {
+  it('never emits a column outside the configured fields', () => {
     const fields = buildFeishuFields({
       catalogNumber: 'X-5',
       results: [result({ status: 'error', error: 'oops', details: details({ label: 'L' }) })],
       enrichedDetails: details({ format: 'CD' })
     })
     expect(Object.keys(fields).every(key => (FEISHU_FIELDS as readonly string[]).includes(key))).toBe(true)
+  })
+
+  it('writes the full result array to resultsJson (link, status, rawItems)', () => {
+    const fields = buildFeishuFields({
+      catalogNumber: 'X-6',
+      results: [result({
+        platform: 'ebay', status: 'found', link: 'https://ebay/1',
+        rawItems: [{ title: 'A', priceValue: 12 }]
+      })]
+    })
+    const parsed = JSON.parse(fields.resultsJson) as QueryResult[]
+    expect(parsed[0]).toMatchObject({
+      platform: 'ebay', link: 'https://ebay/1', status: 'found',
+      rawItems: [{ title: 'A', priceValue: 12 }]
+    })
+  })
+
+  it('merges archived platforms into resultsJson without adding them to human columns', () => {
+    const archived = result({ platform: 'hmv', status: 'found', name: 'Archived HMV' })
+    const fields = buildFeishuFields({
+      catalogNumber: 'X-7',
+      results: [result({ platform: 'discogs', status: 'found', name: 'Fresh Discogs' })]
+    }, [archived])
+    const parsed = JSON.parse(fields.resultsJson) as QueryResult[]
+    expect(parsed.map(r => r.platform)).toEqual(['discogs', 'hmv'])
+    // The human-readable columns still describe only the current batch.
+    expect(fields.name).toBe('Fresh Discogs')
+    expect(JSON.parse(fields.priceAll)).toEqual({ discogs: { priceMin: null, priceMax: null } })
+  })
+
+  it('does not downgrade an archived found channel with a not_found result', () => {
+    const archived = result({ platform: 'discogs', status: 'found', name: 'Old' })
+    const fields = buildFeishuFields({
+      catalogNumber: 'X-8',
+      results: [result({ platform: 'discogs', status: 'not_found' })]
+    }, [archived])
+    expect((JSON.parse(fields.resultsJson) as QueryResult[])[0].status).toBe('found')
   })
 })

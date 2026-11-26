@@ -17,6 +17,7 @@ import {
   batchCreate,
   batchUpdate,
   ensureFields,
+  findArchivedResults,
   findRecordIds,
   isFeishuConfigured,
   normalizeFeishuSettings,
@@ -24,6 +25,7 @@ import {
   testFeishuConnection
 } from './client'
 import { applyImageDecision, createImageSyncContext, decideImageValue } from './media'
+import { parseArchivedResults } from './archived'
 import { buildFeishuFields } from './record'
 
 /**
@@ -118,7 +120,17 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
     const types = await ensureFields(settings, FEISHU_AUTO_FIELDS, {
       fieldTypes: settings.syncImages ? aggregateFieldTypes() : undefined
     })
-    const ids = await findRecordIds(settings, list.map(row => row.catalogNumber))
+    const catalogNumbers = list.map(row => row.catalogNumber)
+    const ids = await findRecordIds(settings, catalogNumbers)
+    // Read back the previous archive so resultsJson can be merged by platform:
+    // a search with fewer channels must not erase channels found in earlier runs.
+    // A failed read only loses the merge, never the whole sync.
+    let archivedTexts = new Map<string, string>()
+    try {
+      archivedTexts = await findArchivedResults(settings, catalogNumbers)
+    } catch (err) {
+      logger.warn('feishu', 'archived read failed, writing current batch only', { error: errorMessage(err) })
+    }
     const imageContext = createImageSyncContext(settings)
 
     // A record created moments ago may not be visible to records/search yet.
@@ -133,7 +145,8 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
     const creates: FeishuRecordFields[] = []
     const updates: Array<{ record_id: string; fields: FeishuRecordFields }> = []
     for (const row of list) {
-      const base = buildFeishuFields(row)
+      const archived = parseArchivedResults(archivedTexts.get(row.catalogNumber.toUpperCase()) ?? '')
+      const base = buildFeishuFields(row, archived)
       const url = typeof base[FEISHU_IMAGE_FIELD] === 'string' ? base[FEISHU_IMAGE_FIELD] : null
       const decision = await decideImageValue(imageContext, url, FEISHU_IMAGE_FIELD, types.get(FEISHU_IMAGE_FIELD))
       const fields = applyImageDecision(base, FEISHU_IMAGE_FIELD, decision)
