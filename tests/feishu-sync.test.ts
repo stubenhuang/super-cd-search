@@ -145,16 +145,54 @@ describe('syncToFeishu', () => {
     expect(parsed.map(r => r.platform)).toEqual(['discogs', 'hmv'])
   })
 
-  it('still archives the batch when the archive read fails', async () => {
+  it('retries a transient archive read failure once', async () => {
     setSetting('feishu', CONFIG)
-    mockFindArchivedResults.mockRejectedValueOnce(new Error('search timeout'))
+    mockFindArchivedResults.mockRejectedValueOnce(new Error('temporary blip'))
+
+    const result = await syncToFeishu({ rows: [oneRow('Fresh')] })
+
+    expect(result.status).toBe('ok')
+    expect(mockFindArchivedResults).toHaveBeenCalledTimes(2)
+    const created = mockBatchCreate.mock.calls[0][1] as Array<Record<string, string>>
+    expect((JSON.parse(created[0].resultsJson) as QueryResult[]).map(r => r.platform)).toEqual(['discogs'])
+  })
+
+  it('still archives NEW rows when the archive read keeps failing', async () => {
+    setSetting('feishu', CONFIG)
+    mockFindArchivedResults.mockRejectedValue(new Error('search timeout'))
 
     const result = await syncToFeishu({ rows: [oneRow('Fresh')] })
 
     expect(result.status).toBe('ok')
     expect(result.created).toBe(1)
+    expect(mockFindArchivedResults).toHaveBeenCalledTimes(2)
+    // New rows have no historical cell to preserve, so the full JSON is safe.
     const created = mockBatchCreate.mock.calls[0][1] as Array<Record<string, string>>
     expect((JSON.parse(created[0].resultsJson) as QueryResult[]).map(r => r.platform)).toEqual(['discogs'])
+  })
+
+  it('never overwrites an existing row resultsJson when the archive read keeps failing', async () => {
+    setSetting('feishu', CONFIG)
+    mockFindRecordIds.mockResolvedValue(new Map([['X-2', 'rec-2']]))
+    mockFindArchivedResults.mockRejectedValue(new Error('search timeout'))
+
+    const result = await syncToFeishu({
+      rows: [
+        { catalogNumber: 'X-1', results: [found('New')] },
+        { catalogNumber: 'X-2', results: [found('Existing')] }
+      ]
+    })
+
+    expect(result).toEqual({ status: 'ok', created: 1, updated: 1, failed: 0 })
+    expect(mockFindArchivedResults).toHaveBeenCalledTimes(2)
+    // Existing row: omit the key so Feishu keeps the previously archived channels.
+    const updated = mockBatchUpdate.mock.calls[0][1] as Array<{ record_id: string; fields: Record<string, string> }>
+    expect(updated[0].fields).not.toHaveProperty('resultsJson')
+    expect(updated[0].fields.name).toBe('Existing')
+    expect(updated[0].fields.priceAll).toBeDefined()
+    // New row: nothing to preserve, so the full JSON is still written.
+    const created = mockBatchCreate.mock.calls[0][1] as Array<Record<string, string>>
+    expect(created[0]).toHaveProperty('resultsJson')
   })
 
   it('deduplicates catalog numbers within one batch (last row wins)', async () => {

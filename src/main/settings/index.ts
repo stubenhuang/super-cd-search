@@ -8,6 +8,7 @@ import type { Settings, LLMSettings, ApifySettings, FeishuSettings, Platform, Di
 import { PLATFORMS, DEFAULT_STANDARD_PLATFORMS, DEFAULT_DEEP_PLATFORMS, DEFAULT_BARCODE_PROVIDERS } from '../../shared/platforms'
 import { DEFAULT_APIFY_SETTINGS, resolveApifySettings } from '../../shared/apify'
 import { DEFAULT_FEISHU_SETTINGS } from '../../shared/feishu'
+import { logger } from '../logger'
 
 export type { Settings, LLMSettings }
 
@@ -222,6 +223,22 @@ function migrateSettingsFile(filePath: string): void {
       }
       return
     }
+  }
+
+  // Nothing could decrypt this file. electron-store's clearInvalidConfig would
+  // now silently reset every setting to defaults, losing Feishu/Apify/LLM
+  // credentials. Keep the unreadable original and log loudly so the user can
+  // recover it with a password-protected settings backup instead of losing it
+  // without a trace.
+  const backupPath = `${filePath}.unrecoverable-${Date.now()}`
+  try {
+    writeFileSync(backupPath, raw)
+    logger.error('settings', 'settings file is unreadable; preserved original and resetting to defaults', {
+      backupPath,
+      hint: '请用「导出/导入设置备份」的密码备份恢复凭据'
+    })
+  } catch {
+    logger.error('settings', 'settings file is unreadable and the original could not be preserved', { backupPath })
   }
 }
 

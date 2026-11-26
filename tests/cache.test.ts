@@ -296,6 +296,47 @@ describe('disk persistence', () => {
     expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
   })
 
+  it('skips a query result whose persisted value has the wrong shape', () => {
+    const file = join(dir, 'search-cache.json')
+    writeFileSync(file, JSON.stringify({
+      queryResults: {
+        [`v${QUERY_CACHE_VERSION}:discogs:X-1`]: {
+          value: { name: 'No platform/status' },
+          fetchedAt: Date.now()
+        }
+      },
+      productDetails: {}
+    }))
+
+    initCachePersistence(dir)
+    expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
+  })
+
+  it('skips entries whose fetchedAt is not a finite number', () => {
+    const file = join(dir, 'search-cache.json')
+    writeFileSync(file, JSON.stringify({
+      queryResults: {
+        [`v${QUERY_CACHE_VERSION}:discogs:X-1`]: {
+          value: found('discogs', 'Bad timestamp'),
+          fetchedAt: 'yesterday'
+        }
+      },
+      productDetails: {}
+    }))
+
+    initCachePersistence(dir)
+    expect(getCachedQueryResult('discogs', 'X-1')).toBeNull()
+  })
+
+  it('writes atomically, leaving no temp file behind', () => {
+    initCachePersistence(dir)
+    cacheQueryResult('X-1', found('discogs', 'Atomic'))
+    flushCacheToDisk()
+
+    expect(existsSync(join(dir, 'search-cache.json'))).toBe(true)
+    expect(existsSync(join(dir, 'search-cache.json.tmp'))).toBe(false)
+  })
+
   it('clearSearchCache tolerates a missing cache file', () => {
     initCachePersistence(dir)
     expect(() => clearSearchCache()).not.toThrow()

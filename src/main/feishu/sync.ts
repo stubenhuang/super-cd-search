@@ -5,6 +5,7 @@ import {
   FEISHU_AUTO_FIELDS,
   FEISHU_IMAGE_FIELD,
   FEISHU_PRIMARY_FIELD,
+  FEISHU_RESULTS_FIELD,
   type FeishuRecordFields,
   type FeishuSyncPayload,
   type FeishuSyncResult,
@@ -48,6 +49,12 @@ interface CachedRecordId {
 const CREATED_ID_TTL_MS = 10 * 60 * 1000
 const CREATED_ID_CACHE_MAX = 1000
 const createdIds = new Map<string, CachedRecordId>()
+
+/**
+ * records/search is a read, so one retry is safe and absorbs transient
+ * Feishu/network blips that would otherwise silently erase the archived set.
+ */
+const MAX_ARCHIVED_READ_ATTEMPTS = 2
 
 /** Test hook: drop the id cache and the serialization queue between cases. */
 export function resetFeishuSyncState(): void {
@@ -124,12 +131,22 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
     const ids = await findRecordIds(settings, catalogNumbers)
     // Read back the previous archive so resultsJson can be merged by platform:
     // a search with fewer channels must not erase channels found in earlier runs.
-    // A failed read only loses the merge, never the whole sync.
+    // If the read fails, we must NOT write a fresh (possibly narrower) resultsJson
+    // over existing rows — omitting that key keeps Feishu's stored value instead.
     let archivedTexts = new Map<string, string>()
-    try {
-      archivedTexts = await findArchivedResults(settings, catalogNumbers)
-    } catch (err) {
-      logger.warn('feishu', 'archived read failed, writing current batch only', { error: errorMessage(err) })
+    let archiveReadOk = true
+    for (let attempt = 1; attempt <= MAX_ARCHIVED_READ_ATTEMPTS; attempt++) {
+      try {
+        archivedTexts = await findArchivedResults(settings, catalogNumbers)
+        break
+      } catch (err) {
+        if (attempt === MAX_ARCHIVED_READ_ATTEMPTS) {
+          archiveReadOk = false
+          logger.warn('feishu', 'archived read failed after retry, preserving existing resultsJson', { error: errorMessage(err) })
+        } else {
+          logger.debug('feishu', 'archived read failed, retrying', { error: errorMessage(err) })
+        }
+      }
     }
     const imageContext = createImageSyncContext(settings)
 
@@ -151,6 +168,10 @@ async function doSync(payload: FeishuSyncPayload): Promise<FeishuSyncResult> {
       const decision = await decideImageValue(imageContext, url, FEISHU_IMAGE_FIELD, types.get(FEISHU_IMAGE_FIELD))
       const fields = applyImageDecision(base, FEISHU_IMAGE_FIELD, decision)
       const recordId = ids.get(row.catalogNumber)
+      // A failed archive read means we cannot safely merge. Never overwrite an
+      // existing row's resultsJson with this batch's narrower set: omit the key
+      // so Feishu keeps the stored cell. New rows have nothing to preserve.
+      if (!archiveReadOk && recordId) delete fields[FEISHU_RESULTS_FIELD]
       if (recordId) updates.push({ record_id: recordId, fields })
       else creates.push(fields)
     }

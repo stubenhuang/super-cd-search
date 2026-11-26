@@ -142,25 +142,53 @@ describe('buildFeishuFields', () => {
     })
   })
 
-  it('merges archived platforms into resultsJson without adding them to human columns', () => {
-    const archived = result({ platform: 'hmv', status: 'found', name: 'Archived HMV' })
+  it('derives every column from the merged archive so the row stays self-consistent', () => {
+    const archived = result({
+      platform: 'hmv', status: 'found', name: 'Archived HMV',
+      priceMin: 30, priceMax: 40, details: details({ label: 'Toshiba' })
+    })
     const fields = buildFeishuFields({
       catalogNumber: 'X-7',
-      results: [result({ platform: 'discogs', status: 'found', name: 'Fresh Discogs' })]
+      results: [result({
+        platform: 'discogs', status: 'found', name: 'Fresh Discogs',
+        priceMin: 10, priceMax: 20
+      })]
     }, [archived])
+
     const parsed = JSON.parse(fields.resultsJson) as QueryResult[]
     expect(parsed.map(r => r.platform)).toEqual(['discogs', 'hmv'])
-    // The human-readable columns still describe only the current batch.
+    // priceAll must cover the same channel set as resultsJson, not just the
+    // latest batch — otherwise narrowing the search sources desynchronises them.
+    expect(JSON.parse(fields.priceAll)).toEqual({
+      discogs: { priceMin: 10, priceMax: 20 },
+      hmv: { priceMin: 30, priceMax: 40 }
+    })
+    // Details are aggregated across every channel too, not only the fresh batch.
+    expect(fields.label).toBe('Toshiba')
+    // The primary result comes from the merged set in canonical platform order.
     expect(fields.name).toBe('Fresh Discogs')
-    expect(JSON.parse(fields.priceAll)).toEqual({ discogs: { priceMin: null, priceMax: null } })
+    expect(fields.status).toBe('found')
   })
 
-  it('does not downgrade an archived found channel with a not_found result', () => {
-    const archived = result({ platform: 'discogs', status: 'found', name: 'Old' })
+  it('does not downgrade an archived found channel with a not_found result, in any column', () => {
+    const archived = result({ platform: 'discogs', status: 'found', name: 'Old', priceMin: 5, priceMax: 9 })
     const fields = buildFeishuFields({
       catalogNumber: 'X-8',
       results: [result({ platform: 'discogs', status: 'not_found' })]
     }, [archived])
     expect((JSON.parse(fields.resultsJson) as QueryResult[])[0].status).toBe('found')
+    // The human columns must agree with the (not downgraded) archive.
+    expect(fields.name).toBe('Old')
+    expect(fields.status).toBe('found')
+    expect(JSON.parse(fields.priceAll)).toEqual({ discogs: { priceMin: 5, priceMax: 9 } })
+  })
+
+  it('keeps a disabled / absent channel out of every column when the archive is empty', () => {
+    const fields = buildFeishuFields({
+      catalogNumber: 'X-9',
+      results: [result({ platform: 'discogs', status: 'found', name: 'Only Discogs', priceMin: 10 })]
+    })
+    expect(JSON.parse(fields.priceAll)).toEqual({ discogs: { priceMin: 10, priceMax: null } })
+    expect((JSON.parse(fields.resultsJson) as QueryResult[]).map(r => r.platform)).toEqual(['discogs'])
   })
 })

@@ -1,5 +1,5 @@
 import { errorMessage } from '../../shared/utils'
-import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync, renameSync } from 'fs'
 import { join } from 'path'
 import type { QueryResult, Platform, CDDetails } from '../../shared/types'
 import { logger } from '../logger'
@@ -238,6 +238,17 @@ export function initCachePersistence(dir?: string | null): void {
   loadCacheFromDisk()
 }
 
+/**
+ * The disk file is untrusted (hand-editable, or left half-written by a crash).
+ * Mirror the defensive parsing used for Feishu's resultsJson column: a
+ * JSON-parseable but wrong-shaped value must never reach the query pipeline.
+ */
+function isQueryResultLike(value: unknown): value is QueryResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const item = value as Record<string, unknown>
+  return typeof item.platform === 'string' && typeof item.status === 'string'
+}
+
 function loadCacheFromDisk(): void {
   const file = cacheFilePath()
   if (!file) return
@@ -248,10 +259,15 @@ function loadCacheFromDisk(): void {
     let enrichmentsLoaded = 0
     let staleSkipped = 0
     let legacySkipped = 0
+    let corruptSkipped = 0
 
     for (const [key, entry] of Object.entries(data.queryResults ?? {})) {
       if (!key.startsWith(QUERY_CACHE_KEY_PREFIX)) {
         legacySkipped++
+        continue
+      }
+      if (!entry || !Number.isFinite(entry.fetchedAt) || !isQueryResultLike(entry.value)) {
+        corruptSkipped++
         continue
       }
       if (Date.now() - entry.fetchedAt <= CACHE_TTL) {
@@ -262,18 +278,31 @@ function loadCacheFromDisk(): void {
       }
     }
     for (const [key, entry] of Object.entries(data.productDetails ?? {})) {
+      if (!entry || !Number.isFinite(entry.fetchedAt) || entry.value === null || entry.value === undefined) {
+        corruptSkipped++
+        continue
+      }
       if (Date.now() - entry.fetchedAt <= CACHE_TTL) {
         productDetailCache.seed(key, entry.value, entry.fetchedAt)
         productDetailsLoaded++
+      } else {
+        staleSkipped++
       }
     }
     for (const [key, entry] of Object.entries(data.enrichments ?? {})) {
+      if (!entry || !Number.isFinite(entry.fetchedAt) ||
+          !entry.value || typeof entry.value !== 'object' || Array.isArray(entry.value)) {
+        corruptSkipped++
+        continue
+      }
       if (Date.now() - entry.fetchedAt <= CACHE_TTL) {
         enrichmentCache.seed(key, entry.value, entry.fetchedAt)
         enrichmentsLoaded++
+      } else {
+        staleSkipped++
       }
     }
-    logger.debug('cache', 'loaded cache from disk', { file, queryResultsLoaded, productDetailsLoaded, enrichmentsLoaded, staleSkipped, legacySkipped })
+    logger.debug('cache', 'loaded cache from disk', { file, queryResultsLoaded, productDetailsLoaded, enrichmentsLoaded, staleSkipped, legacySkipped, corruptSkipped })
   } catch {
     logger.debug('cache', 'missing or corrupt cache file, starting empty', { file })
   }
@@ -301,6 +330,8 @@ function writeCacheToDisk(): void {
   const dir = persistenceDir
   if (!dir) return
   const startedAt = Date.now()
+  const file = join(dir, CACHE_FILE_NAME)
+  const tmp = `${file}.tmp`
   try {
     mkdirSync(dir, { recursive: true })
     const data: PersistedCacheEntry = {
@@ -308,9 +339,13 @@ function writeCacheToDisk(): void {
       productDetails: Object.fromEntries(productDetailCache.entries()),
       enrichments: Object.fromEntries(enrichmentCache.entries())
     }
-    writeFileSync(join(dir, CACHE_FILE_NAME), JSON.stringify(data))
+    // Write to a sibling temp file then rename: a crash mid-write leaves the
+    // previous complete file intact instead of a half-written JSON that would
+    // force re-running (possibly paid) queries on the next launch.
+    writeFileSync(tmp, JSON.stringify(data))
+    renameSync(tmp, file)
     logger.debug('cache', 'cache persisted to disk', {
-      file: join(dir, CACHE_FILE_NAME),
+      file,
       queryResultCount: Object.keys(data.queryResults).length,
       productDetailCount: Object.keys(data.productDetails).length,
       enrichmentCount: Object.keys(data.enrichments).length,

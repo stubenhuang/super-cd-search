@@ -56,7 +56,12 @@ export function buildFeishuFields(
   archived: readonly QueryResult[] = []
 ): Record<string, string> {
   const fields: Record<string, string> = {}
-  const primary = pickPrimaryResult(row.results)
+  // One source of truth for the whole row. resultsJson is the lossless, merged
+  // archive, so every human-readable column is derived from the same merged set.
+  // Otherwise a later, narrower search would leave resultsJson as a superset
+  // while name/status/priceAll/details describe only the latest batch.
+  const effective = mergeResults(row.results, archived)
+  const primary = pickPrimaryResult(effective)
 
   putField(fields, FEISHU_PRIMARY_FIELD, row.catalogNumber)
   if (primary) {
@@ -69,15 +74,15 @@ export function buildFeishuFields(
 
   // Same merge as the detail modal: scraped details first, LLM details only
   // fill the fields that are still empty.
-  const merged: CDDetails = { ...aggregateDetails(row.results).details }
+  const merged: CDDetails = { ...aggregateDetails(effective).details }
   fillMissingDetails(merged, row.enrichedDetails)
   for (const key of DETAIL_KEYS) {
     putField(fields, key, merged[key])
   }
 
-  fields.priceAll = buildPriceAll(row.results)
+  fields.priceAll = buildPriceAll(effective)
   // Omitting the key (serializeResults returned null) leaves the existing cell
   // untouched on update rather than overwriting it with a truncated value.
-  putField(fields, FEISHU_RESULTS_FIELD, serializeResults(mergeResults(row.results, archived)) ?? undefined)
+  putField(fields, FEISHU_RESULTS_FIELD, serializeResults(effective) ?? undefined)
   return fields
 }
